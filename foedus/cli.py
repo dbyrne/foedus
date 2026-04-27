@@ -1,14 +1,16 @@
-"""Tiny interactive CLI for stepping through games by hand.
+"""foedus command-line entry point.
 
-Lets you see the map, see each player's view (with fog), enter orders, and
-resolve turns. Useful for debugging the engine and getting a feel for the game
-before any agents exist.
+Two subcommand groups so far:
+- `foedus play`         — interactive REPL for stepping through a game by hand
+- `foedus agent serve`  — run an HTTP server that wraps an Agent class
 """
 
 from __future__ import annotations
 
-import argparse
+import importlib
 import sys
+
+import click
 
 from foedus.core import (
     GameConfig,
@@ -26,6 +28,9 @@ from foedus.mapgen import generate_map
 from foedus.resolve import initial_state, resolve_turn
 
 
+# --- interactive `foedus play` ----------------------------------------------
+
+
 def print_map(state: GameState) -> None:
     """Render the hex map ASCII-style with node id and owner."""
     coords_by_node = state.map.coords
@@ -38,7 +43,6 @@ def print_map(state: GameState) -> None:
 
     print()
     for r in range(rmin, rmax + 1):
-        # offset based on r for hex visualization
         indent = " " * (2 * (r - rmin))
         line = indent
         for q in range(qmin, qmax + 1):
@@ -50,8 +54,6 @@ def print_map(state: GameState) -> None:
             mark = "*" if t == NodeType.SUPPLY else ("H" if t == NodeType.HOME else ".")
             owner = state.ownership.get(n)
             owner_s = str(owner) if owner is not None else "-"
-            unit = occupant.get(n)
-            unit_s = f"u{unit.id}p{unit.owner}" if unit else "    "
             line += f"[{n:>2}{mark}{owner_s}]"
         print(line)
     print()
@@ -105,7 +107,6 @@ def parse_order(unit_id: UnitId, raw: str) -> Order:
 
 
 def collect_orders_interactive(state: GameState) -> dict[int, dict[UnitId, Order]]:
-    """Prompt each active player for their orders this turn."""
     orders: dict[int, dict[UnitId, Order]] = {}
     for player in range(state.config.num_players):
         if player in state.eliminated:
@@ -126,24 +127,54 @@ def collect_orders_interactive(state: GameState) -> dict[int, dict[UnitId, Order
     return orders
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="foedus CLI")
-    parser.add_argument("--players", type=int, default=4)
-    parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--turns", type=int, default=10)
-    parser.add_argument("--demo", action="store_true",
-                        help="Generate a map and print initial state, then exit")
-    args = parser.parse_args()
+# --- agent class import helper ---------------------------------------------
 
-    config = GameConfig(num_players=args.players, max_turns=args.turns, seed=args.seed)
-    m = generate_map(config.num_players, seed=args.seed)
+
+def _load_agent_class(import_path: str):
+    if "." not in import_path:
+        raise click.ClickException(
+            f"--agent must be a fully qualified path (module.ClassName), got {import_path!r}"
+        )
+    module_path, class_name = import_path.rsplit(".", 1)
+    try:
+        module = importlib.import_module(module_path)
+    except ImportError as e:
+        raise click.ClickException(f"could not import module {module_path!r}: {e}")
+    try:
+        return getattr(module, class_name)
+    except AttributeError:
+        raise click.ClickException(
+            f"module {module_path!r} has no attribute {class_name!r}"
+        )
+
+
+# --- click root --------------------------------------------------------------
+
+
+@click.group()
+@click.version_option()
+def main() -> None:
+    """foedus — lightweight Diplomacy-inspired multi-agent strategy game."""
+
+
+@main.command()
+@click.option("--players", default=4, show_default=True, type=int)
+@click.option("--seed", default=None, type=int)
+@click.option("--turns", default=10, show_default=True, type=int)
+@click.option("--demo", is_flag=True,
+              help="Generate a map and print initial state, then exit.")
+def play(players: int, seed: int | None, turns: int, demo: bool) -> None:
+    """Interactive REPL for stepping through a game by hand."""
+    config = GameConfig(num_players=players, max_turns=turns, seed=seed)
+    m = generate_map(config.num_players, seed=seed)
     state = initial_state(config, m)
 
-    print(f"Generated map with {len(m.nodes)} nodes; {sum(1 for t in m.node_types.values() if t in (NodeType.SUPPLY, NodeType.HOME))} supply centers.")
+    print(f"Generated map with {len(m.nodes)} nodes; "
+          f"{sum(1 for t in m.node_types.values() if t in (NodeType.SUPPLY, NodeType.HOME))} supply centers.")
     print_state(state)
 
-    if args.demo:
-        return 0
+    if demo:
+        return
 
     while not state.is_terminal():
         try:
@@ -162,10 +193,39 @@ def main() -> int:
     print("=== final ===")
     print(f"Scores: {dict(state.scores)}")
     print(f"Eliminated: {sorted(state.eliminated)}")
-    winner = max(state.scores.items(), key=lambda kv: kv[1])
-    print(f"Winner: player {winner[0]} with score {winner[1]}")
-    return 0
+    if state.scores:
+        winner = max(state.scores.items(), key=lambda kv: kv[1])
+        print(f"Highest score: player {winner[0]} with {winner[1]}")
+
+
+@main.group()
+def agent() -> None:
+    """Agent serving + packaging commands."""
+
+
+@agent.command(name="serve")
+@click.option("--agent", "agent_path", required=True,
+              help="Fully qualified Agent class path, e.g. foedus.RandomAgent.")
+@click.option("--port", default=8080, show_default=True, type=int)
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--name", default=None,
+              help="Agent name reported via /info (default: class name).")
+@click.option("--version", default="0.1.0", show_default=True)
+def agent_serve(agent_path: str, port: int, host: str,
+                name: str | None, version: str) -> None:
+    """Run an HTTP server wrapping the named Agent class."""
+    cls = _load_agent_class(agent_path)
+    instance = cls()
+    try:
+        from foedus.remote.server import serve as _serve
+    except ImportError as e:
+        raise click.ClickException(
+            "foedus[remote] extra not installed. Run: pip install foedus[remote]"
+        ) from e
+    click.echo(f"serving {agent_path} on http://{host}:{port}")
+    _serve(instance, host=host, port=port,
+           name=name or cls.__name__, version=version)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(standalone_mode=True))
