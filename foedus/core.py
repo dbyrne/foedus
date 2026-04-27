@@ -163,7 +163,6 @@ class GameState:
     next_unit_id: UnitId
     config: GameConfig
     log: list[str] = field(default_factory=list)
-    peace_streak: int = 0  # DEPRECATED (Phase D renames to mutual_ally_streak)
 
     # New Press v0 fields:
     mutual_ally_streak: int = 0

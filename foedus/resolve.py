@@ -358,11 +358,9 @@ def _resolve_orders(state: GameState,
 
     # 5. Apply: build new units dict, log moves and dislodgements.
     new_units: dict[UnitId, Unit] = {}
-    any_dislodged = False
     for u_id, unit in state.units.items():
         result = outcome.get(u_id)
         if result == "dislodged":
-            any_dislodged = True
             log.append(f"  u{u_id} (p{unit.owner}) dislodged at n{unit.location}")
             continue
         order = canon[u_id]
