@@ -27,7 +27,7 @@ multi-agent games where:
 git clone https://github.com/dbyrne/foedus.git
 cd foedus
 pip install -e .[dev]
-pytest      # 119 tests, ~90ms
+pytest      # 161 tests, ~450ms
 ```
 
 ## Your first game
@@ -126,6 +126,52 @@ Use `rating.conservative` (mu − 3·sigma) for leaderboards: it's the lower
 bound of the 99.7% confidence interval, so newcomers don't temporarily
 leapfrog established players on a single lucky win.
 
+## Agents-as-Docker-images
+
+The `foedus[remote]` extra adds an HTTP wire protocol (`/act`, `/info`,
+`/healthz`) so an agent can run anywhere — same process, sibling subprocess,
+SSH'd machine, or a Docker container pulled from a registry. `RemoteAgent`
+implements the same `Agent` protocol over HTTP and is a drop-in for
+`play_game(...)`.
+
+Quick local tour with the bundled `HeuristicAgent`:
+
+```sh
+# Terminal 1: serve the agent over HTTP
+foedus agent serve --agent foedus.HeuristicAgent --port 8080
+
+# Terminal 2: ping it
+curl http://localhost:8080/info
+```
+
+Or package it as a Docker image you can share:
+
+```sh
+foedus agent build heuristic:v1 --agent foedus.HeuristicAgent
+foedus agent run heuristic:v1 --port 8080 --name h1
+# (someone else can then docker pull and play against it)
+foedus agent stop h1
+```
+
+In Python:
+
+```python
+from foedus import GameConfig, HeuristicAgent, RandomAgent, play_game
+from foedus.remote import RemoteAgent  # pip install foedus[remote]
+
+agents = {
+    0: HeuristicAgent(),                           # in-process
+    1: RemoteAgent("http://localhost:8080"),       # over the wire
+    2: RandomAgent(),
+    3: RandomAgent(),
+}
+final = play_game(agents, config=GameConfig(num_players=4))
+```
+
+`HeuristicAgent` is a greedy-expansion baseline (BFS to nearest unowned
+supply, step toward it). It demonstrably beats `RandomAgent` over modest
+sample sizes — useful as the bar to clear when you train a real NN.
+
 ## The game in 30 seconds
 
 - Procedural hex map of ~37 nodes, freshly generated each game.
@@ -160,7 +206,7 @@ foedus/
   agents/
     base.py           Agent protocol
     random_agent.py   uniform-random reference agent
-tests/                119 tests, all passing in ~90ms
+tests/                161 tests, all passing in ~450ms
 ```
 
 ## Roadmap

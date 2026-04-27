@@ -4,6 +4,7 @@ A sandbox for training neural networks in a search-resistant multi-agent setting
 """
 
 from foedus.agents.base import Agent
+from foedus.agents.heuristic import HeuristicAgent
 from foedus.agents.random_agent import RandomAgent
 from foedus.core import (
     GameConfig,
@@ -33,6 +34,7 @@ __all__ = [
     "Agent",
     "GameConfig",
     "GameState",
+    "HeuristicAgent",
     "Hold",
     "Map",
     "MatchResult",
