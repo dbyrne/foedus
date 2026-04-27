@@ -27,13 +27,13 @@ def test_stance_enum_has_three_values() -> None:
 
 
 def test_intent_constructible_with_unit_id_and_order() -> None:
-    i = Intent(unit_id=3, declared_order=Move(dest=7))
+    i = Intent(unit_id=3, declared_order=Move(dest=7), visible_to=None)
     assert i.unit_id == 3
     assert i.declared_order == Move(dest=7)
 
 
 def test_intent_is_frozen() -> None:
-    i = Intent(unit_id=1, declared_order=Hold())
+    i = Intent(unit_id=1, declared_order=Hold(), visible_to=None)
     try:
         i.unit_id = 2  # type: ignore[misc]
     except (AttributeError, Exception):
@@ -41,19 +41,37 @@ def test_intent_is_frozen() -> None:
     raise AssertionError("Intent should be frozen")
 
 
+def test_intent_visible_to_field() -> None:
+    # Public intent.
+    i_pub = Intent(unit_id=1, declared_order=Hold(), visible_to=None)
+    assert i_pub.visible_to is None
+    # Bilateral intent.
+    i_priv = Intent(unit_id=1, declared_order=Hold(), visible_to=frozenset({2}))
+    assert i_priv.visible_to == frozenset({2})
+    # Group intent.
+    i_grp = Intent(unit_id=1, declared_order=Hold(), visible_to=frozenset({2, 3}))
+    assert i_grp.visible_to == frozenset({2, 3})
+
+
+def test_press_intents_is_list() -> None:
+    p = Press(stance={}, intents=[Intent(unit_id=0, declared_order=Hold(), visible_to=None)])
+    assert isinstance(p.intents, list)
+    assert len(p.intents) == 1
+
+
 def test_press_constructible_with_empty_dicts() -> None:
-    p = Press(stance={}, intents={})
+    p = Press(stance={}, intents=[])
     assert p.stance == {}
-    assert p.intents == {}
+    assert p.intents == []
 
 
 def test_press_with_stance_and_intents() -> None:
     p = Press(
         stance={1: Stance.ALLY, 2: Stance.HOSTILE},
-        intents={1: [Intent(unit_id=0, declared_order=Hold())]},
+        intents=[Intent(unit_id=0, declared_order=Hold(), visible_to=frozenset({1}))],
     )
     assert p.stance[1] == Stance.ALLY
-    assert len(p.intents[1]) == 1
+    assert len(p.intents) == 1
 
 
 def test_chat_draft_constructible() -> None:
@@ -73,7 +91,7 @@ def test_chat_message_constructible() -> None:
 
 
 def test_betrayal_observation_constructible() -> None:
-    intent = Intent(unit_id=3, declared_order=Move(dest=7))
+    intent = Intent(unit_id=3, declared_order=Move(dest=7), visible_to=None)
     actual = Hold()
     b = BetrayalObservation(turn=4, betrayer=0, intent=intent,
                             actual_order=actual)

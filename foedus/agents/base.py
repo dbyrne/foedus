@@ -36,7 +36,7 @@ class Agent(Protocol):
         Default implementation returns an empty Press (NEUTRAL toward all,
         no intents shared). Override for press-aware agents.
         """
-        return Press(stance={}, intents={})
+        return Press(stance={}, intents=[])
 
     def chat_drafts(self, state: GameState, player: PlayerId
                     ) -> list[ChatDraft]:

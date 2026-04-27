@@ -31,7 +31,7 @@ class RandomAgent:
 
     def choose_press(self, state, player):  # type: ignore[no-untyped-def]
         from foedus.core import Press
-        return Press(stance={}, intents={})
+        return Press(stance={}, intents=[])
 
     def chat_drafts(self, state, player):  # type: ignore[no-untyped-def]
         return []

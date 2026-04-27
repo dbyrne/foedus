@@ -21,8 +21,9 @@ def _state_with_history():
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 4)], num_players=2)
     s.press_history.append({
         0: Press(stance={1: Stance.ALLY},
-                 intents={1: [Intent(unit_id=0, declared_order=Hold())]}),
-        1: Press(stance={0: Stance.HOSTILE}, intents={}),
+                 intents=[Intent(unit_id=0, declared_order=Hold(),
+                                 visible_to=frozenset({1}))]),
+        1: Press(stance={0: Stance.HOSTILE}, intents=[]),
     })
     s.chat_history.append([
         ChatMessage(turn=0, sequence=0, sender=0, recipients=None,
@@ -35,7 +36,7 @@ def _state_with_history():
     s.betrayals[0] = []
     s.betrayals[1] = [BetrayalObservation(
         turn=1, betrayer=0,
-        intent=Intent(unit_id=0, declared_order=Hold()),
+        intent=Intent(unit_id=0, declared_order=Hold(), visible_to=None),
         actual_order=Hold(),
     )]
     return s
@@ -54,7 +55,9 @@ def test_inbound_intents_only_to_recipient() -> None:
     s = _state_with_history()
     v0 = visible_state_for(s, 0)
     v1 = visible_state_for(s, 1)
-    assert v1["your_inbound_intents"][0] == [Intent(unit_id=0, declared_order=Hold())]
+    assert v1["your_inbound_intents"][0] == [
+        Intent(unit_id=0, declared_order=Hold(), visible_to=frozenset({1}))
+    ]
     assert v0["your_inbound_intents"] == {}
 
 
@@ -84,7 +87,7 @@ def test_pending_press_exposes_own_round_submission() -> None:
 
     cfg = GameConfig(num_players=2, seed=42)
     s = initial_state(cfg, generate_map(2, seed=42))
-    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
     v0 = visible_state_for(s, 0)
     v1 = visible_state_for(s, 1)
     # Player 0 sees their own pending press.
@@ -102,7 +105,7 @@ def test_pending_press_never_exposes_others() -> None:
 
     cfg = GameConfig(num_players=2, seed=42)
     s = initial_state(cfg, generate_map(2, seed=42))
-    s = submit_press_tokens(s, 0, Press(stance={1: Stance.HOSTILE}, intents={}))
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.HOSTILE}, intents=[]))
     v1 = visible_state_for(s, 1)
     # Player 1 should NOT see player 0's pending press.
     assert v1["your_pending_press"] is None
@@ -142,3 +145,46 @@ def test_current_round_phase_in_view() -> None:
     s = initial_state(cfg, generate_map(2, seed=42))
     v = visible_state_for(s, 0)
     assert v["current_round_phase"] == "negotiation"
+
+
+def test_public_intent_visible_to_all_in_fog() -> None:
+    from foedus.core import GameConfig, Intent, Press
+    from foedus.mapgen import generate_map
+    from foedus.resolve import initial_state
+
+    cfg = GameConfig(num_players=3, seed=42)
+    s = initial_state(cfg, generate_map(3, seed=42))
+    public_intent = Intent(unit_id=0, declared_order=Hold(), visible_to=None)
+    s.press_history.append({
+        0: Press(stance={}, intents=[public_intent]),
+        1: Press(stance={}, intents=[]),
+        2: Press(stance={}, intents=[]),
+    })
+    v1 = visible_state_for(s, 1)
+    v2 = visible_state_for(s, 2)
+    assert v1["your_inbound_intents"][0] == [public_intent]
+    assert v2["your_inbound_intents"][0] == [public_intent]
+
+
+def test_group_intent_visible_only_to_named_in_fog() -> None:
+    from foedus.core import GameConfig, Intent, Press
+    from foedus.mapgen import generate_map
+    from foedus.resolve import initial_state
+
+    cfg = GameConfig(num_players=4, seed=42)
+    s = initial_state(cfg, generate_map(4, seed=42))
+    group_intent = Intent(unit_id=0, declared_order=Hold(),
+                          visible_to=frozenset({1, 2}))
+    s.press_history.append({
+        0: Press(stance={}, intents=[group_intent]),
+        1: Press(stance={}, intents=[]),
+        2: Press(stance={}, intents=[]),
+        3: Press(stance={}, intents=[]),
+    })
+    v1 = visible_state_for(s, 1)
+    v2 = visible_state_for(s, 2)
+    v3 = visible_state_for(s, 3)
+    assert v1["your_inbound_intents"][0] == [group_intent]
+    assert v2["your_inbound_intents"][0] == [group_intent]
+    # Player 3 NOT in visible_to — sees no inbound from player 0.
+    assert 0 not in v3["your_inbound_intents"]

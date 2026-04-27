@@ -32,8 +32,10 @@ def submit_press_tokens(state: GameState, player: PlayerId,
                         press: Press) -> GameState:
     """Set/replace player's pending press tokens for the current round.
 
-    Multiple calls overwrite (revisability until done). Intents about units
-    not owned by `player` are silently dropped.
+    Multiple calls overwrite (revisability until done). Intents are filtered:
+    - intents about units not owned by `player` are dropped
+    - intents with empty visible_to (or visible_to filtered to empty) are dropped
+    - eliminated and self-references in visible_to are removed
 
     Returns state unchanged if:
     - phase is not NEGOTIATION
@@ -47,15 +49,27 @@ def submit_press_tokens(state: GameState, player: PlayerId,
     if player in state.round_done:
         return state
 
-    # Drop intents about units the player doesn't own.
-    cleaned_intents: dict[PlayerId, list[Intent]] = {}
-    for recipient, intents in press.intents.items():
-        kept = [
-            i for i in intents
-            if i.unit_id in state.units
-            and state.units[i.unit_id].owner == player
-        ]
-        cleaned_intents[recipient] = kept
+    cleaned_intents: list[Intent] = []
+    for intent in press.intents:
+        # Ownership filter.
+        unit = state.units.get(intent.unit_id)
+        if unit is None or unit.owner != player:
+            continue
+        # Visibility filter.
+        vt = intent.visible_to
+        if vt is None:
+            cleaned_intents.append(intent)
+            continue
+        # Drop eliminated and self-references.
+        cleaned_vt = frozenset(
+            p for p in vt if p not in state.eliminated and p != player
+        )
+        if not cleaned_vt:
+            continue  # empty after filter -> drop
+        if cleaned_vt == vt:
+            cleaned_intents.append(intent)
+        else:
+            cleaned_intents.append(replace(intent, visible_to=cleaned_vt))
 
     cleaned = Press(stance=dict(press.stance), intents=cleaned_intents)
 
@@ -103,7 +117,7 @@ def force_round_end(state: GameState) -> GameState:
         if p not in new_done:
             new_done.add(p)
             if p not in new_pending:
-                new_pending[p] = Press(stance={}, intents={})
+                new_pending[p] = Press(stance={}, intents=[])
     return replace(state, round_done=new_done,
                    round_press_pending=new_pending)
 
@@ -150,24 +164,33 @@ def _verify_intents(
     flat: dict[UnitId, Order],
     state: GameState,
 ) -> dict[PlayerId, list[BetrayalObservation]]:
-    """For each (sender, recipient, intent) tuple in the locked round press,
-    check whether sender's RAW submitted order for the intent's unit matches
-    the declared order.
-
-    Returns dict[recipient -> list[BetrayalObservation]] of observations
-    visible only to each betrayed party.
+    """For each (sender, intent) tuple in the locked round press, check whether
+    sender's RAW submitted order for the intent's unit matches the declared
+    order. Mismatches emit BetrayalObservation to each player in the intent's
+    visible_to set (or all surviving non-senders if visible_to is None).
     """
     out: dict[PlayerId, list[BetrayalObservation]] = defaultdict(list)
+    survivors = {
+        p for p in range(state.config.num_players) if p not in state.eliminated
+    }
     for sender, press in state.round_press_pending.items():
-        for recipient, intents in press.intents.items():
-            for intent in intents:
-                unit = state.units.get(intent.unit_id)
-                if unit is None or unit.owner != sender:
-                    continue  # void: unit dead or never owned by sender
+        for intent in press.intents:
+            unit = state.units.get(intent.unit_id)
+            if unit is None or unit.owner != sender:
+                continue  # void: unit dead or never owned by sender
 
-                submitted = flat.get(intent.unit_id, Hold())
+            submitted = flat.get(intent.unit_id, Hold())
 
-                if submitted != intent.declared_order:
+            if submitted != intent.declared_order:
+                # Determine who observes the betrayal.
+                if intent.visible_to is None:
+                    recipients = {p for p in survivors if p != sender}
+                else:
+                    recipients = {
+                        p for p in intent.visible_to
+                        if p in survivors and p != sender
+                    }
+                for recipient in recipients:
                     out[recipient].append(BetrayalObservation(
                         turn=state.turn + 1,
                         betrayer=sender,
@@ -292,7 +315,7 @@ def advance_turn(state: GameState,
         p for p in range(s.config.num_players) if p not in s.eliminated
     ]
     for p in survivors:
-        s = submit_press_tokens(s, p, Press(stance={}, intents={}))
+        s = submit_press_tokens(s, p, Press(stance={}, intents=[]))
         s = signal_done(s, p)
     return finalize_round(s, orders_by_player)
 
@@ -309,7 +332,7 @@ def _all_pairs_mutual_ally(state: GameState) -> bool:
     if len(survivors) < 2:
         return False
     for i in survivors:
-        press_i = state.round_press_pending.get(i, Press(stance={}, intents={}))
+        press_i = state.round_press_pending.get(i, Press(stance={}, intents=[]))
         for j in survivors:
             if i == j:
                 continue

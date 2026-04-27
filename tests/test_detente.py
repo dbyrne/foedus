@@ -23,7 +23,7 @@ def _all_ally_press_for(num_players: int) -> dict[int, Press]:
     return {
         i: Press(
             stance={j: Stance.ALLY for j in range(num_players) if j != i},
-            intents={},
+            intents=[],
         )
         for i in range(num_players)
     }
@@ -62,8 +62,8 @@ def test_streak_resets_when_one_pair_not_ally() -> None:
                    detente_threshold=99)
     press_ally = _all_ally_press_for(2)
     press_mixed = {
-        0: Press(stance={1: Stance.NEUTRAL}, intents={}),
-        1: Press(stance={0: Stance.ALLY}, intents={}),
+        0: Press(stance={1: Stance.NEUTRAL}, intents=[]),
+        1: Press(stance={0: Stance.ALLY}, intents=[]),
     }
     orders = {0: {0: Hold()}, 1: {1: Hold()}}
     s = _run_round_with_press(s, press_ally, orders)

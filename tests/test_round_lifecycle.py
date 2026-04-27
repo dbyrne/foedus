@@ -16,23 +16,23 @@ def _fresh_state(num_players: int = 3) -> GameState:
 
 def test_submit_press_tokens_records_pending() -> None:
     s = _fresh_state()
-    p = Press(stance={1: Stance.ALLY}, intents={})
+    p = Press(stance={1: Stance.ALLY}, intents=[])
     s = submit_press_tokens(s, 0, p)
     assert s.round_press_pending[0] == p
 
 
 def test_submit_press_tokens_overwrites_on_revision() -> None:
     s = _fresh_state()
-    s = submit_press_tokens(s, 0, Press(stance={1: Stance.HOSTILE}, intents={}))
-    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.HOSTILE}, intents=[]))
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
     assert s.round_press_pending[0].stance == {1: Stance.ALLY}
 
 
 def test_submit_press_tokens_rejects_after_done() -> None:
     s = _fresh_state()
-    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
     s.round_done.add(0)  # simulate signal_done; we'll test it separately
-    s2 = submit_press_tokens(s, 0, Press(stance={1: Stance.HOSTILE}, intents={}))
+    s2 = submit_press_tokens(s, 0, Press(stance={1: Stance.HOSTILE}, intents=[]))
     # Submission silently dropped, pending press unchanged.
     assert s2.round_press_pending[0].stance == {1: Stance.ALLY}
 
@@ -40,14 +40,14 @@ def test_submit_press_tokens_rejects_after_done() -> None:
 def test_submit_press_tokens_rejects_when_phase_not_negotiation() -> None:
     s = _fresh_state()
     s.phase = Phase.ORDERS
-    s2 = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
+    s2 = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
     assert 0 not in s2.round_press_pending
 
 
 def test_submit_press_tokens_rejects_eliminated_player() -> None:
     s = _fresh_state()
     s.eliminated.add(0)
-    s2 = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
+    s2 = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
     assert 0 not in s2.round_press_pending
 
 
@@ -58,11 +58,12 @@ def test_submit_press_tokens_drops_intents_for_non_owned_units() -> None:
     other_unit_id = next(u.id for u in s.units.values() if u.owner != 0)
     p = Press(
         stance={},
-        intents={1: [Intent(unit_id=other_unit_id, declared_order=Hold())]},
+        intents=[Intent(unit_id=other_unit_id, declared_order=Hold(),
+                        visible_to=frozenset({1}))],
     )
     s = submit_press_tokens(s, 0, p)
     # The full Press is recorded but the offending intent is dropped on submit.
-    assert s.round_press_pending[0].intents.get(1, []) == []
+    assert s.round_press_pending[0].intents == []
 
 
 from foedus.press import signal_done
@@ -129,18 +130,18 @@ def test_is_round_complete_skips_eliminated_players() -> None:
 def test_force_round_end_marks_unsubmitted_as_done_with_empty_press() -> None:
     s = _fresh_state(num_players=3)
     # Player 0 submits and signals done. Players 1 and 2 do nothing.
-    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
     s = signal_done(s, 0)
     s = force_round_end(s)
     assert s.round_done == {0, 1, 2}
     assert s.round_press_pending[0].stance == {1: Stance.ALLY}
-    assert s.round_press_pending.get(1, Press(stance={}, intents={})).stance == {}
-    assert s.round_press_pending.get(2, Press(stance={}, intents={})).stance == {}
+    assert s.round_press_pending.get(1, Press(stance={}, intents=[])).stance == {}
+    assert s.round_press_pending.get(2, Press(stance={}, intents=[])).stance == {}
 
 
 def test_force_round_end_preserves_submitted_pending() -> None:
     s = _fresh_state(num_players=3)
-    p1 = Press(stance={0: Stance.HOSTILE}, intents={})
+    p1 = Press(stance={0: Stance.HOSTILE}, intents=[])
     s = submit_press_tokens(s, 1, p1)
     s = force_round_end(s)
     assert s.round_press_pending[1] == p1
@@ -177,9 +178,9 @@ def test_finalize_round_archives_press_and_chat() -> None:
     from foedus.core import ChatDraft, Hold, Press, Stance
     from foedus.press import record_chat_message
     s = _fresh_state(num_players=3)
-    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
-    s = submit_press_tokens(s, 1, Press(stance={0: Stance.ALLY}, intents={}))
-    s = submit_press_tokens(s, 2, Press(stance={}, intents={}))
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
+    s = submit_press_tokens(s, 1, Press(stance={0: Stance.ALLY}, intents=[]))
+    s = submit_press_tokens(s, 2, Press(stance={}, intents=[]))
     s = record_chat_message(s, 0, ChatDraft(None, "let's ally"))
     s = signal_done(s, 0)
     s = signal_done(s, 1)
@@ -194,8 +195,8 @@ def test_finalize_round_archives_press_and_chat() -> None:
 def test_finalize_round_clears_round_scratch() -> None:
     from foedus.core import Hold
     s = _fresh_state(num_players=2)
-    s = submit_press_tokens(s, 0, Press(stance={}, intents={}))
-    s = submit_press_tokens(s, 1, Press(stance={}, intents={}))
+    s = submit_press_tokens(s, 0, Press(stance={}, intents=[]))
+    s = submit_press_tokens(s, 1, Press(stance={}, intents=[]))
     s = signal_done(s, 0)
     s = signal_done(s, 1)
     s = finalize_round(s, {p: {p: Hold()} for p in range(2)})
@@ -203,3 +204,40 @@ def test_finalize_round_clears_round_scratch() -> None:
     assert s.round_press_pending == {}
     assert s.round_done == set()
     assert s.phase == Phase.NEGOTIATION  # ready for next turn
+
+
+def test_submit_press_tokens_drops_empty_visible_to() -> None:
+    s = _fresh_state()
+    intent = Intent(unit_id=0, declared_order=Hold(), visible_to=frozenset())
+    p = Press(stance={}, intents=[intent])
+    s = submit_press_tokens(s, 0, p)
+    # Intent should be dropped (empty visible_to).
+    assert s.round_press_pending[0].intents == []
+
+
+def test_submit_press_tokens_filters_eliminated_from_visible_to() -> None:
+    s = _fresh_state(num_players=3)
+    s.eliminated.add(1)
+    intent = Intent(unit_id=0, declared_order=Hold(), visible_to=frozenset({1, 2}))
+    p = Press(stance={}, intents=[intent])
+    s = submit_press_tokens(s, 0, p)
+    # Eliminated player 1 should be filtered out, leaving visible_to={2}.
+    stored = s.round_press_pending[0].intents[0]
+    assert stored.visible_to == frozenset({2})
+
+
+def test_submit_press_tokens_filters_self_from_visible_to() -> None:
+    s = _fresh_state()
+    intent = Intent(unit_id=0, declared_order=Hold(), visible_to=frozenset({0, 1}))
+    p = Press(stance={}, intents=[intent])
+    s = submit_press_tokens(s, 0, p)
+    stored = s.round_press_pending[0].intents[0]
+    assert stored.visible_to == frozenset({1})  # 0 (self) removed
+
+
+def test_submit_press_tokens_keeps_public_intent_unchanged() -> None:
+    s = _fresh_state()
+    intent = Intent(unit_id=0, declared_order=Hold(), visible_to=None)
+    p = Press(stance={}, intents=[intent])
+    s = submit_press_tokens(s, 0, p)
+    assert s.round_press_pending[0].intents[0].visible_to is None

@@ -46,7 +46,7 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
         if i in state.eliminated:
             continue
         public_stance_matrix[i] = {}
-        press_i = last_press.get(i, Press(stance={}, intents={}))
+        press_i = last_press.get(i, Press(stance={}, intents=[]))
         for j in range(state.config.num_players):
             if i == j or j in state.eliminated:
                 continue
@@ -54,17 +54,22 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
                 j, Stance.NEUTRAL
             ).value
 
-    # Inbound intents: only intents addressed to `player`.
+    # Inbound intents: intents from each sender where this player is in
+    # visible_to (or visible_to is None, meaning public).
     your_inbound_intents: dict[PlayerId, list] = {}
     for sender, press_s in last_press.items():
         if sender == player:
             continue
-        if player in press_s.intents:
-            your_inbound_intents[sender] = list(press_s.intents[player])
+        visible = [
+            intent for intent in press_s.intents
+            if intent.visible_to is None or player in intent.visible_to
+        ]
+        if visible:
+            your_inbound_intents[sender] = visible
 
     # Outbound press history (this player's own press, all turns).
     your_outbound_press = [
-        press_per_turn.get(player, Press(stance={}, intents={}))
+        press_per_turn.get(player, Press(stance={}, intents=[]))
         for press_per_turn in state.press_history
     ]
 

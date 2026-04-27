@@ -70,7 +70,7 @@ def test_agent_protocol_has_choose_press_default() -> None:
     p = a.choose_press(s, 0)
     assert isinstance(p, Press)
     assert p.stance == {}
-    assert p.intents == {}
+    assert p.intents == []
 
 
 def test_agent_protocol_has_chat_drafts_default() -> None:

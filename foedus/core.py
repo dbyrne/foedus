@@ -54,9 +54,16 @@ class Phase(Enum):
 
 @dataclass(frozen=True)
 class Intent:
-    """A pre-declaration of what order I will issue for one of my units."""
+    """A pre-declaration of what order I will issue for one of my units.
+
+    `visible_to` controls who sees this commitment:
+    - `None` -> public broadcast: visible to all surviving players
+    - `frozenset({p1, p2, ...})` -> visible only to the named recipients
+    - `frozenset()` -> silently dropped on submit (no recipients = no commitment)
+    """
     unit_id: UnitId
     declared_order: Order
+    visible_to: frozenset[PlayerId] | None  # None = public broadcast
 
 
 @dataclass(frozen=True)
@@ -64,10 +71,10 @@ class Press:
     """One player's structured outbound press for one round.
 
     `stance` is public; missing entries default to NEUTRAL.
-    `intents` is private bilateral; key is the recipient who receives those intents.
+    `intents` is a flat list; each Intent carries its own `visible_to` set.
     """
     stance: dict[PlayerId, Stance]
-    intents: dict[PlayerId, list[Intent]]
+    intents: list[Intent]
 
 
 @dataclass(frozen=True)
@@ -89,7 +96,12 @@ class ChatMessage:
 
 @dataclass(frozen=True)
 class BetrayalObservation:
-    """End-of-turn signal that someone broke a private intent to me."""
+    """End-of-turn signal that someone broke an intent visible to me.
+
+    The intent's `visible_to` set determined who received this observation:
+    public intents broadcast a betrayal observation to all surviving players;
+    private/group intents notify only the named recipients.
+    """
     turn: int
     betrayer: PlayerId
     intent: Intent
