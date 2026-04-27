@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_game.core import (
+from foedus.core import (
     GameConfig,
     GameState,
     Map,
@@ -51,8 +51,14 @@ def triangle_map() -> Map:
 
 def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
                build_period: int = 999, max_turns: int = 20,
-               turn: int = 0, fog_radius: int = 1) -> GameState:
-    """Build a GameState with units placed and ownership inferred from unit positions."""
+               turn: int = 0, fog_radius: int = 1,
+               peace_threshold: int = 0) -> GameState:
+    """Build a GameState with units placed and ownership inferred from unit positions.
+
+    `peace_threshold` defaults to 0 (détente disabled) so existing single-purpose
+    tests aren't accidentally terminated by the détente condition. Tests that
+    exercise détente should pass it explicitly.
+    """
     ownership: dict[NodeId, PlayerId | None] = {n: None for n in m.nodes}
     for u in units:
         ownership[u.location] = u.owner
@@ -66,5 +72,6 @@ def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
         eliminated=set(),
         next_unit_id=max((u.id for u in units), default=-1) + 1,
         config=GameConfig(num_players=num_players, max_turns=max_turns,
-                          build_period=build_period, fog_radius=fog_radius),
+                          build_period=build_period, fog_radius=fog_radius,
+                          peace_threshold=peace_threshold),
     )

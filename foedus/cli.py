@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from agent_game.core import (
+from foedus.core import (
     GameConfig,
     GameState,
     Hold,
@@ -21,9 +21,9 @@ from agent_game.core import (
     SupportMove,
     UnitId,
 )
-from agent_game.fog import visible_state_for
-from agent_game.mapgen import generate_map
-from agent_game.resolve import initial_state, resolve_turn
+from foedus.fog import visible_state_for
+from foedus.mapgen import generate_map
+from foedus.resolve import initial_state, resolve_turn
 
 
 def print_map(state: GameState) -> None:
@@ -127,7 +127,7 @@ def collect_orders_interactive(state: GameState) -> dict[int, dict[UnitId, Order
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="agent_game CLI")
+    parser = argparse.ArgumentParser(description="foedus CLI")
     parser.add_argument("--players", type=int, default=4)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--turns", type=int, default=10)

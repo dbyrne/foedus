@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from agent_game.agents.base import Agent
-from agent_game.core import GameConfig, GameState, Order, PlayerId, UnitId
-from agent_game.mapgen import generate_map
-from agent_game.resolve import initial_state, resolve_turn
+from foedus.agents.base import Agent
+from foedus.core import GameConfig, GameState, Order, PlayerId, UnitId
+from foedus.mapgen import generate_map
+from foedus.resolve import initial_state, resolve_turn
 
 
 def play_game(

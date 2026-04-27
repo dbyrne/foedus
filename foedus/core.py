@@ -76,6 +76,8 @@ class GameConfig:
     max_turns: int = 25
     fog_radius: int = 1
     build_period: int = 3  # build phase every N turns
+    peace_threshold: int = 5  # consecutive dislodgement-free turns to trigger
+                              # the détente collective-victory; 0 disables.
     seed: int | None = None
 
 
@@ -91,6 +93,7 @@ class GameState:
     next_unit_id: UnitId
     config: GameConfig
     log: list[str] = field(default_factory=list)
+    peace_streak: int = 0  # consecutive turns ending without any dislodgement
 
     def units_of(self, player: PlayerId) -> list[Unit]:
         return [u for u in self.units.values() if u.owner == player]
@@ -113,29 +116,64 @@ class GameState:
         return player not in self.eliminated
 
     def is_terminal(self) -> bool:
+        active = [p for p in range(self.config.num_players) if p not in self.eliminated]
+        if len(active) <= 1:
+            return True
+        if (self.config.peace_threshold > 0
+                and self.peace_streak >= self.config.peace_threshold):
+            return True
         if self.turn >= self.config.max_turns:
             return True
+        return False
+
+    @property
+    def detente_reached(self) -> bool:
+        """True iff the game ended via the peaceful collective-victory condition.
+
+        Requires multiple surviving players; a last-standing victory is not détente.
+        """
+        if self.config.peace_threshold <= 0:
+            return False
+        if self.peace_streak < self.config.peace_threshold:
+            return False
         active = [p for p in range(self.config.num_players) if p not in self.eliminated]
-        return len(active) <= 1
+        return len(active) > 1
 
     @property
     def winner(self) -> PlayerId | None:
-        """The single winner, or None if game is non-terminal or scores tie.
+        """The single winner, or None if non-terminal, tied, or détente (collective).
 
-        - Last player standing wins regardless of score.
-        - Otherwise highest cumulative score wins.
-        - Returns None on a tie at the top.
+        Resolution priority:
+        1. Only one active player: last-standing wins.
+        2. Détente reached: returns None (use `winners()` for the list).
+        3. Otherwise: highest cumulative score; tie at top → None.
         """
         if not self.is_terminal():
             return None
         active = [p for p in range(self.config.num_players) if p not in self.eliminated]
         if len(active) == 1:
             return active[0]
+        if self.detente_reached:
+            return None
         if not self.scores:
             return None
         max_score = max(self.scores.values())
-        winners = [p for p, s in self.scores.items() if s == max_score]
-        return winners[0] if len(winners) == 1 else None
+        top = [p for p, s in self.scores.items() if s == max_score]
+        return top[0] if len(top) == 1 else None
+
+    def winners(self) -> list[PlayerId]:
+        """All winning players. For solo wins, single element. For détente,
+        all surviving players. Empty for non-terminal or full ties.
+        """
+        if not self.is_terminal():
+            return []
+        active = sorted(p for p in range(self.config.num_players) if p not in self.eliminated)
+        if len(active) == 1:
+            return active
+        if self.detente_reached:
+            return active
+        w = self.winner
+        return [w] if w is not None else []
 
     def final_scores(self) -> list[tuple[PlayerId, float]]:
         """Players paired with their cumulative scores, sorted descending."""

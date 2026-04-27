@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from agent_game.agents.base import Agent
-from agent_game.agents.random_agent import RandomAgent
-from agent_game.core import GameConfig, Unit
-from agent_game.legal import legal_orders_for_unit
-from agent_game.mapgen import generate_map
-from agent_game.resolve import initial_state
+from foedus.agents.base import Agent
+from foedus.agents.random_agent import RandomAgent
+from foedus.core import GameConfig, Unit
+from foedus.legal import legal_orders_for_unit
+from foedus.mapgen import generate_map
+from foedus.resolve import initial_state
 
 from tests.helpers import line_map, make_state
 

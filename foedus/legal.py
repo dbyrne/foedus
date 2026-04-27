@@ -14,7 +14,7 @@ This is what an agent uses to enumerate its action space:
 
 from __future__ import annotations
 
-from agent_game.core import (
+from foedus.core import (
     GameState,
     Hold,
     Move,

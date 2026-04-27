@@ -6,9 +6,9 @@ be able to replay it exactly. Any stray nondeterminism corrupts that.
 
 from __future__ import annotations
 
-from agent_game.core import GameConfig, Hold, Move
-from agent_game.mapgen import generate_map
-from agent_game.resolve import initial_state, resolve_turn
+from foedus.core import GameConfig, Hold, Move
+from foedus.mapgen import generate_map
+from foedus.resolve import initial_state, resolve_turn
 
 
 def test_same_seed_same_initial_state() -> None:

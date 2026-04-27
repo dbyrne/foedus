@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agent_game"
+name = "foedus"
 version = "0.1.0"
 description = "Lightweight Diplomacy-inspired multi-agent game for NN training"
 requires-python = ">=3.11"
@@ -13,10 +13,10 @@ dependencies = []
 dev = ["pytest>=7.0"]
 
 [project.scripts]
-agent-game = "agent_game.cli:main"
+foedus = "foedus.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["agent_game*"]
+include = ["foedus*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

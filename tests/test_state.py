@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_game.core import Unit
+from foedus.core import Unit
 
 from tests.helpers import line_map, make_state
 

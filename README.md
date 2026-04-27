@@ -1,4 +1,4 @@
-# agent_game
+# foedus
 
 A small multiplayer strategy game designed as a sandbox for training neural
 networks against search-resistant opponents — more like Go or poker than chess.
@@ -19,21 +19,21 @@ multi-agent games where:
 - **3+ players** force real alliance reasoning, not zero-sum optimization.
 - **Procedural maps** prevent memorization, force generalization.
 
-`agent_game` is a small, hackable testbed for those problems.
+`foedus` is a small, hackable testbed for those problems.
 
 ## Install
 
 ```sh
-git clone https://github.com/dbyrne/agent_game.git
-cd agent_game
+git clone https://github.com/dbyrne/foedus.git
+cd foedus
 pip install -e .[dev]
-pytest      # 88 tests, ~70ms
+pytest      # 96 tests, ~70ms
 ```
 
 ## Your first game
 
 ```python
-from agent_game import GameConfig, RandomAgent, play_game
+from foedus import GameConfig, RandomAgent, play_game
 
 config = GameConfig(num_players=4, seed=42, max_turns=20)
 agents = {p: RandomAgent(seed=p) for p in range(4)}
@@ -46,7 +46,7 @@ print(f"Final scores: {final.final_scores()}")
 Or step through interactively:
 
 ```sh
-python -m agent_game.cli --players 4 --seed 42
+python -m foedus.cli --players 4 --seed 42
 ```
 
 ## Build your own agent
@@ -54,9 +54,9 @@ python -m agent_game.cli --players 4 --seed 42
 The `Agent` protocol is one method:
 
 ```python
-from agent_game import GameState, PlayerId, UnitId, Order
-from agent_game.legal import legal_orders_for_unit
-from agent_game.fog import visible_state_for
+from foedus import GameState, PlayerId, UnitId, Order
+from foedus.legal import legal_orders_for_unit
+from foedus.fog import visible_state_for
 
 class GreedyAgent:
     """Whenever possible, move toward an unowned supply center."""
@@ -89,16 +89,17 @@ agent. Plug it into `play_game({0: GreedyAgent(), 1: RandomAgent(), …}, config
 - Strength comparison resolves contested moves; ties bounce; supports get cut by attacks.
 - Every 3 turns, a **build phase**: extra units spawn at unoccupied territory you control, up to your supply-center count.
 - Score +1 per turn per controlled supply center. Highest cumulative score after 25 turns wins (or last player standing).
+- **Détente**: if 5 consecutive turns pass with zero dislodgements, the game ends in a shared peace and *all* surviving players win. The project's name is *foedus* — "treaty" — and this is the alliance-track victory condition that makes the name carry weight.
 
 The simplifications vs. full Diplomacy are deliberate: dislodged units are
 eliminated (no retreat phase), no convoys, head-to-head uses simple
 move-strength comparison. Documented in
-[`agent_game/resolve.py`](agent_game/resolve.py).
+[`foedus/resolve.py`](foedus/resolve.py).
 
 ## Architecture
 
 ```
-agent_game/
+foedus/
   core.py             types: GameState, Map, Unit, Order subclasses
   mapgen.py           procedural hex map generation
   resolve.py          simultaneous-order resolution
@@ -109,7 +110,7 @@ agent_game/
   agents/
     base.py           Agent protocol
     random_agent.py   uniform-random reference agent
-tests/                88 tests, all passing in ~70ms
+tests/                96 tests, all passing in ~70ms
 ```
 
 ## Roadmap

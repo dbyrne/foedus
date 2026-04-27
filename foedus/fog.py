@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent_game.core import GameState, NodeId, PlayerId
+from foedus.core import GameState, NodeId, PlayerId
 
 
 def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:

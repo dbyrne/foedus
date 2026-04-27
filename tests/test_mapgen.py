@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent_game.mapgen import generate_map
+from foedus.mapgen import generate_map
 
 
 def _bfs_reachable(start: int, edges: dict[int, frozenset[int]]) -> set[int]:
@@ -78,7 +78,7 @@ def test_no_self_loops() -> None:
 
 def test_homes_are_supply_centers() -> None:
     """Every home node is a supply center."""
-    from agent_game.core import NodeType
+    from foedus.core import NodeType
     m = generate_map(4, seed=42)
     for node in m.home_assignments:
         assert m.node_types[node] == NodeType.HOME

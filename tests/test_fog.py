@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from agent_game.core import Unit
-from agent_game.fog import visible_state_for
+from foedus.core import Unit
+from foedus.fog import visible_state_for
 
 from tests.helpers import line_map, make_state
 

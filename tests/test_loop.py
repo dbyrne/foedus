@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from agent_game.agents.random_agent import RandomAgent
-from agent_game.core import GameConfig
-from agent_game.loop import play_game
-from agent_game.mapgen import generate_map
-from agent_game.resolve import initial_state
+from foedus.agents.random_agent import RandomAgent
+from foedus.core import GameConfig
+from foedus.loop import play_game
+from foedus.mapgen import generate_map
+from foedus.resolve import initial_state
 
 
 def test_play_game_runs_to_completion() -> None:

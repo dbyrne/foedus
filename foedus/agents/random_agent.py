@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import random
 
-from agent_game.core import GameState, Order, PlayerId, UnitId
-from agent_game.legal import legal_orders_for_unit
+from foedus.core import GameState, Order, PlayerId, UnitId
+from foedus.legal import legal_orders_for_unit
 
 
 class RandomAgent:

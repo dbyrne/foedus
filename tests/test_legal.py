@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from agent_game.core import (
+from foedus.core import (
     Hold,
     Move,
     SupportHold,
     SupportMove,
     Unit,
 )
-from agent_game.legal import legal_orders_for_unit
+from foedus.legal import legal_orders_for_unit
 
 from tests.helpers import line_map, make_state, triangle_map
 

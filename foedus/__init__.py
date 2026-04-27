@@ -3,9 +3,9 @@
 A sandbox for training neural networks in a search-resistant multi-agent setting.
 """
 
-from agent_game.agents.base import Agent
-from agent_game.agents.random_agent import RandomAgent
-from agent_game.core import (
+from foedus.agents.base import Agent
+from foedus.agents.random_agent import RandomAgent
+from foedus.core import (
     GameConfig,
     GameState,
     Hold,
@@ -20,11 +20,11 @@ from agent_game.core import (
     Unit,
     UnitId,
 )
-from agent_game.fog import visible_state_for
-from agent_game.legal import legal_orders_for_unit
-from agent_game.loop import play_game
-from agent_game.mapgen import generate_map
-from agent_game.resolve import initial_state, resolve_turn
+from foedus.fog import visible_state_for
+from foedus.legal import legal_orders_for_unit
+from foedus.loop import play_game
+from foedus.mapgen import generate_map
+from foedus.resolve import initial_state, resolve_turn
 
 __version__ = "0.1.0"
 

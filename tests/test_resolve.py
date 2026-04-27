@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from agent_game.core import (
+from foedus.core import (
     Hold,
     Move,
     SupportHold,
     SupportMove,
     Unit,
 )
-from agent_game.resolve import resolve_turn
+from foedus.resolve import resolve_turn
 
 from tests.helpers import line_map, make_state, triangle_map
 
