@@ -41,6 +41,61 @@ class SupportMove:
 Order: TypeAlias = Hold | Move | SupportHold | SupportMove
 
 
+class Stance(Enum):
+    ALLY = "ally"
+    NEUTRAL = "neutral"
+    HOSTILE = "hostile"
+
+
+class Phase(Enum):
+    NEGOTIATION = "negotiation"
+    ORDERS = "orders"
+
+
+@dataclass(frozen=True)
+class Intent:
+    """A pre-declaration of what order I will issue for one of my units."""
+    unit_id: UnitId
+    declared_order: Order
+
+
+@dataclass(frozen=True)
+class Press:
+    """One player's structured outbound press for one round.
+
+    `stance` is public; missing entries default to NEUTRAL.
+    `intents` is private bilateral; key is the recipient who receives those intents.
+    """
+    stance: dict[PlayerId, Stance]
+    intents: dict[PlayerId, list[Intent]]
+
+
+@dataclass(frozen=True)
+class ChatDraft:
+    """What an agent emits when sending chat. Engine fills in turn/sequence/sender."""
+    recipients: frozenset[PlayerId] | None  # None = public broadcast
+    body: str
+
+
+@dataclass(frozen=True)
+class ChatMessage:
+    """Canonical chat record stored in chat_history."""
+    turn: int
+    sequence: int
+    sender: PlayerId
+    recipients: frozenset[PlayerId] | None
+    body: str
+
+
+@dataclass(frozen=True)
+class BetrayalObservation:
+    """End-of-turn signal that someone broke a private intent to me."""
+    turn: int
+    betrayer: PlayerId
+    intent: Intent
+    actual_order: Order
+
+
 @dataclass(frozen=True)
 class Unit:
     id: UnitId
