@@ -144,3 +144,62 @@ def test_force_round_end_preserves_submitted_pending() -> None:
     s = submit_press_tokens(s, 1, p1)
     s = force_round_end(s)
     assert s.round_press_pending[1] == p1
+
+
+from foedus.press import advance_turn, finalize_round
+
+
+def test_advance_turn_with_empty_press_matches_old_resolve_turn() -> None:
+    """advance_turn(state, orders) should be semantically equivalent to
+    the old resolve_turn(state, orders) for any flow that never used press.
+
+    Disable stagnation_cost so we're comparing against pre-Press v0
+    score behavior — resolve_turn doesn't apply stagnation; finalize_round
+    does. Equivalence only holds with stagnation off.
+    """
+    from foedus.core import Hold
+    from foedus.resolve import resolve_turn
+
+    s_old = _fresh_state(num_players=3)
+    s_new = _fresh_state(num_players=3)
+    s_old.config.stagnation_cost = 0.0
+    s_new.config.stagnation_cost = 0.0
+    orders = {0: {0: Hold()}, 1: {1: Hold()}, 2: {2: Hold()}}
+    s_old = resolve_turn(s_old, orders)
+    s_new = advance_turn(s_new, orders)
+    assert {u.id: (u.owner, u.location) for u in s_old.units.values()} == \
+           {u.id: (u.owner, u.location) for u in s_new.units.values()}
+    assert s_old.scores == s_new.scores
+    assert s_old.eliminated == s_new.eliminated
+
+
+def test_finalize_round_archives_press_and_chat() -> None:
+    from foedus.core import ChatDraft, Hold, Press, Stance
+    from foedus.press import record_chat_message
+    s = _fresh_state(num_players=3)
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
+    s = submit_press_tokens(s, 1, Press(stance={0: Stance.ALLY}, intents={}))
+    s = submit_press_tokens(s, 2, Press(stance={}, intents={}))
+    s = record_chat_message(s, 0, ChatDraft(None, "let's ally"))
+    s = signal_done(s, 0)
+    s = signal_done(s, 1)
+    s = signal_done(s, 2)
+    s = finalize_round(s, {p: {p: Hold()} for p in range(3)})
+    assert len(s.press_history) == 1
+    assert len(s.chat_history) == 1
+    assert len(s.chat_history[0]) == 1
+    assert s.chat_history[0][0].body == "let's ally"
+
+
+def test_finalize_round_clears_round_scratch() -> None:
+    from foedus.core import Hold
+    s = _fresh_state(num_players=2)
+    s = submit_press_tokens(s, 0, Press(stance={}, intents={}))
+    s = submit_press_tokens(s, 1, Press(stance={}, intents={}))
+    s = signal_done(s, 0)
+    s = signal_done(s, 1)
+    s = finalize_round(s, {p: {p: Hold()} for p in range(2)})
+    assert s.round_chat == []
+    assert s.round_press_pending == {}
+    assert s.round_done == set()
+    assert s.phase == Phase.NEGOTIATION  # ready for next turn
