@@ -320,13 +320,15 @@ def _resolve_moves(canon: dict[UnitId, Order], move_str: dict[UnitId, int],
 # --- Top-level turn function ----------------------------------------------
 
 
-def resolve_turn(state: GameState,
-                 orders_by_player: dict[PlayerId, dict[UnitId, Order]]
-                 ) -> GameState:
-    """Apply one turn, returning the new GameState.
+def _resolve_orders(state: GameState,
+                    orders_by_player: dict[PlayerId, dict[UnitId, Order]]
+                    ) -> GameState:
+    """Internal: run order normalization, conflict resolution, build phase,
+    scoring, and elimination, returning the post-resolution GameState.
 
-    `orders_by_player[player][unit_id] = order`. Missing units default to Hold.
-    Spoofed orders (a player ordering another's unit) are dropped silently.
+    Called by both the legacy `resolve_turn` entry point and the new
+    `finalize_round` (in foedus.press) which adds press-specific steps
+    around the order resolution.
     """
     log: list[str] = [f"--- turn {state.turn + 1} ---"]
 
@@ -440,3 +442,16 @@ def resolve_turn(state: GameState,
         log=state.log + log,
         peace_streak=new_peace_streak,
     )
+
+
+def resolve_turn(state: GameState,
+                 orders_by_player: dict[PlayerId, dict[UnitId, Order]]
+                 ) -> GameState:
+    """Backward-compat entry point. Equivalent to the no-press resolution path.
+
+    `orders_by_player[player][unit_id] = order`. Missing units default to Hold.
+    Spoofed orders (a player ordering another's unit) are dropped silently.
+
+    For new code prefer foedus.press.advance_turn or foedus.press.finalize_round.
+    """
+    return _resolve_orders(state, orders_by_player)
