@@ -63,3 +63,33 @@ def test_submit_press_tokens_drops_intents_for_non_owned_units() -> None:
     s = submit_press_tokens(s, 0, p)
     # The full Press is recorded but the offending intent is dropped on submit.
     assert s.round_press_pending[0].intents.get(1, []) == []
+
+
+from foedus.press import signal_done
+
+
+def test_signal_done_marks_player() -> None:
+    s = _fresh_state()
+    s = signal_done(s, 0)
+    assert 0 in s.round_done
+
+
+def test_signal_done_is_idempotent() -> None:
+    s = _fresh_state()
+    s = signal_done(s, 0)
+    s = signal_done(s, 0)
+    assert s.round_done == {0}
+
+
+def test_signal_done_rejects_eliminated() -> None:
+    s = _fresh_state()
+    s.eliminated.add(0)
+    s = signal_done(s, 0)
+    assert 0 not in s.round_done
+
+
+def test_signal_done_rejects_outside_negotiation_phase() -> None:
+    s = _fresh_state()
+    s.phase = Phase.ORDERS
+    s = signal_done(s, 0)
+    assert 0 not in s.round_done

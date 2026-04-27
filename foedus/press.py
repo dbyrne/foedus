@@ -53,3 +53,18 @@ def submit_press_tokens(state: GameState, player: PlayerId,
     new_pending[player] = cleaned
 
     return replace(state, round_press_pending=new_pending)
+
+
+def signal_done(state: GameState, player: PlayerId) -> GameState:
+    """Mark a player as done negotiating. Idempotent. Cannot be undone.
+
+    Returns state unchanged if phase is not NEGOTIATION or player is eliminated.
+    """
+    if state.phase != Phase.NEGOTIATION:
+        return state
+    if player in state.eliminated:
+        return state
+
+    new_done = set(state.round_done)
+    new_done.add(player)
+    return replace(state, round_done=new_done)
