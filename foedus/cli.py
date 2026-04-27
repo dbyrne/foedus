@@ -227,5 +227,70 @@ def agent_serve(agent_path: str, port: int, host: str,
            name=name or cls.__name__, version=version)
 
 
+@agent.command(name="build")
+@click.argument("tag")
+@click.option("--agent", "agent_path", required=True,
+              help="Fully qualified Agent class path, e.g. foedus.RandomAgent.")
+@click.option("--context", "context_dir", default=".",
+              type=click.Path(exists=True, file_okay=False),
+              show_default=True,
+              help="Build context (must contain pyproject.toml).")
+@click.option("--dockerfile", default=None,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Custom Dockerfile (default: bundled Dockerfile.agent).")
+@click.option("--no-cache", is_flag=True, help="Skip layer cache.")
+def agent_build(tag: str, agent_path: str, context_dir: str,
+                dockerfile: str | None, no_cache: bool) -> None:
+    """Build a Docker image that serves the named Agent over HTTP."""
+    from pathlib import Path as _P
+    from foedus.agent_build import DockerError, build_agent_image
+    try:
+        build_agent_image(
+            tag, agent_path,
+            context=_P(context_dir),
+            dockerfile=_P(dockerfile) if dockerfile else None,
+            no_cache=no_cache,
+        )
+    except DockerError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"built {tag}")
+    click.echo(f"  run with: foedus agent run {tag} --port 8080")
+
+
+@agent.command(name="run")
+@click.argument("tag")
+@click.option("--port", default=8080, show_default=True, type=int,
+              help="Host port to map to the container's :8080.")
+@click.option("--name", default=None, help="Container name.")
+@click.option("--keep", is_flag=True,
+              help="Don't auto-remove the container on exit (default: auto-remove).")
+def agent_run(tag: str, port: int, name: str | None, keep: bool) -> None:
+    """Start an agent container. Returns the container ID."""
+    from foedus.agent_build import DockerError, run_agent_container
+    try:
+        cid = run_agent_container(
+            tag, port=port, name=name, auto_remove=not keep,
+        )
+    except DockerError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"started container {cid[:12]}")
+    click.echo(f"  agent listening on http://localhost:{port}")
+    click.echo(f"  curl http://localhost:{port}/info")
+
+
+@agent.command(name="stop")
+@click.argument("name_or_id")
+@click.option("--timeout", default=10, show_default=True,
+              help="Seconds to wait for clean shutdown before SIGKILL.")
+def agent_stop(name_or_id: str, timeout: int) -> None:
+    """Stop a running agent container."""
+    from foedus.agent_build import DockerError, stop_agent_container
+    try:
+        stop_agent_container(name_or_id, timeout=timeout)
+    except DockerError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"stopped {name_or_id}")
+
+
 if __name__ == "__main__":
     sys.exit(main(standalone_mode=True))

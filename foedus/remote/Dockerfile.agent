@@ -1,0 +1,31 @@
+# Bundled Dockerfile for packaging a foedus agent as a runnable image.
+#
+# Usage:
+#   foedus agent build <tag> --agent <import.path>
+#
+# Build context expectations:
+# - Either the foedus repo itself (so `pip install .[remote]` installs foedus),
+#   or a user project whose pyproject.toml depends on `foedus[remote]` and
+#   defines / imports the chosen agent class.
+#
+# Build arg:
+#   AGENT  — fully qualified Python path to an Agent class
+#            (e.g. "foedus.RandomAgent" or "myproj.MCTSAgent").
+#
+# Runtime: serves the agent over HTTP on container port 8080.
+
+ARG PYTHON_VERSION=3.11
+FROM python:${PYTHON_VERSION}-slim
+
+ARG AGENT
+ENV FOEDUS_AGENT=${AGENT}
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+COPY . /app/
+
+RUN pip install --no-cache-dir ".[remote]" || \
+    pip install --no-cache-dir "."
+
+EXPOSE 8080
+CMD ["sh", "-c", "foedus agent serve --agent $FOEDUS_AGENT --host 0.0.0.0 --port 8080"]
