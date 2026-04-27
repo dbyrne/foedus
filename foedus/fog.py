@@ -80,6 +80,15 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
 
     your_betrayals = list(state.betrayals.get(player, []))
 
+    # Round-in-progress data (visible during NEGOTIATION phase).
+    your_pending_press = state.round_press_pending.get(player)
+    round_chat_so_far = [
+        m for m in state.round_chat
+        if m.recipients is None
+        or m.sender == player
+        or player in m.recipients
+    ]
+
     return {
         "turn": state.turn,
         "you": player,
@@ -94,4 +103,7 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
         "your_inbound_intents": your_inbound_intents,
         "your_chat": your_chat,
         "your_betrayals": your_betrayals,
+        "your_pending_press": your_pending_press,
+        "round_chat_so_far": round_chat_so_far,
+        "current_round_phase": state.phase.value,
     }
