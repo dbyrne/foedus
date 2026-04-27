@@ -28,3 +28,10 @@ class RandomAgent:
             choices = legal_orders_for_unit(state, u.id)
             orders[u.id] = self._rng.choice(choices)
         return orders
+
+    def choose_press(self, state, player):  # type: ignore[no-untyped-def]
+        from foedus.core import Press
+        return Press(stance={}, intents={})
+
+    def chat_drafts(self, state, player):  # type: ignore[no-untyped-def]
+        return []
