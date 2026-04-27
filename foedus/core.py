@@ -131,9 +131,24 @@ class GameConfig:
     max_turns: int = 25
     fog_radius: int = 1
     build_period: int = 3  # build phase every N turns
-    peace_threshold: int = 5  # consecutive dislodgement-free turns to trigger
-                              # the détente collective-victory; 0 disables.
+    detente_threshold: int = 5  # consensus mutual-ALLY turns required for
+                                # the détente collective-victory; 0 disables.
+    stagnation_cost: float = 1.0  # score penalty for passive turns; 0 disables
+    chat_char_cap: int = 500  # chat message body length cap
+    round_timer_seconds: float = 60.0  # default for live play; drivers
+                                       # override to 0 in training/turn-based modes
     seed: int | None = None
+    # Deprecated alias for detente_threshold; kept for one minor version.
+    peace_threshold: int | None = None
+
+    def __post_init__(self) -> None:
+        # If peace_threshold was explicitly passed (deprecated), it overrides
+        # detente_threshold. Otherwise leave detente_threshold alone.
+        if self.peace_threshold is not None:
+            self.detente_threshold = self.peace_threshold
+        # Always reflect the current value back into peace_threshold for any
+        # legacy reader that reads it directly from a GameConfig instance.
+        self.peace_threshold = self.detente_threshold
 
 
 @dataclass
@@ -148,7 +163,19 @@ class GameState:
     next_unit_id: UnitId
     config: GameConfig
     log: list[str] = field(default_factory=list)
-    peace_streak: int = 0  # consecutive turns ending without any dislodgement
+    peace_streak: int = 0  # DEPRECATED (Phase D renames to mutual_ally_streak)
+
+    # New Press v0 fields:
+    mutual_ally_streak: int = 0
+    press_history: list[dict[PlayerId, "Press"]] = field(default_factory=list)
+    chat_history: list[list["ChatMessage"]] = field(default_factory=list)
+    betrayals: dict[PlayerId, list["BetrayalObservation"]] = field(
+        default_factory=dict
+    )
+    phase: "Phase" = field(default_factory=lambda: Phase.NEGOTIATION)
+    round_chat: list["ChatMessage"] = field(default_factory=list)
+    round_press_pending: dict[PlayerId, "Press"] = field(default_factory=dict)
+    round_done: set[PlayerId] = field(default_factory=set)
 
     def units_of(self, player: PlayerId) -> list[Unit]:
         return [u for u in self.units.values() if u.owner == player]
