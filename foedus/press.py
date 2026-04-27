@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import replace
 
 from foedus.core import (
+    ChatDraft,
+    ChatMessage,
     GameState,
     Intent,
     Phase,
@@ -96,3 +98,41 @@ def force_round_end(state: GameState) -> GameState:
                 new_pending[p] = Press(stance={}, intents={})
     return replace(state, round_done=new_done,
                    round_press_pending=new_pending)
+
+
+def record_chat_message(state: GameState, sender: PlayerId,
+                        draft: ChatDraft) -> GameState:
+    """Append a chat message to the current round's chat log.
+
+    Engine constructs the canonical ChatMessage from sender + draft +
+    state.turn + a monotonic sequence number.
+
+    Drops the message silently (returns state unchanged) if:
+    - phase is not NEGOTIATION
+    - sender is eliminated or already signaled done
+    - any named recipient is eliminated
+    - body exceeds config.chat_char_cap
+    """
+    if state.phase != Phase.NEGOTIATION:
+        return state
+    if sender in state.eliminated:
+        return state
+    if sender in state.round_done:
+        return state
+    if len(draft.body) > state.config.chat_char_cap:
+        return state
+    if draft.recipients is not None:
+        for r in draft.recipients:
+            if r in state.eliminated:
+                return state
+
+    msg = ChatMessage(
+        turn=state.turn,
+        sequence=len(state.round_chat),
+        sender=sender,
+        recipients=draft.recipients,
+        body=draft.body,
+    )
+    new_chat = list(state.round_chat)
+    new_chat.append(msg)
+    return replace(state, round_chat=new_chat)
