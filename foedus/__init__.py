@@ -25,6 +25,7 @@ from foedus.legal import legal_orders_for_unit
 from foedus.loop import play_game
 from foedus.mapgen import generate_map
 from foedus.resolve import initial_state, resolve_turn
+from foedus.scoring import MatchResult, compute_match_result
 
 __version__ = "0.1.0"
 
@@ -34,6 +35,7 @@ __all__ = [
     "GameState",
     "Hold",
     "Map",
+    "MatchResult",
     "Move",
     "NodeId",
     "NodeType",
@@ -44,6 +46,7 @@ __all__ = [
     "SupportMove",
     "Unit",
     "UnitId",
+    "compute_match_result",
     "generate_map",
     "initial_state",
     "legal_orders_for_unit",

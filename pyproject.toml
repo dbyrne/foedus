@@ -10,7 +10,8 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "openskill>=6.0"]
+rating = ["openskill>=6.0"]
 
 [project.scripts]
 foedus = "foedus.cli:main"
