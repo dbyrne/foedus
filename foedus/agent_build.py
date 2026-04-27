@@ -31,11 +31,19 @@ def bundled_dockerfile() -> Path:
 
 
 def _run(argv: list[str], *, check: bool = True) -> str:
+    """Run a docker command. Returns stdout (UTF-8, with replace on bad bytes).
+
+    Forces utf-8 + errors='replace' explicitly so Windows hosts (default
+    cp1252 locale) don't crash on docker's progress output, which can
+    contain bytes outside cp1252's range.
+    """
     if shutil.which(argv[0]) is None:
         raise DockerError(f"{argv[0]!r} not found on PATH; install Docker first")
     try:
         result = subprocess.run(
-            argv, capture_output=True, text=True, check=check,
+            argv, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            check=check,
         )
     except subprocess.CalledProcessError as e:
         msg = (e.stderr or e.stdout or "").strip()
