@@ -23,7 +23,8 @@ from foedus.core import (
 )
 from foedus.fog import visible_state_for
 from foedus.mapgen import generate_map
-from foedus.resolve import initial_state, resolve_turn
+from foedus.press import advance_turn
+from foedus.resolve import initial_state
 
 
 def print_map(state: GameState) -> None:
@@ -151,7 +152,7 @@ def main() -> int:
         except (EOFError, KeyboardInterrupt):
             print("\n(interrupted)")
             break
-        state = resolve_turn(state, orders)
+        state = advance_turn(state, orders)
         print()
         print("--- resolution log ---")
         for line in state.log[-30:]:
