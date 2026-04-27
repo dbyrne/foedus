@@ -17,10 +17,12 @@ from foedus.core import (
     GameState,
     Hold,
     Intent,
+    Move,
     Order,
     Phase,
     PlayerId,
     Press,
+    SupportMove,
     UnitId,
 )
 
@@ -172,3 +174,32 @@ def _verify_intents(
                         actual_order=submitted,
                     ))
     return dict(out)
+
+
+def _stagnation_cost_deltas(
+    canon: dict[UnitId, Order],
+    state: GameState,
+) -> dict[PlayerId, float]:
+    """Return per-player score deltas for the stagnation cost.
+
+    A player "did nothing" this turn if all their canon orders are
+    Hold or SupportHold (no Move, no SupportMove). Such players pay
+    `config.stagnation_cost`. Eliminated and unit-less players are exempt.
+
+    If config.stagnation_cost == 0, returns an empty dict (disabled).
+    """
+    cost = state.config.stagnation_cost
+    if cost == 0.0:
+        return {}
+
+    out: dict[PlayerId, float] = {}
+    for p in range(state.config.num_players):
+        if p in state.eliminated:
+            continue
+        p_units = [u for u in state.units.values() if u.owner == p]
+        if not p_units:
+            continue
+        p_orders = [canon.get(u.id) for u in p_units]
+        if not any(isinstance(o, (Move, SupportMove)) for o in p_orders):
+            out[p] = -cost
+    return out
