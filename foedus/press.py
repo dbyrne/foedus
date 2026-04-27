@@ -22,6 +22,7 @@ from foedus.core import (
     Phase,
     PlayerId,
     Press,
+    Stance,
     SupportMove,
     UnitId,
 )
@@ -203,3 +204,24 @@ def _stagnation_cost_deltas(
         if not any(isinstance(o, (Move, SupportMove)) for o in p_orders):
             out[p] = -cost
     return out
+
+
+def _all_pairs_mutual_ally(state: GameState) -> bool:
+    """True iff every ordered pair (i, j) of distinct survivors has
+    state.round_press_pending[i].stance.get(j, NEUTRAL) == ALLY.
+
+    Returns False for fewer than 2 survivors (détente requires multiple).
+    """
+    survivors = [
+        p for p in range(state.config.num_players) if p not in state.eliminated
+    ]
+    if len(survivors) < 2:
+        return False
+    for i in survivors:
+        press_i = state.round_press_pending.get(i, Press(stance={}, intents={}))
+        for j in survivors:
+            if i == j:
+                continue
+            if press_i.stance.get(j, Stance.NEUTRAL) != Stance.ALLY:
+                return False
+    return True
