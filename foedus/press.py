@@ -7,16 +7,21 @@ them as events arrive.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import replace
 
 from foedus.core import (
+    BetrayalObservation,
     ChatDraft,
     ChatMessage,
     GameState,
+    Hold,
     Intent,
+    Order,
     Phase,
     PlayerId,
     Press,
+    UnitId,
 )
 
 
@@ -136,3 +141,34 @@ def record_chat_message(state: GameState, sender: PlayerId,
     new_chat = list(state.round_chat)
     new_chat.append(msg)
     return replace(state, round_chat=new_chat)
+
+
+def _verify_intents(
+    flat: dict[UnitId, Order],
+    state: GameState,
+) -> dict[PlayerId, list[BetrayalObservation]]:
+    """For each (sender, recipient, intent) tuple in the locked round press,
+    check whether sender's RAW submitted order for the intent's unit matches
+    the declared order.
+
+    Returns dict[recipient -> list[BetrayalObservation]] of observations
+    visible only to each betrayed party.
+    """
+    out: dict[PlayerId, list[BetrayalObservation]] = defaultdict(list)
+    for sender, press in state.round_press_pending.items():
+        for recipient, intents in press.intents.items():
+            for intent in intents:
+                unit = state.units.get(intent.unit_id)
+                if unit is None or unit.owner != sender:
+                    continue  # void: unit dead or never owned by sender
+
+                submitted = flat.get(intent.unit_id, Hold())
+
+                if submitted != intent.declared_order:
+                    out[recipient].append(BetrayalObservation(
+                        turn=state.turn + 1,
+                        betrayer=sender,
+                        intent=intent,
+                        actual_order=submitted,
+                    ))
+    return dict(out)
