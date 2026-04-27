@@ -292,5 +292,26 @@ def agent_stop(name_or_id: str, timeout: int) -> None:
     click.echo(f"stopped {name_or_id}")
 
 
+@main.group(name="play-server")
+def play_server() -> None:
+    """HTTP game server for UI clients (Godot, web, terminal)."""
+
+
+@play_server.command(name="start")
+@click.option("--port", default=8090, show_default=True, type=int)
+@click.option("--host", default="127.0.0.1", show_default=True,
+              help="Use 0.0.0.0 for LAN play (no auth — local-trust only).")
+def play_server_start(port: int, host: str) -> None:
+    """Start the game server (foreground, blocking)."""
+    try:
+        from foedus.game_server import serve
+    except ImportError as e:
+        raise click.ClickException(
+            "foedus[remote] extra not installed. Run: pip install foedus[remote]"
+        ) from e
+    click.echo(f"foedus game server: http://{host}:{port}")
+    serve(host=host, port=port)
+
+
 if __name__ == "__main__":
     sys.exit(main(standalone_mode=True))
