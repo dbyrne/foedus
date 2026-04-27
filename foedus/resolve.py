@@ -374,8 +374,6 @@ def _resolve_orders(state: GameState,
             if isinstance(order, Move):
                 log.append(f"  u{u_id} (p{unit.owner}) bounced at n{unit.location}")
 
-    new_peace_streak = 0 if any_dislodged else state.peace_streak + 1
-
     # 6. Ownership: any node with a unit at end-of-turn is owned by that player;
     #    empty nodes retain prior ownership.
     new_owner = dict(state.ownership)
@@ -440,7 +438,6 @@ def _resolve_orders(state: GameState,
         next_unit_id=next_id,
         config=state.config,
         log=state.log + log,
-        peace_streak=new_peace_streak,
     )
 
 

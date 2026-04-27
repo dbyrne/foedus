@@ -201,8 +201,8 @@ class GameState:
         active = [p for p in range(self.config.num_players) if p not in self.eliminated]
         if len(active) <= 1:
             return True
-        if (self.config.peace_threshold > 0
-                and self.peace_streak >= self.config.peace_threshold):
+        if (self.config.detente_threshold > 0
+                and self.mutual_ally_streak >= self.config.detente_threshold):
             return True
         if self.turn >= self.config.max_turns:
             return True
@@ -212,11 +212,12 @@ class GameState:
     def detente_reached(self) -> bool:
         """True iff the game ended via the peaceful collective-victory condition.
 
-        Requires multiple surviving players; a last-standing victory is not détente.
+        Requires multiple surviving players AND the consensus mutual-ALLY streak
+        has reached the threshold; a last-standing victory is not détente.
         """
-        if self.config.peace_threshold <= 0:
+        if self.config.detente_threshold <= 0:
             return False
-        if self.peace_streak < self.config.peace_threshold:
+        if self.mutual_ally_streak < self.config.detente_threshold:
             return False
         active = [p for p in range(self.config.num_players) if p not in self.eliminated]
         return len(active) > 1
