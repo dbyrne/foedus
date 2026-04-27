@@ -93,3 +93,54 @@ def test_signal_done_rejects_outside_negotiation_phase() -> None:
     s.phase = Phase.ORDERS
     s = signal_done(s, 0)
     assert 0 not in s.round_done
+
+
+from foedus.press import force_round_end, is_round_complete
+
+
+def test_is_round_complete_false_when_no_one_done() -> None:
+    s = _fresh_state(num_players=3)
+    assert is_round_complete(s) is False
+
+
+def test_is_round_complete_false_with_partial_done() -> None:
+    s = _fresh_state(num_players=3)
+    s = signal_done(s, 0)
+    s = signal_done(s, 1)
+    assert is_round_complete(s) is False
+
+
+def test_is_round_complete_true_when_all_survivors_done() -> None:
+    s = _fresh_state(num_players=3)
+    s = signal_done(s, 0)
+    s = signal_done(s, 1)
+    s = signal_done(s, 2)
+    assert is_round_complete(s) is True
+
+
+def test_is_round_complete_skips_eliminated_players() -> None:
+    s = _fresh_state(num_players=3)
+    s.eliminated.add(2)
+    s = signal_done(s, 0)
+    s = signal_done(s, 1)
+    assert is_round_complete(s) is True
+
+
+def test_force_round_end_marks_unsubmitted_as_done_with_empty_press() -> None:
+    s = _fresh_state(num_players=3)
+    # Player 0 submits and signals done. Players 1 and 2 do nothing.
+    s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents={}))
+    s = signal_done(s, 0)
+    s = force_round_end(s)
+    assert s.round_done == {0, 1, 2}
+    assert s.round_press_pending[0].stance == {1: Stance.ALLY}
+    assert s.round_press_pending.get(1, Press(stance={}, intents={})).stance == {}
+    assert s.round_press_pending.get(2, Press(stance={}, intents={})).stance == {}
+
+
+def test_force_round_end_preserves_submitted_pending() -> None:
+    s = _fresh_state(num_players=3)
+    p1 = Press(stance={0: Stance.HOSTILE}, intents={})
+    s = submit_press_tokens(s, 1, p1)
+    s = force_round_end(s)
+    assert s.round_press_pending[1] == p1
