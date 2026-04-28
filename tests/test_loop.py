@@ -55,3 +55,43 @@ def test_play_game_populates_press_and_chat_history() -> None:
     # 3 turns played, so 3 entries in each history.
     assert len(final.press_history) == 3
     assert len(final.chat_history) == 3
+
+
+def test_play_game_propagates_archetype_to_mapgen() -> None:
+    """Regression: play_game must pass config.archetype to generate_map.
+
+    Without this, the loop silently produces a UNIFORM map regardless of
+    the archetype configured. Verifies by running games on different
+    archetypes and confirming the maps differ structurally.
+    """
+    from foedus.core import Archetype, NodeType
+
+    archetypes_with_terrain = [
+        (Archetype.HIGHLAND_PASS, NodeType.MOUNTAIN),
+        (Archetype.RIVERLANDS, NodeType.WATER),
+    ]
+    for arch, expected_terrain in archetypes_with_terrain:
+        cfg = GameConfig(num_players=4, seed=42, max_turns=2,
+                         archetype=arch)
+        agents = {p: RandomAgent(seed=p) for p in range(4)}
+        final = play_game(agents, config=cfg)
+        terrain_present = expected_terrain in final.map.node_types.values()
+        assert terrain_present, (
+            f"play_game(config.archetype={arch}) produced a map with no "
+            f"{expected_terrain.value} cells — config not propagated to "
+            f"generate_map."
+        )
+
+
+def test_play_game_propagates_map_radius() -> None:
+    """Regression: play_game must pass config.map_radius to generate_map."""
+    cfg_small = GameConfig(num_players=2, seed=42, max_turns=2, map_radius=2)
+    cfg_default = GameConfig(num_players=2, seed=42, max_turns=2)
+    agents = {p: RandomAgent(seed=p) for p in range(2)}
+    final_small = play_game(agents, config=cfg_small)
+    agents = {p: RandomAgent(seed=p) for p in range(2)}
+    final_default = play_game(agents, config=cfg_default)
+    # A radius=2 map has fewer cells than default radius=3.
+    assert len(final_small.map.coords) < len(final_default.map.coords), (
+        "play_game ignored config.map_radius — both maps have same size"
+    )

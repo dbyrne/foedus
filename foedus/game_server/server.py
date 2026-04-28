@@ -89,7 +89,12 @@ def make_app() -> FastAPI:
                 status_code=400,
                 detail=f"need {cfg.num_players} seats, got {len(req.seats)}",
             )
-        m = generate_map(cfg.num_players, seed=cfg.seed)
+        m = generate_map(
+            cfg.num_players,
+            seed=cfg.seed,
+            archetype=cfg.archetype,
+            map_radius=cfg.map_radius,
+        )
         state = initial_state(cfg, m)
 
         seats: dict[int, SeatSpec] = {}

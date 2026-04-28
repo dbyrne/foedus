@@ -17,12 +17,14 @@ from collections import deque
 
 from foedus.agents.base import Agent  # noqa: F401  (used by isinstance in tests)
 from foedus.core import (
+    ChatDraft,
     GameState,
     Hold,
     Move,
     NodeId,
     Order,
     PlayerId,
+    Press,
     Unit,
     UnitId,
 )
@@ -44,6 +46,14 @@ class HeuristicAgent:
                 continue
             orders[unit.id] = self._choose_for_unit(state, player, unit)
         return orders
+
+    def choose_press(self, state: GameState, player: PlayerId) -> Press:
+        # Heuristic baseline is press-silent: NEUTRAL toward all, no intents.
+        return Press(stance={}, intents=[])
+
+    def chat_drafts(self, state: GameState,
+                    player: PlayerId) -> list[ChatDraft]:
+        return []
 
     def _choose_for_unit(self, state: GameState, player: PlayerId,
                          unit: Unit) -> Order:

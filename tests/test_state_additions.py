@@ -38,3 +38,27 @@ def test_gamestate_has_new_press_fields_after_initial_state() -> None:
     assert s.round_chat == []
     assert s.round_press_pending == {}
     assert s.round_done == set()
+
+
+def test_gameconfig_archetype_default_is_uniform() -> None:
+    from foedus.core import Archetype, GameConfig
+    cfg = GameConfig()
+    assert cfg.archetype == Archetype.UNIFORM
+
+
+def test_gameconfig_map_radius_default_is_3() -> None:
+    from foedus.core import GameConfig
+    cfg = GameConfig()
+    assert cfg.map_radius == 3
+
+
+def test_gameconfig_explicit_archetype() -> None:
+    from foedus.core import Archetype, GameConfig
+    cfg = GameConfig(archetype=Archetype.HIGHLAND_PASS)
+    assert cfg.archetype == Archetype.HIGHLAND_PASS
+
+
+def test_gameconfig_explicit_map_radius() -> None:
+    from foedus.core import GameConfig
+    cfg = GameConfig(map_radius=5)
+    assert cfg.map_radius == 5

@@ -167,7 +167,12 @@ def main() -> None:
 def play(players: int, seed: int | None, turns: int, demo: bool) -> None:
     """Interactive REPL for stepping through a game by hand."""
     config = GameConfig(num_players=players, max_turns=turns, seed=seed)
-    m = generate_map(config.num_players, seed=seed)
+    m = generate_map(
+        config.num_players,
+        seed=config.seed,
+        archetype=config.archetype,
+        map_radius=config.map_radius,
+    )
     state = initial_state(config, m)
 
     print(f"Generated map with {len(m.nodes)} nodes; "

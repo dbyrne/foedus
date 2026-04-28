@@ -30,7 +30,12 @@ def play_game(
     if state is None:
         if config is None:
             raise ValueError("either `state` or `config` must be provided")
-        m = generate_map(config.num_players, seed=config.seed)
+        m = generate_map(
+            config.num_players,
+            seed=config.seed,
+            archetype=config.archetype,
+            map_radius=config.map_radius,
+        )
         state = initial_state(config, m)
 
     while not state.is_terminal():
