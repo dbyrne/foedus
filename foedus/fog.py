@@ -60,12 +60,15 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
     for sender, press_s in last_press.items():
         if sender == player:
             continue
-        visible = [
+        # NB: do NOT name this `visible` — that name is bound above to the
+        # set of fog-visible nodes and would be clobbered, regressing
+        # `visible_nodes` to []. Both Haiku playtest agents reported this.
+        visible_intents = [
             intent for intent in press_s.intents
             if intent.visible_to is None or player in intent.visible_to
         ]
-        if visible:
-            your_inbound_intents[sender] = visible
+        if visible_intents:
+            your_inbound_intents[sender] = visible_intents
 
     # Outbound press history (this player's own press, all turns).
     your_outbound_press = [

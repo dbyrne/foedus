@@ -136,6 +136,32 @@ def _compute_cuts(canon: dict[UnitId, Order], state: GameState) -> set[UnitId]:
     return cut
 
 
+def _find_cutters(supporter: Unit, exclude_from: NodeId | None,
+                  canon: dict[UnitId, Order],
+                  state: GameState) -> list[UnitId]:
+    """Return the unit_ids of all enemy units whose Move into `supporter.location`
+    cut this supporter's order. Mirrors _is_cut's filter exactly so reasons
+    surfaced in the log match the resolver's actual cut decision.
+
+    Used purely for logging (Haiku playtest UX gap: agents had no way to see
+    why their support failed).
+    """
+    cutters: list[UnitId] = []
+    for u_id, order in canon.items():
+        if u_id == supporter.id:
+            continue
+        if not isinstance(order, Move):
+            continue
+        if order.dest != supporter.location:
+            continue
+        attacker = state.units[u_id]
+        if attacker.owner == supporter.owner:
+            continue
+        if exclude_from is None or attacker.location != exclude_from:
+            cutters.append(u_id)
+    return cutters
+
+
 # --- Strengths -------------------------------------------------------------
 
 
@@ -350,6 +376,21 @@ def _resolve_orders(state: GameState,
 
     # 3. Cuts + strengths.
     cut = _compute_cuts(canon, state)
+    # Surface cut-support events in the log so agents can see *why* a
+    # supported move failed. (Both Haiku playtest agents flagged this as
+    # the single biggest "explain failure" gap.)
+    for supporter_id in sorted(cut):
+        supporter = state.units[supporter_id]
+        s_order = canon[supporter_id]
+        exclude = (s_order.target_dest
+                   if isinstance(s_order, SupportMove) else None)
+        cutters = _find_cutters(supporter, exclude, canon, state)
+        if cutters:
+            cutter_s = ", ".join(f"u{c}" for c in sorted(cutters))
+            log.append(
+                f"  u{supporter_id} (p{supporter.owner}) support cut "
+                f"by attack from {cutter_s}"
+            )
     move_str, hold_str = _compute_strengths(canon, cut)
 
     # 4. Resolve.
@@ -370,7 +411,12 @@ def _resolve_orders(state: GameState,
         else:
             new_units[u_id] = unit
             if isinstance(order, Move):
-                log.append(f"  u{u_id} (p{unit.owner}) bounced at n{unit.location}")
+                # Include attempted destination so agents can see what they
+                # tried to do, not just "you bounced". (Haiku playtest UX.)
+                log.append(
+                    f"  u{u_id} (p{unit.owner}) bounced at n{unit.location} "
+                    f"-> n{order.dest}"
+                )
 
     # 6. Ownership: any node with a unit at end-of-turn is owned by that player;
     #    empty nodes retain prior ownership.
@@ -393,9 +439,13 @@ def _resolve_orders(state: GameState,
             if need <= 0:
                 continue
             occupied = {u.location for u in new_units.values()}
+            # Sonnet playtest: prefer SUPPLY/HOME nodes over PLAIN, then by
+            # node id. Without this, a low-id PLAIN absorbs a build slot
+            # ahead of a higher-id supply, wasting the build.
             candidates = sorted(
-                n for n in state.map.nodes
-                if new_owner.get(n) == player and n not in occupied
+                (n for n in state.map.nodes
+                 if new_owner.get(n) == player and n not in occupied),
+                key=lambda n: (not state.map.is_supply(n), n),
             )
             for n in candidates[:need]:
                 new_units[next_id] = Unit(id=next_id, owner=player, location=n)

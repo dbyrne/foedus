@@ -159,8 +159,11 @@ class GameConfig:
     max_turns: int = 25
     fog_radius: int = 1
     build_period: int = 3  # build phase every N turns
-    detente_threshold: int = 5  # consensus mutual-ALLY turns required for
-                                # the détente collective-victory; 0 disables.
+    # Consensus mutual-ALLY turns required for the détente collective-victory.
+    # `None` (the default) scales the threshold with table size: `4 + num_players`,
+    # giving roomier negotiation as ordered-pair count grows. `0` disables the
+    # détente condition entirely; any other positive int is honored verbatim.
+    detente_threshold: int | None = None
     stagnation_cost: float = 1.0  # score penalty for passive turns; 0 disables
     chat_char_cap: int = 500  # chat message body length cap
     round_timer_seconds: float = 60.0  # default for live play; drivers
@@ -173,10 +176,14 @@ class GameConfig:
 
     def __post_init__(self) -> None:
         # If peace_threshold was explicitly passed (deprecated), it overrides
-        # detente_threshold. Otherwise leave detente_threshold alone.
+        # detente_threshold. Otherwise resolve the table-size-scaled default.
         if self.peace_threshold is not None:
             self.detente_threshold = self.peace_threshold
-        # Always reflect the current value back into peace_threshold for any
+        elif self.detente_threshold is None:
+            # Default: scale with table size so 4-player has more headroom
+            # than 2-player. (Sonnet playtest feedback.)
+            self.detente_threshold = 4 + self.num_players
+        # Always reflect the resolved value back into peace_threshold for any
         # legacy reader that reads it directly from a GameConfig instance.
         self.peace_threshold = self.detente_threshold
         # Coerce string archetype (e.g. from JSON wire) to the enum value so
