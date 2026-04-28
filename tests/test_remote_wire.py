@@ -95,3 +95,32 @@ def test_unknown_order_type_raises() -> None:
     import pytest
     with pytest.raises(ValueError):
         deserialize_order({"type": "Magic", "x": 1})
+
+
+def test_chat_done_roundtrips() -> None:
+    """Bundle 6: chat_done is preserved across (de)serialize."""
+    from foedus.press import signal_chat_done
+    cfg = GameConfig(num_players=3)
+    m = generate_map(3, seed=42)
+    s = initial_state(cfg, m)
+    s = signal_chat_done(s, 0)
+    s = signal_chat_done(s, 2)
+
+    blob = serialize_state(s)
+    assert sorted(blob["chat_done"]) == [0, 2]
+
+    s2 = deserialize_state(blob)
+    assert s2.chat_done == {0, 2}
+
+
+def test_deserialize_state_without_chat_done_defaults_empty() -> None:
+    """Backward-compat: blobs from older clients (no chat_done key)
+    deserialize cleanly with an empty chat_done."""
+    cfg = GameConfig(num_players=3)
+    m = generate_map(3, seed=42)
+    s = initial_state(cfg, m)
+    blob = serialize_state(s)
+    # Simulate a pre-Bundle-6 blob by removing the new key.
+    blob.pop("chat_done", None)
+    s2 = deserialize_state(blob)
+    assert s2.chat_done == set()

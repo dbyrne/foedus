@@ -84,6 +84,7 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         "next_unit_id": state.next_unit_id,
         "config": serialize_config(state.config),
         "mutual_ally_streak": state.mutual_ally_streak,
+        "chat_done": sorted(state.chat_done),
         # `log` deliberately omitted (grows unbounded; not strategic).
         # Press v0 fields (press_history, chat_history, betrayals, phase, and
         # round-in-progress scratch) are also omitted from this minimal wire
@@ -109,6 +110,7 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
         next_unit_id=data["next_unit_id"],
         config=deserialize_config(data["config"]),
         mutual_ally_streak=streak,
+        chat_done=set(data.get("chat_done", [])),
         log=[],
     )
 
