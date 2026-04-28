@@ -479,7 +479,71 @@ def cmd_apply_commit(player: int, path: str) -> None:
 
 # Advance (Task 6)
 def cmd_advance() -> None:
-    raise NotImplementedError("Task 6 will fill this in.")
+    """Run one full round:
+       1. Submit heuristic press for HEURISTIC_SEATS.
+       2. signal_done for all surviving players.
+       3. Load orders from per-player pickles for LLM_SEATS.
+       4. HeuristicAgent.choose_orders for HEURISTIC_SEATS.
+       5. finalize_round.
+    """
+    state = load()
+    survivors = [
+        p for p in range(state.config.num_players)
+        if p not in state.eliminated
+    ]
+
+    agent = HeuristicAgent()
+
+    # Heuristic seats: submit press now (LLM seats already submitted via
+    # apply_commit).
+    for p in HEURISTIC_SEATS:
+        if p not in survivors:
+            continue
+        press = agent.choose_press(state, p)
+        state = submit_press_tokens(state, p, press)
+
+    # signal_done for everyone surviving.
+    for p in survivors:
+        state = signal_done(state, p)
+
+    # Build orders dict.
+    orders_by_player: dict[int, dict[UnitId, Order]] = {}
+    for p in survivors:
+        if p in HEURISTIC_SEATS:
+            orders_by_player[p] = agent.choose_orders(state, p)
+        else:
+            f = ORDERS_PICKLE(p)
+            if not f.exists():
+                print(f"ERROR: no orders submitted for player {p} "
+                      f"(run apply_commit first); aborting")
+                sys.exit(2)
+            with f.open("rb") as fh:
+                orders_by_player[p] = pickle.load(fh)
+            f.unlink()  # consume
+
+    # Finalize.
+    state = finalize_round(state, orders_by_player)
+    save(state)
+
+    # Clean up per-player chat / commit files.
+    for p in range(state.config.num_players):
+        for fn in (CHAT_FILE(p), COMMIT_FILE(p)):
+            if fn.exists():
+                fn.unlink()
+
+    print(f"advanced to turn {state.turn}/{state.config.max_turns}")
+    print(f"scores: {state.scores}")
+    print(f"eliminated: {sorted(state.eliminated)}")
+    print(f"mutual_ally_streak: {state.mutual_ally_streak}/"
+          f"{state.config.detente_threshold}")
+    if state.is_terminal():
+        print("\n=== GAME OVER ===")
+        print(f"Final scores: {dict(state.final_scores())}")
+        print(f"Winner(s): {state.winners()}")
+        print(f"Détente reached: {state.detente_reached}")
+    print("\nRecent log:")
+    for line in state.log[-15:]:
+        print(f"  {line}")
 
 
 COMMANDS = {
