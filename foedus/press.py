@@ -94,6 +94,34 @@ def signal_done(state: GameState, player: PlayerId) -> GameState:
     return replace(state, round_done=new_done)
 
 
+def signal_chat_done(state: GameState, player: PlayerId) -> GameState:
+    """Mark a player as done with the chat phase. Idempotent.
+
+    Bundle 6: gates the commit-phase opening. Cannot be undone within a
+    round. Returns state unchanged if phase is not NEGOTIATION or player
+    is eliminated.
+    """
+    if state.phase != Phase.NEGOTIATION:
+        return state
+    if player in state.eliminated:
+        return state
+    new_chat_done = set(state.chat_done)
+    new_chat_done.add(player)
+    return replace(state, chat_done=new_chat_done)
+
+
+def is_chat_phase_complete(state: GameState) -> bool:
+    """True iff every surviving player has signaled chat-done.
+
+    Bundle 6: when this returns True, the chat phase is closed and
+    /commit submissions become valid.
+    """
+    survivors = {
+        p for p in range(state.config.num_players) if p not in state.eliminated
+    }
+    return survivors.issubset(state.chat_done)
+
+
 def is_round_complete(state: GameState) -> bool:
     """True iff every surviving player has signaled done."""
     survivors = {
@@ -310,6 +338,7 @@ def finalize_round(state: GameState,
         round_chat=[],
         round_press_pending={},
         round_done=set(),
+        chat_done=set(),
     )
 
 

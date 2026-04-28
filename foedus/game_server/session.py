@@ -18,16 +18,37 @@ from typing import Any
 
 from foedus.agents.base import Agent
 from foedus.core import (
+    ChatDraft,
     GameState,
     Order,
     PlayerId,
+    Press,
     UnitId,
 )
 from foedus.legal import legal_orders_for_unit
 from foedus.resolve import resolve_turn
+from foedus.press import (
+    finalize_round,
+    is_chat_phase_complete,
+    is_round_complete,
+    record_chat_message,
+    signal_chat_done,
+    signal_done,
+    submit_press_tokens,
+)
 
 
 SeatType = str  # "human" | "agent" | "remote"
+
+
+# Bundle 6: sentinel error message fragments. The server.py HTTP layer
+# substring-matches on these to map ValueErrors to specific HTTP codes
+# (409 Conflict for duplicate signals, 425 Too Early for chat-phase).
+# Keep raise sites and matchers using these constants so the mapping
+# survives message refactors.
+ERR_ALREADY_CHAT_DONE = "already chat_done this round"
+ERR_ALREADY_COMMITTED = "already committed this round"
+ERR_CHAT_PHASE_NOT_COMPLETE = "chat phase not complete; cannot commit yet"
 
 
 @dataclass
@@ -99,6 +120,9 @@ class GameSession:
     def __post_init__(self) -> None:
         if not self.history:
             self.history.append(self.state)
+        # Bundle 6: pre-compute agent press+orders for round 0.
+        if self.agents:
+            self.init_round()
 
     # --- query helpers -----------------------------------------------------
 
@@ -124,6 +148,131 @@ class GameSession:
         return not self.awaiting_humans()
 
     # --- order I/O ---------------------------------------------------------
+
+    # --- press flow (Bundle 6) ---------------------------------------------
+
+    def init_round(self) -> None:
+        """Pre-compute press + orders for agent seats and mark them as
+        chat_done / round_done so they don't block sync points.
+
+        Called once at session creation (after __post_init__ snapshots
+        the initial state) AND after each finalize_round in
+        submit_press_commit.
+
+        KNOWN LIMITATION: agent seats compute their press + orders BEFORE
+        any human chat or press tokens are written to state for the round.
+        For HeuristicAgent (which ignores chat/press) this is fine. For a
+        hypothetical agent that reads same-round chat or inbound intents
+        in choose_orders / choose_press, this would mean the agent acts on
+        stale information. If that becomes a real use case, defer agent
+        order computation to after `is_chat_phase_complete` returns True
+        (the same trigger point where finalize_round currently fires) —
+        an architectural change worth its own design pass.
+        """
+        for player, agent in self.agents.items():
+            if not self.is_active(player):
+                continue
+            # Press: choose, submit, mark chat_done.
+            press = (agent.choose_press(self.state, player)
+                     if hasattr(agent, "choose_press")
+                     else Press(stance={}, intents=[]))
+            self.state = submit_press_tokens(self.state, player, press)
+            self.state = signal_chat_done(self.state, player)
+            # Orders: pre-compute and buffer for finalize.
+            self.pending_orders[player] = agent.choose_orders(
+                self.state, player
+            )
+            self.state = signal_done(self.state, player)
+
+    def submit_press_chat(self, player: PlayerId,
+                          draft: dict | None) -> dict:
+        """Record a chat draft (or skip) for `player` and mark them
+        chat_done. Returns engine drop info if the message was rejected.
+
+        `draft` is None or `{}` to skip. Otherwise must have `body` and
+        optional `recipients`.
+        """
+        if not self.is_human(player):
+            raise ValueError(f"seat {player} is not human (LLM seat)")
+        if not self.is_active(player):
+            raise ValueError(f"player {player} is eliminated")
+        if player in self.state.chat_done:
+            raise ValueError(
+                f"player {player} {ERR_ALREADY_CHAT_DONE}"
+            )
+        message_dropped = False
+        drop_reason = None
+        if draft:
+            recipients_raw = draft.get("recipients")
+            if recipients_raw is None:
+                recipients = None
+            else:
+                recipients = frozenset(int(r) for r in recipients_raw)
+            chat_draft = ChatDraft(
+                recipients=recipients,
+                body=str(draft.get("body", "")),
+            )
+            new_state = record_chat_message(
+                self.state, player, chat_draft
+            )
+            if (new_state is self.state
+                    or len(new_state.round_chat) ==
+                        len(self.state.round_chat)):
+                message_dropped = True
+                drop_reason = (
+                    f"engine dropped (len={len(chat_draft.body)}, "
+                    f"cap={self.state.config.chat_char_cap})"
+                )
+            else:
+                self.state = new_state
+        self.state = signal_chat_done(self.state, player)
+        return {
+            "ok": True,
+            "chat_phase_complete": is_chat_phase_complete(self.state),
+            "message_dropped": message_dropped,
+            "drop_reason": drop_reason,
+        }
+
+    def submit_press_commit(self, player: PlayerId,
+                            press: "Press",
+                            orders: dict[UnitId, Order]) -> dict:
+        """Submit press tokens + orders + implicit signal_done for
+        `player`. If this commit completes the round, runs
+        finalize_round and re-initializes for the next round.
+
+        Returns whether the round was advanced and the resulting turn.
+        """
+        if not self.is_human(player):
+            raise ValueError(f"seat {player} is not human (LLM seat)")
+        if not self.is_active(player):
+            raise ValueError(f"player {player} is eliminated")
+        if not is_chat_phase_complete(self.state):
+            raise ValueError(
+                ERR_CHAT_PHASE_NOT_COMPLETE
+            )
+        if player in self.state.round_done:
+            raise ValueError(
+                f"player {player} {ERR_ALREADY_COMMITTED}"
+            )
+        self.state = submit_press_tokens(self.state, player, press)
+        self.pending_orders[player] = dict(orders)
+        self.state = signal_done(self.state, player)
+        round_advanced = False
+        if is_round_complete(self.state):
+            self.state = finalize_round(
+                self.state, dict(self.pending_orders)
+            )
+            self.history.append(self.state)
+            self.pending_orders.clear()
+            round_advanced = True
+            if not self.state.is_terminal():
+                self.init_round()
+        return {
+            "ok": True,
+            "round_advanced": round_advanced,
+            "is_terminal": self.state.is_terminal(),
+            "new_turn": self.state.turn,
+        }
 
     def submit_human_orders(self, player: PlayerId,
                             orders: dict[UnitId, Order]) -> None:

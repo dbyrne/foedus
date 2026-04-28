@@ -84,6 +84,7 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         "next_unit_id": state.next_unit_id,
         "config": serialize_config(state.config),
         "mutual_ally_streak": state.mutual_ally_streak,
+        "chat_done": sorted(state.chat_done),
         # `log` deliberately omitted (grows unbounded; not strategic).
         # Press v0 fields (press_history, chat_history, betrayals, phase, and
         # round-in-progress scratch) are also omitted from this minimal wire
@@ -109,6 +110,7 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
         next_unit_id=data["next_unit_id"],
         config=deserialize_config(data["config"]),
         mutual_ally_streak=streak,
+        chat_done=set(data.get("chat_done", [])),
         log=[],
     )
 
@@ -152,3 +154,28 @@ def serialize_orders(orders: dict) -> dict[str, dict[str, Any]]:
 
 def deserialize_orders(data: dict[str, dict[str, Any]]) -> dict:
     return {int(uid): deserialize_order(od) for uid, od in data.items()}
+
+
+def deserialize_intent(data: dict[str, Any]) -> "Intent":
+    """Parse a JSON intent payload into a domain `Intent` object.
+
+    Schema:
+      {"unit_id": <int>, "declared_order": <order>, "visible_to": null | [<pid>, ...]}
+
+    Used by the press server's /commit endpoint and by orchestrator
+    scripts that read intents from JSON. Reuses `deserialize_order`
+    for the inner declared_order.
+    """
+    from foedus.core import Intent
+    unit_id = int(data["unit_id"])
+    declared_order = deserialize_order(data["declared_order"])
+    vt_raw = data.get("visible_to")
+    if vt_raw is None:
+        visible_to = None
+    else:
+        visible_to = frozenset(int(x) for x in vt_raw)
+    return Intent(
+        unit_id=unit_id,
+        declared_order=declared_order,
+        visible_to=visible_to,
+    )

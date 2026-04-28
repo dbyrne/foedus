@@ -21,7 +21,10 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import os
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from foedus.core import GameConfig
@@ -61,6 +64,17 @@ class SubmitOrdersRequest(BaseModel):
 class AdvanceRequest(BaseModel):
     auto: bool = False           # keep advancing while no humans block
     max_turns: int = 1000        # safety bound for auto
+
+
+class PressChatRequest(BaseModel):
+    player: int
+    draft: dict | None = None  # null/empty = skip
+
+
+class PressCommitRequest(BaseModel):
+    player: int
+    press: dict = Field(default_factory=dict)
+    orders: dict[str, dict] = Field(default_factory=dict)
 
 
 def make_app() -> FastAPI:
@@ -230,6 +244,153 @@ def make_app() -> FastAPI:
             return sess.view_at_turn(turn, player)
         except IndexError as e:
             raise HTTPException(status_code=404, detail=str(e))
+
+    # --- Press v0 flow endpoints (Bundle 6) ----------------------------------
+
+    @app.post("/games/{game_id}/chat")
+    def press_chat(game_id: str,
+                    req: PressChatRequest) -> dict[str, Any]:
+        from foedus.game_server.session import ERR_ALREADY_CHAT_DONE
+        sess = _session(game_id)
+        try:
+            return sess.submit_press_chat(req.player, req.draft)
+        except ValueError as e:
+            msg = str(e)
+            if ERR_ALREADY_CHAT_DONE in msg:
+                raise HTTPException(status_code=409, detail=msg)
+            raise HTTPException(status_code=400, detail=msg)
+
+    @app.post("/games/{game_id}/commit")
+    def press_commit(game_id: str,
+                      req: PressCommitRequest) -> dict[str, Any]:
+        from foedus.core import Press, Stance
+        from foedus.game_server.session import (
+            ERR_ALREADY_COMMITTED,
+            ERR_CHAT_PHASE_NOT_COMPLETE,
+        )
+        from foedus.remote.wire import deserialize_intent, deserialize_orders
+        sess = _session(game_id)
+        # Parse stance.
+        stance: dict[int, Stance] = {}
+        for k, v in (req.press.get("stance") or {}).items():
+            try:
+                stance[int(k)] = Stance(v)
+            except (ValueError, TypeError) as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"bad stance entry {k}={v!r}: {e}",
+                )
+        # Parse intents (delegates to wire.deserialize_intent).
+        intents = []
+        for it_raw in (req.press.get("intents") or []):
+            try:
+                intents.append(deserialize_intent(it_raw))
+            except (KeyError, TypeError, ValueError) as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"bad intent {it_raw!r}: {e}",
+                )
+        press = Press(stance=stance, intents=intents)
+        # Parse orders.
+        try:
+            orders = deserialize_orders(req.orders)
+        except (KeyError, ValueError) as e:
+            raise HTTPException(
+                status_code=400, detail=f"invalid orders: {e}",
+            )
+        # Submit.
+        try:
+            return sess.submit_press_commit(req.player, press, orders)
+        except ValueError as e:
+            msg = str(e)
+            if ERR_CHAT_PHASE_NOT_COMPLETE in msg:
+                raise HTTPException(status_code=425, detail=msg)
+            if ERR_ALREADY_COMMITTED in msg:
+                raise HTTPException(status_code=409, detail=msg)
+            raise HTTPException(status_code=400, detail=msg)
+
+    @app.get("/games/{game_id}/chat-prompt/{player}",
+             response_class=PlainTextResponse)
+    def chat_prompt(game_id: str, player: int) -> str:
+        from foedus.game_server.render import render_chat_prompt
+        sess = _session(game_id)
+        if player not in sess.seats:
+            raise HTTPException(status_code=404,
+                                detail=f"unknown player {player}")
+        if not sess.is_human(player):
+            raise HTTPException(status_code=400,
+                                detail=f"player {player} is not a human (LLM) seat")
+        return render_chat_prompt(sess.state, player)
+
+    @app.get("/games/{game_id}/commit-prompt/{player}",
+             response_class=PlainTextResponse)
+    def commit_prompt(game_id: str, player: int) -> str:
+        from foedus.game_server.render import render_commit_prompt
+        from foedus.press import is_chat_phase_complete
+        sess = _session(game_id)
+        if player not in sess.seats:
+            raise HTTPException(status_code=404,
+                                detail=f"unknown player {player}")
+        if not sess.is_human(player):
+            raise HTTPException(status_code=400,
+                                detail=f"player {player} is not a human (LLM) seat")
+        if not is_chat_phase_complete(sess.state):
+            raise HTTPException(
+                status_code=425,
+                detail="chat phase not complete; call /wait/{p}/commit",
+            )
+        return render_commit_prompt(sess.state, player)
+
+    @app.get("/games/{game_id}/wait/{player}/{phase}")
+    async def wait_for_phase(game_id: str, player: int,
+                              phase: str) -> dict[str, Any]:
+        import asyncio
+        from foedus.press import is_chat_phase_complete
+        if phase not in ("chat", "commit"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"phase must be 'chat' or 'commit'",
+            )
+        max_wait_seconds = float(
+            os.environ.get("FOEDUS_PRESS_WAIT_TIMEOUT", "30")
+        )
+        poll_interval = 0.5
+        elapsed = 0.0
+        while elapsed < max_wait_seconds:
+            sess = _session(game_id)
+            if sess.state.is_terminal():
+                return {
+                    "ready": False, "current_phase": None,
+                    "turn": sess.state.turn, "is_terminal": True,
+                }
+            chat_complete = is_chat_phase_complete(sess.state)
+            if phase == "chat":
+                # Ready iff this player hasn't yet submitted their chat.
+                # (When chat_complete is True, this player is necessarily
+                # in chat_done already, so the check naturally falls
+                # through to the timeout retry path.)
+                if player not in sess.state.chat_done:
+                    return {
+                        "ready": True, "current_phase": "chat",
+                        "turn": sess.state.turn, "is_terminal": False,
+                    }
+            else:  # commit
+                # Ready iff chat complete AND player not yet committed.
+                if (chat_complete
+                        and player not in sess.state.round_done):
+                    return {
+                        "ready": True, "current_phase": "commit",
+                        "turn": sess.state.turn, "is_terminal": False,
+                    }
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+        # Timeout — return current snapshot for client to retry.
+        sess = _session(game_id)
+        return {
+            "ready": False, "current_phase": phase,
+            "turn": sess.state.turn,
+            "is_terminal": sess.state.is_terminal(),
+        }
 
     return app
 
