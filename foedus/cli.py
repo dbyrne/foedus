@@ -137,7 +137,12 @@ def main() -> int:
     args = parser.parse_args()
 
     config = GameConfig(num_players=args.players, max_turns=args.turns, seed=args.seed)
-    m = generate_map(config.num_players, seed=args.seed)
+    m = generate_map(
+        config.num_players,
+        seed=config.seed,
+        archetype=config.archetype,
+        map_radius=config.map_radius,
+    )
     state = initial_state(config, m)
 
     print(f"Generated map with {len(m.nodes)} nodes; {sum(1 for t in m.node_types.values() if t in (NodeType.SUPPLY, NodeType.HOME))} supply centers.")
