@@ -57,6 +57,15 @@ def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
     """Build a GameState with units placed and ownership inferred from unit
     positions.
 
+    Ownership seeding (precedence, low to high):
+      1. All nodes start as None (unowned).
+      2. Home nodes are seeded from `m.home_assignments` so each player's
+         home is owned by them at start. Tests that need a home to start
+         unowned must explicitly override `state.ownership[node] = None`
+         after construction.
+      3. Any node with a unit at construction time is owned by that unit's
+         owner (overrides home-seeding for non-home occupied nodes).
+
     `detente_threshold` (or its deprecated alias `peace_threshold`) defaults
     to 0 (détente disabled) so single-purpose tests aren't accidentally
     terminated by the détente condition.

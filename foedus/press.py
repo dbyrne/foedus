@@ -211,6 +211,17 @@ def _stagnation_cost_deltas(
     `config.stagnation_cost`. Eliminated and unit-less players are exempt.
 
     If config.stagnation_cost == 0, returns an empty dict (disabled).
+
+    Known interaction with Bundle 2 (mechanic A — supply ownership
+    cadence): under that rule, a player who walks into an empty supply
+    must HOLD on it for the next full turn to lock in ownership. If
+    that hold is the player's only order (e.g. single-unit player), the
+    stagnation cost penalizes that hold (-1.0 by default), exactly
+    canceling the +1 score from the newly-owned supply. Net 0 for the
+    capture turn. This catch-22 is a known design tension; revisit if
+    playtest data shows it disincentivizes commitment-to-hold beyond
+    the intent. Possible future tuning: exempt holds-on-recently-walked-
+    into-supplies, or shrink stagnation_cost magnitude.
     """
     cost = state.config.stagnation_cost
     if cost == 0.0:
