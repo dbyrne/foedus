@@ -144,3 +144,95 @@ def test_highland_pass_is_deterministic() -> None:
     assert m1.coords == m2.coords
     assert m1.edges == m2.edges
     assert m1.node_types == m2.node_types
+
+
+def test_archipelago_has_water() -> None:
+    from foedus.core import Archetype, NodeType
+    from foedus.mapgen import generate_map
+    for seed in [1, 7, 11, 42, 99]:
+        m = generate_map(num_players=4, seed=seed,
+                         archetype=Archetype.ARCHIPELAGO)
+        assert NodeType.WATER in m.node_types.values()
+
+
+def test_archipelago_no_mountain() -> None:
+    from foedus.core import Archetype, NodeType
+    from foedus.mapgen import generate_map
+    for seed in [1, 7, 11, 42, 99]:
+        m = generate_map(num_players=4, seed=seed,
+                         archetype=Archetype.ARCHIPELAGO)
+        assert NodeType.MOUNTAIN not in m.node_types.values()
+
+
+def test_archipelago_islands_disconnected() -> None:
+    """No path exists between any two homes through passable cells."""
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    for seed in [1, 7, 11, 42, 99]:
+        m = generate_map(num_players=4, seed=seed,
+                         archetype=Archetype.ARCHIPELAGO)
+        homes = sorted(m.home_assignments.keys())
+        start = homes[0]
+        visited = {start}
+        frontier = [start]
+        while frontier:
+            n = frontier.pop()
+            for nbr in m.edges[n]:
+                if nbr not in visited and m.is_passable(nbr):
+                    visited.add(nbr)
+                    frontier.append(nbr)
+        for h in homes[1:]:
+            assert h not in visited, \
+                f"seed {seed}: home {h} reachable from {start}"
+
+
+def test_archipelago_each_player_has_island() -> None:
+    """Each player's home has at least 3 passable cells in its component."""
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    for seed in [1, 7, 11, 42, 99]:
+        m = generate_map(num_players=4, seed=seed,
+                         archetype=Archetype.ARCHIPELAGO)
+        for home in m.home_assignments:
+            visited = {home}
+            frontier = [home]
+            while frontier:
+                n = frontier.pop()
+                for nbr in m.edges[n]:
+                    if nbr not in visited and m.is_passable(nbr):
+                        visited.add(nbr)
+                        frontier.append(nbr)
+            assert len(visited) >= 3, \
+                f"seed {seed}: home {home} island too small ({len(visited)} cells)"
+
+
+def test_archipelago_water_cells_have_no_edges() -> None:
+    from foedus.core import Archetype, NodeType
+    from foedus.mapgen import generate_map
+    m = generate_map(num_players=4, seed=42,
+                     archetype=Archetype.ARCHIPELAGO)
+    for n, t in m.node_types.items():
+        if t == NodeType.WATER:
+            assert m.edges[n] == frozenset()
+
+
+def test_archipelago_5_players_radius_3_raises() -> None:
+    """Archipelago with 5+ players requires map_radius >= 4."""
+    import pytest
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    with pytest.raises(ValueError):
+        generate_map(num_players=5, seed=42,
+                     archetype=Archetype.ARCHIPELAGO, map_radius=3)
+
+
+def test_archipelago_is_deterministic() -> None:
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    m1 = generate_map(num_players=4, seed=42,
+                      archetype=Archetype.ARCHIPELAGO)
+    m2 = generate_map(num_players=4, seed=42,
+                      archetype=Archetype.ARCHIPELAGO)
+    assert m1.coords == m2.coords
+    assert m1.edges == m2.edges
+    assert m1.node_types == m2.node_types

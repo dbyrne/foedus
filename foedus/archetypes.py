@@ -287,4 +287,135 @@ def _gen_highland_pass(num_players: int, rng: random.Random,
 
 def _gen_archipelago(num_players: int, rng: random.Random,
                      map_radius: int) -> Map:
-    raise NotImplementedError("Implemented in Task 7")
+    """Water-separated islands, one per player; isolated buildup flavor.
+
+    1. Validate: 5+ players require map_radius >= 4.
+    2. Pick num_players seed cells around the perimeter.
+    3. BFS-grow each island round-robin until quota reached or cells run out.
+    4. Mark unclaimed cells as WATER.
+    5. Apply ~45% supply density per island.
+    Re-rolls up to 5 times if any island ends up below the 3-cell minimum.
+    """
+    if num_players >= 5 and map_radius < 4:
+        raise ValueError(
+            "Archipelago archetype requires map_radius >= 4 for 5+ players"
+        )
+
+    for attempt in range(5):
+        coords = _hex_disk(map_radius)
+        coord_set = set(coords)
+
+        perimeter = [c for c in coords if _ring_distance(c) == map_radius]
+
+        def angle(c: tuple[int, int]) -> float:
+            x, y = _hex_to_xy(*c)
+            return math.atan2(y, x)
+
+        perimeter.sort(key=angle)
+        seed_coords = [
+            perimeter[(i * len(perimeter)) // num_players]
+            for i in range(num_players)
+        ]
+
+        # Round-robin BFS from each seed.
+        island_assignments: dict[tuple[int, int], int] = {
+            s: i for i, s in enumerate(seed_coords)
+        }
+        target_per_island = len(coords) // (num_players + 1)
+        frontiers: list[list[tuple[int, int]]] = [
+            [s] for s in seed_coords
+        ]
+
+        any_growth = True
+        while any_growth:
+            any_growth = False
+            for player_idx in range(num_players):
+                size = sum(1 for v in island_assignments.values()
+                           if v == player_idx)
+                if size >= target_per_island:
+                    continue
+                if not frontiers[player_idx]:
+                    continue
+                grew = False
+                while frontiers[player_idx] and not grew:
+                    cell = frontiers[player_idx].pop(0)
+                    for nbr in _hex_neighbors(*cell):
+                        if nbr not in coord_set:
+                            continue
+                        if nbr in island_assignments:
+                            continue
+                        # Don't claim a cell adjacent to another player's
+                        # island; this preserves a water gap between islands.
+                        touches_other = False
+                        for nbr2 in _hex_neighbors(*nbr):
+                            owner = island_assignments.get(nbr2)
+                            if owner is not None and owner != player_idx:
+                                touches_other = True
+                                break
+                        if touches_other:
+                            continue
+                        island_assignments[nbr] = player_idx
+                        frontiers[player_idx].append(nbr)
+                        grew = True
+                        any_growth = True
+                        break
+
+        sizes = [
+            sum(1 for v in island_assignments.values() if v == i)
+            for i in range(num_players)
+        ]
+        if any(s < 3 for s in sizes):
+            continue
+
+        final_coords = sorted(coords)
+        node_id_of = {c: i for i, c in enumerate(final_coords)}
+        coord_of = {i: c for c, i in node_id_of.items()}
+
+        water_ids = {
+            node_id_of[c] for c in final_coords if c not in island_assignments
+        }
+
+        edges: dict[NodeId, set[NodeId]] = {
+            i: set() for i in node_id_of.values()
+        }
+        for c, i in node_id_of.items():
+            if i in water_ids:
+                continue
+            for nbr in _hex_neighbors(*c):
+                if nbr in node_id_of and node_id_of[nbr] not in water_ids:
+                    edges[i].add(node_id_of[nbr])
+        edges_frozen = {n: frozenset(s) for n, s in edges.items()}
+
+        home_assignments: dict[NodeId, PlayerId] = {
+            node_id_of[s]: i for i, s in enumerate(seed_coords)
+        }
+
+        non_home_land_ids = [
+            n for n in node_id_of.values()
+            if n not in home_assignments and n not in water_ids
+        ]
+        rng.shuffle(non_home_land_ids)
+        num_supply = max(num_players, int(len(non_home_land_ids) * 0.45))
+        supply_set = set(non_home_land_ids[:num_supply])
+
+        node_types: dict[NodeId, NodeType] = {}
+        for n in node_id_of.values():
+            if n in water_ids:
+                node_types[n] = NodeType.WATER
+            elif n in home_assignments:
+                node_types[n] = NodeType.HOME
+            elif n in supply_set:
+                node_types[n] = NodeType.SUPPLY
+            else:
+                node_types[n] = NodeType.PLAIN
+
+        return Map(
+            coords=coord_of,
+            edges=edges_frozen,
+            node_types=node_types,
+            home_assignments=home_assignments,
+        )
+
+    raise ValueError(
+        "Archipelago generation failed after 5 attempts; try larger map_radius"
+    )
