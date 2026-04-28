@@ -25,6 +25,7 @@ from foedus.core import (
     Order,
     PlayerId,
     Press,
+    Stance,
     Unit,
     UnitId,
 )
@@ -48,8 +49,25 @@ class HeuristicAgent:
         return orders
 
     def choose_press(self, state: GameState, player: PlayerId) -> Press:
-        # Heuristic baseline is press-silent: NEUTRAL toward all, no intents.
-        return Press(stance={}, intents=[])
+        """ALLY toward the active opponent whose supply count is closest
+        to mine; NEUTRAL toward all others (omitted from the dict).
+        Ties broken by lower player_id. No intents.
+
+        Spec: docs/superpowers/specs/2026-04-28-press-driver-design.md
+        """
+        my_supply = state.supply_count(player)
+        active_opponents = [
+            p for p in range(state.config.num_players)
+            if p != player and p not in state.eliminated
+        ]
+        if not active_opponents:
+            return Press(stance={}, intents=[])
+        # min() with tuple key gives us closest-distance, then lower-pid.
+        closest = min(
+            active_opponents,
+            key=lambda p: (abs(state.supply_count(p) - my_supply), p),
+        )
+        return Press(stance={closest: Stance.ALLY}, intents=[])
 
     def chat_drafts(self, state: GameState,
                     player: PlayerId) -> list[ChatDraft]:
