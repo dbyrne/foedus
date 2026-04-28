@@ -165,6 +165,8 @@ class GameConfig:
     chat_char_cap: int = 500  # chat message body length cap
     round_timer_seconds: float = 60.0  # default for live play; drivers
                                        # override to 0 in training/turn-based modes
+    archetype: Archetype = Archetype.UNIFORM
+    map_radius: int = 3
     seed: int | None = None
     # Deprecated alias for detente_threshold; kept for one minor version.
     peace_threshold: int | None = None
