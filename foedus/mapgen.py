@@ -1,9 +1,9 @@
 """Procedural hex map generation.
 
-Uses a hex disk of radius 3 (37 cells) with light per-game variation:
-- 0-3 cells randomly removed to vary topology
-- N home nodes placed evenly around the perimeter
-- ~40% of non-home nodes become supply centers
+The generator dispatches on `archetype`:
+- UNIFORM produces v1-compatible maps (no terrain types).
+- HIGHLAND_PASS / ARCHIPELAGO / CONTINENTAL_SWEEP produce maps with
+  archetype-specific terrain and structural variation.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import random
 
-from foedus.core import Map, NodeId, NodeType, PlayerId
+from foedus.core import Archetype, Map, NodeId, NodeType, PlayerId
 
 
 def _hex_neighbors(q: int, r: int) -> list[tuple[int, int]]:
@@ -46,65 +46,36 @@ def _ring_distance(c: tuple[int, int]) -> int:
     return max(abs(q), abs(r), abs(q + r))
 
 
-def generate_map(num_players: int, seed: int | None = None) -> Map:
+def generate_map(
+    num_players: int,
+    seed: int | None = None,
+    archetype: Archetype = Archetype.UNIFORM,
+    map_radius: int = 3,
+) -> Map:
+    """Generate a procedural hex map.
+
+    Dispatches on archetype to a specialized generator. UNIFORM preserves
+    pre-archetype behavior exactly for backward compatibility.
+    """
     if not 2 <= num_players <= 6:
         raise ValueError("num_players must be 2..6")
 
     rng = random.Random(seed)
-    radius = 3
-    coords = _hex_disk(radius)
 
-    # Perimeter cells, sorted by angle around origin (for symmetric placement).
-    perimeter = [c for c in coords if _ring_distance(c) == radius]
-
-    def angle(c: tuple[int, int]) -> float:
-        x, y = _hex_to_xy(*c)
-        return math.atan2(y, x)
-
-    perimeter.sort(key=angle)
-
-    home_coords = [perimeter[(i * len(perimeter)) // num_players] for i in range(num_players)]
-
-    # Random topology variation: drop 0-3 non-home, non-center cells.
-    removable = [c for c in coords if c not in home_coords and c != (0, 0)]
-    rng.shuffle(removable)
-    removed = set(removable[: rng.randint(0, 3)])
-
-    final_coords = sorted(c for c in coords if c not in removed)
-    node_id_of = {c: i for i, c in enumerate(final_coords)}
-    coord_of = {i: c for c, i in node_id_of.items()}
-
-    # Adjacency.
-    edges: dict[NodeId, set[NodeId]] = {i: set() for i in node_id_of.values()}
-    for c, i in node_id_of.items():
-        for nbr in _hex_neighbors(*c):
-            if nbr in node_id_of:
-                edges[i].add(node_id_of[nbr])
-    edges_frozen = {n: frozenset(s) for n, s in edges.items()}
-
-    # Home nodes by player.
-    home_assignments: dict[NodeId, PlayerId] = {
-        node_id_of[hc]: i for i, hc in enumerate(home_coords)
-    }
-
-    # Supply centers: all homes plus ~40% of remaining nodes.
-    non_home_ids = [n for n in node_id_of.values() if n not in home_assignments]
-    rng.shuffle(non_home_ids)
-    num_supply = max(num_players, int(len(non_home_ids) * 0.4))
-    supply_set = set(non_home_ids[:num_supply])
-
-    node_types: dict[NodeId, NodeType] = {}
-    for n in node_id_of.values():
-        if n in home_assignments:
-            node_types[n] = NodeType.HOME
-        elif n in supply_set:
-            node_types[n] = NodeType.SUPPLY
-        else:
-            node_types[n] = NodeType.PLAIN
-
-    return Map(
-        coords=coord_of,
-        edges=edges_frozen,
-        node_types=node_types,
-        home_assignments=home_assignments,
+    # Lazy import avoids any future circular dependency.
+    from foedus.archetypes import (
+        _gen_archipelago,
+        _gen_continental_sweep,
+        _gen_highland_pass,
+        _gen_uniform,
     )
+
+    if archetype == Archetype.UNIFORM:
+        return _gen_uniform(num_players, rng, map_radius)
+    if archetype == Archetype.CONTINENTAL_SWEEP:
+        return _gen_continental_sweep(num_players, rng, map_radius)
+    if archetype == Archetype.HIGHLAND_PASS:
+        return _gen_highland_pass(num_players, rng, map_radius)
+    if archetype == Archetype.ARCHIPELAGO:
+        return _gen_archipelago(num_players, rng, map_radius)
+    raise ValueError(f"Unknown archetype: {archetype}")

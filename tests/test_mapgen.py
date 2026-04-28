@@ -120,3 +120,37 @@ def test_map_is_passable_false_for_mountain_water() -> None:
     )
     assert m.is_passable(0) is False
     assert m.is_passable(1) is False
+
+
+def test_uniform_archetype_preserves_v1_output_for_seed() -> None:
+    """The UNIFORM archetype must produce maps byte-identical to the
+    pre-archetype generator for the same seed and player count.
+    This is the primary backward-compat invariant."""
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+
+    m_explicit = generate_map(num_players=4, seed=42,
+                              archetype=Archetype.UNIFORM)
+    m_default = generate_map(num_players=4, seed=42)
+
+    assert m_explicit.coords == m_default.coords
+    assert m_explicit.edges == m_default.edges
+    assert m_explicit.node_types == m_default.node_types
+    assert m_explicit.home_assignments == m_default.home_assignments
+
+
+def test_default_generate_map_produces_uniform_archetype() -> None:
+    """Default archetype is UNIFORM — no terrain types."""
+    from foedus.core import NodeType
+    from foedus.mapgen import generate_map
+    m = generate_map(num_players=4, seed=42)
+    types = {t for t in m.node_types.values()}
+    assert NodeType.MOUNTAIN not in types
+    assert NodeType.WATER not in types
+
+
+def test_generate_map_accepts_archetype_kwarg() -> None:
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    m = generate_map(num_players=4, seed=42, archetype=Archetype.UNIFORM)
+    assert m is not None
