@@ -72,3 +72,75 @@ def test_continental_sweep_homes_match_player_count() -> None:
         m = generate_map(num_players=n, seed=42,
                          archetype=Archetype.CONTINENTAL_SWEEP)
         assert len(m.home_assignments) == n
+
+
+def test_highland_pass_has_mountains() -> None:
+    """Highland Pass produces at least one MOUNTAIN cell per map."""
+    from foedus.core import Archetype, NodeType
+    from foedus.mapgen import generate_map
+    for seed in [1, 7, 11, 42, 99]:
+        m = generate_map(num_players=4, seed=seed,
+                         archetype=Archetype.HIGHLAND_PASS)
+        types = list(m.node_types.values())
+        assert NodeType.MOUNTAIN in types, f"seed {seed}: no mountains"
+
+
+def test_highland_pass_no_water() -> None:
+    """Highland Pass uses MOUNTAIN, never WATER."""
+    from foedus.core import Archetype, NodeType
+    from foedus.mapgen import generate_map
+    for seed in [1, 7, 11, 42, 99]:
+        m = generate_map(num_players=4, seed=seed,
+                         archetype=Archetype.HIGHLAND_PASS)
+        assert NodeType.WATER not in m.node_types.values()
+
+
+def test_highland_pass_homes_reachable() -> None:
+    """Every home is reachable from every other home via passable cells.
+
+    Passes through the ridge must exist; otherwise homes get isolated.
+    """
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    for seed in [1, 7, 11, 42, 99]:
+        m = generate_map(num_players=4, seed=seed,
+                         archetype=Archetype.HIGHLAND_PASS)
+        homes = sorted(m.home_assignments.keys())
+        start = homes[0]
+        visited = {start}
+        frontier = [start]
+        while frontier:
+            n = frontier.pop()
+            for nbr in m.edges[n]:
+                if nbr not in visited and m.is_passable(nbr):
+                    visited.add(nbr)
+                    frontier.append(nbr)
+        for h in homes:
+            assert h in visited, \
+                f"seed {seed}: home {h} unreachable from home {start}"
+
+
+def test_highland_pass_mountain_cells_have_no_edges() -> None:
+    """MOUNTAIN cells should have empty edge sets and no neighbors."""
+    from foedus.core import Archetype, NodeType
+    from foedus.mapgen import generate_map
+    m = generate_map(num_players=4, seed=42,
+                     archetype=Archetype.HIGHLAND_PASS)
+    for n, t in m.node_types.items():
+        if t == NodeType.MOUNTAIN:
+            assert m.edges[n] == frozenset(), f"mountain node {n} has edges"
+        else:
+            for nbr in m.edges[n]:
+                assert m.node_types[nbr] != NodeType.MOUNTAIN
+
+
+def test_highland_pass_is_deterministic() -> None:
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    m1 = generate_map(num_players=4, seed=42,
+                      archetype=Archetype.HIGHLAND_PASS)
+    m2 = generate_map(num_players=4, seed=42,
+                      archetype=Archetype.HIGHLAND_PASS)
+    assert m1.coords == m2.coords
+    assert m1.edges == m2.edges
+    assert m1.node_types == m2.node_types
