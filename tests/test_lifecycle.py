@@ -31,14 +31,18 @@ def test_score_increments_per_turn() -> None:
 
 
 def test_score_grows_when_supply_captured() -> None:
-    """Capturing a supply center increases score next turn."""
+    """Capturing a supply center increases score after holding through a full turn."""
     m = line_map(5)
     s = make_state(m, [Unit(0, 0, 0)], num_players=2, build_period=999)
     # Move into adjacent supply node 1.
     s = resolve_turn(s, {0: {0: Move(dest=1)}})
-    assert s.scores[0] == 2.0  # home (still owned) + new supply
+    # Bundle 2 cadence: walk-in does not flip ownership — only home (node 0)
+    # is still owned; score = 1.
+    assert s.scores[0] == 1.0
     s = resolve_turn(s, {0: {0: Hold()}})
-    assert s.scores[0] == 4.0  # 2 supply x 2 turns total
+    # After holding node 1 for a full turn (start AND end), ownership flips.
+    # p0 now owns nodes 0 and 1 → score per turn = 2, accumulated = 1+2 = 3.
+    assert s.scores[0] == 3.0  # 1 (turn 1) + 2 (turn 2)
 
 
 def test_eliminated_player_does_not_score() -> None:
@@ -56,17 +60,20 @@ def test_eliminated_player_does_not_score() -> None:
 def test_build_phase_at_period() -> None:
     """Build occurs every config.build_period turns."""
     m = line_map(5)
-    # Player 0 will own home (0) + supply (1) by turn 1.
+    # Player 0 will own home (0) + supply (1) by turn 2 (hold-through flip).
     s = make_state(m, [Unit(0, 0, 0)], num_players=2, build_period=2)
     # turn 1: move 0->1 (capture supply). No build yet (build_period=2, turn 1).
     s = resolve_turn(s, {0: {0: Move(dest=1)}})
     assert len(s.units) == 1, "no build at turn 1"
     # turn 2: hold. Build phase fires.
-    # Player 0 now controls 2 supplies (home 0 + node 1) but home 0 is unoccupied.
+    # Bundle 2 cadence: node 1 owned at end of turn 2 (held start+end).
+    # p0 controls 2 supplies (home 0 + node 1); p1 controls home 4.
+    # make_state seeds home ownership for p1, so p1 also builds at n4.
     s = resolve_turn(s, {0: {0: Hold()}})
-    # supply_count(0) = 2 (nodes 0 and 1), unit count was 1 → need 1 more.
-    # Build at owned unoccupied node: node 0 is owned, unoccupied.
-    assert len(s.units) == 2
+    # p0: 2 supplies, 1 unit → builds 1 (at node 0). p1: 1 supply, 0 units → builds 1 (at node 4).
+    p0_units = [u for u in s.units.values() if u.owner == 0]
+    assert len(p0_units) == 2  # p0 built 1 new unit
+    assert any(u.location == 0 for u in p0_units)  # built at unoccupied home
 
 
 def test_no_build_when_supply_equals_units() -> None:
@@ -75,8 +82,11 @@ def test_no_build_when_supply_equals_units() -> None:
     # Don't capture extra supply. Just hold.
     s = resolve_turn(s, {0: {0: Hold()}})  # turn 1
     s = resolve_turn(s, {0: {0: Hold()}})  # turn 2 (build)
-    # Player 0 has 1 supply, 1 unit. No build needed.
-    assert len(s.units) == 1
+    # p0 has 1 supply, 1 unit — no build needed for p0.
+    # Bundle 2: make_state seeds home ownership for p1 (node 4); p1 has 0 units
+    # → p1 builds 1 unit at n4 at turn 2 (build_period=2).
+    p0_units = [u for u in s.units.values() if u.owner == 0]
+    assert len(p0_units) == 1  # no build for p0
 
 
 def test_eliminated_when_no_units_and_no_supply() -> None:
@@ -126,9 +136,11 @@ def test_build_at_owned_unoccupied_node() -> None:
     s = resolve_turn(s, {0: {0: Hold()}})
     # Build at turn 1 (build_period=1).
     # Supply for p0: home 0, supply 1, supply 2 = 3 supplies. Unit count = 1. Build 2.
-    locations = sorted(u.location for u in s.units.values())
-    assert len(s.units) == 3
-    assert locations == [0, 1, 2]
+    # Bundle 2: make_state seeds home ownership for p1 (node 4); p1 has 0 units → builds 1.
+    p0_units = [u for u in s.units.values() if u.owner == 0]
+    p0_locations = sorted(u.location for u in p0_units)
+    assert len(p0_units) == 3  # p0 built 2 new units
+    assert p0_locations == [0, 1, 2]  # at unoccupied owned nodes 0 and 1
 
 
 def test_terminal_at_max_turns() -> None:
