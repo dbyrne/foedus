@@ -212,16 +212,14 @@ def _stagnation_cost_deltas(
 
     If config.stagnation_cost == 0, returns an empty dict (disabled).
 
-    Known interaction with Bundle 2 (mechanic A — supply ownership
-    cadence): under that rule, a player who walks into an empty supply
-    must HOLD on it for the next full turn to lock in ownership. If
-    that hold is the player's only order (e.g. single-unit player), the
-    stagnation cost penalizes that hold (-1.0 by default), exactly
-    canceling the +1 score from the newly-owned supply. Net 0 for the
-    capture turn. This catch-22 is a known design tension; revisit if
-    playtest data shows it disincentivizes commitment-to-hold beyond
-    the intent. Possible future tuning: exempt holds-on-recently-walked-
-    into-supplies, or shrink stagnation_cost magnitude.
+    History: stagnation_cost was originally 1.0 by default (Bundle 1) to
+    discourage the v1 all-Hold détente-attractor degenerate game. Bundle 2's
+    hold-or-dislodge supply-ownership rule now incentivizes committed
+    Holds directly (you must Hold on a fresh capture to lock in ownership
+    via rule (b)), making the stagnation penalty perverse — a single-unit
+    player Holding to capture was paying for the strategically-correct play.
+    The default was therefore changed to 0.0 in Bundle 2. The penalty
+    mechanism is preserved here for callers who want the v1 behavior.
     """
     cost = state.config.stagnation_cost
     if cost == 0.0:

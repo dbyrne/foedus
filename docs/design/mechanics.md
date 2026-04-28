@@ -109,8 +109,14 @@ See `docs/design/2026-04-27-press-v0.md` for full spec. Summary:
   8 consecutive mutual-ALLY turns; a 2-player game, 6); `0` disables.
   Replaces v1's "no dislodgement" timeout, which had a degenerate
   attractor.
-- **Stagnation cost:** -1.0 score per turn for players whose canon
-  contains no Move or SupportMove (default 1.0; configurable; 0 disables).
+- **Stagnation cost:** -`stagnation_cost` score per turn for players whose
+  canon contains no Move or SupportMove (default `0.0`, i.e. disabled;
+  configurable). Was originally 1.0 in v1 to discourage all-Hold détente
+  attractor games, but Bundle 2's hold-or-dislodge supply ownership rule
+  now incentivizes commitment-to-hold directly — so the penalty became
+  perverse (a single-unit player Holding to lock in a freshly-captured
+  supply was paying the penalty for the strategically-correct play).
+  Callers who want the v1 behavior can pass `stagnation_cost=1.0`.
 
 ### Fog of war
 

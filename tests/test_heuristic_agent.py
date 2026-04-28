@@ -116,8 +116,12 @@ def test_heuristic_beats_random_in_score_aggregate() -> None:
     heuristic_total = 0.0
     random_total = 0.0
     for seed in range(12):
+        # Bundle 2 default change: stagnation_cost defaults to 0.0, but
+        # this regression test assumes the v1 dynamic where random's
+        # all-Hold turns are penalized — that's the gap heuristic exploits.
+        # Set stagnation_cost=1.0 explicitly to preserve the test's intent.
         cfg = GameConfig(num_players=4, seed=seed, max_turns=15,
-                         peace_threshold=99)
+                         peace_threshold=99, stagnation_cost=1.0)
         agents = {
             0: HeuristicAgent(),
             1: RandomAgent(seed=seed * 100 + 1),
@@ -140,8 +144,12 @@ def test_heuristic_match_result_payout_advantage() -> None:
     heuristic_payout = 0.0
     random_payout_sum = 0.0
     for seed in range(12):
+        # Bundle 2 default change: stagnation_cost defaults to 0.0, but
+        # this regression test assumes the v1 dynamic where random's
+        # all-Hold turns are penalized — that's the gap heuristic exploits.
+        # Set stagnation_cost=1.0 explicitly to preserve the test's intent.
         cfg = GameConfig(num_players=4, seed=seed, max_turns=15,
-                         peace_threshold=99)
+                         peace_threshold=99, stagnation_cost=1.0)
         agents = {
             0: HeuristicAgent(),
             1: RandomAgent(seed=seed * 100 + 1),
