@@ -6,8 +6,7 @@ import math
 
 import pytest
 
-from foedus.core import Hold, Unit
-from foedus.resolve import resolve_turn
+from foedus.core import Unit
 from foedus.scoring import (
     SCORE_POOL_FRACTION,
     SURVIVAL_BONUS_FRACTION,
@@ -109,12 +108,18 @@ def test_score_payout_eliminated_get_zero() -> None:
 
 
 def test_detente_payout_proportional_to_score() -> None:
-    """Détente payouts are linearly proportional to score (less steep than SS)."""
+    """Détente payouts are linearly proportional to score (less steep than SS).
+
+    Press v0 detente requires consensus mutual-ALLY signals across multiple
+    rounds; this scoring test only cares about a state where
+    `detente_reached` is True. We assemble that directly by setting
+    `mutual_ally_streak` to the threshold rather than driving the full
+    press flow, which keeps the test focused on the scoring math.
+    """
     m = line_map(5)
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 4)],
-                   num_players=2, max_turns=100, peace_threshold=2)
-    for _ in range(2):
-        s = resolve_turn(s, {0: {0: Hold()}, 1: {1: Hold()}})
+                   num_players=2, max_turns=100, detente_threshold=2)
+    s.mutual_ally_streak = s.config.detente_threshold
     assert s.detente_reached
     s.scores = {0: 100.0, 1: 90.0}
     result = compute_match_result(s)
@@ -130,9 +135,9 @@ def test_detente_payout_proportional_to_score() -> None:
 def test_detente_payout_all_zero_equal_split() -> None:
     m = line_map(5)
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 4)],
-                   num_players=2, max_turns=100, peace_threshold=2)
-    for _ in range(2):
-        s = resolve_turn(s, {0: {0: Hold()}, 1: {1: Hold()}})
+                   num_players=2, max_turns=100, detente_threshold=2)
+    s.mutual_ally_streak = s.config.detente_threshold
+    assert s.detente_reached
     s.scores = {0: 0.0, 1: 0.0}
     result = compute_match_result(s)
     assert math.isclose(result.payout[0], 0.5, rel_tol=1e-9)
@@ -142,9 +147,8 @@ def test_detente_payout_all_zero_equal_split() -> None:
 def test_detente_eliminated_excluded() -> None:
     m = line_map(5)
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 4)],
-                   num_players=4, max_turns=100, peace_threshold=2)
-    for _ in range(2):
-        s = resolve_turn(s, {0: {0: Hold()}, 1: {1: Hold()}})
+                   num_players=4, max_turns=100, detente_threshold=2)
+    s.mutual_ally_streak = s.config.detente_threshold
     assert s.detente_reached
     # Mark p2 and p3 as eliminated post-hoc
     s.scores = {0: 60.0, 1: 40.0, 2: 100.0, 3: 999.0}

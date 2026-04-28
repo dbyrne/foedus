@@ -46,7 +46,7 @@ def test_state_roundtrip_initial() -> None:
     assert s2.eliminated == s.eliminated
     assert s2.next_unit_id == s.next_unit_id
     assert s2.config.num_players == cfg.num_players
-    assert s2.config.peace_threshold == cfg.peace_threshold
+    assert s2.config.detente_threshold == cfg.detente_threshold
 
 
 def test_state_does_not_transmit_log() -> None:
