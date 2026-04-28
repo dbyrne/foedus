@@ -27,7 +27,7 @@ multi-agent games where:
 git clone https://github.com/dbyrne/foedus.git
 cd foedus
 pip install -e .[dev]
-pytest      # 96 tests, ~70ms
+pytest      # 161 tests, ~450ms
 ```
 
 ## Your first game
@@ -78,6 +78,100 @@ class GreedyAgent:
 That's the whole interface — anything implementing `choose_orders` is an
 agent. Plug it into `play_game({0: GreedyAgent(), 1: RandomAgent(), …}, config)`.
 
+## Scoring and ratings
+
+Every terminal game can be reduced to a `MatchResult` — ranks plus
+normalized payouts that a rating system can consume directly:
+
+```python
+from foedus import compute_match_result, play_game, GameConfig, RandomAgent
+
+final = play_game({p: RandomAgent() for p in range(4)},
+                  config=GameConfig(num_players=4))
+match = compute_match_result(final)
+print(match.rank)     # {0: 1, 1: 2, 2: 3, 3: 4} — placement (1 = best)
+print(match.payout)   # {0: 0.42, 1: 0.35, 2: 0.14, 3: 0.08} — sums to 1.0
+```
+
+Payout shape:
+- **Score-victory** (max turns reached): 20% flat survival bonus + 80%
+  sum-of-squares of in-game scores. Sum-of-squares rewards margin-of-victory
+  while the survival bonus keeps 4th-place payouts non-trivial — preserving
+  the incentive to keep playing.
+- **Détente**: linearly proportional to score among survivors. Less steep
+  than sum-of-squares so a losing-but-not-lost player still benefits from
+  pushing for peace.
+- **Last player standing**: takes the entire pot.
+- **Eliminated players**: zero.
+
+For multi-game ratings (install the `rating` extra: `pip install foedus[rating]`):
+
+```python
+from foedus.rating import RatingSystem
+
+ratings = RatingSystem()  # OpenSkill (Plackett-Luce) under the hood
+identities = ["alice", "bob", "carol", "dave"]
+
+for game_num in range(100):
+    cfg = GameConfig(num_players=4, seed=game_num)
+    agents = {p: RandomAgent(seed=p * 1000 + game_num) for p in range(4)}
+    final = play_game(agents, config=cfg)
+    ratings.update(compute_match_result(final), identities=identities)
+
+for name, rating in ratings.leaderboard():
+    print(f"{name}: {rating.conservative:.1f}  (mu={rating.mu:.1f}, sigma={rating.sigma:.1f})")
+```
+
+Use `rating.conservative` (mu − 3·sigma) for leaderboards: it's the lower
+bound of the 99.7% confidence interval, so newcomers don't temporarily
+leapfrog established players on a single lucky win.
+
+## Agents-as-Docker-images
+
+The `foedus[remote]` extra adds an HTTP wire protocol (`/act`, `/info`,
+`/healthz`) so an agent can run anywhere — same process, sibling subprocess,
+SSH'd machine, or a Docker container pulled from a registry. `RemoteAgent`
+implements the same `Agent` protocol over HTTP and is a drop-in for
+`play_game(...)`.
+
+Quick local tour with the bundled `HeuristicAgent`:
+
+```sh
+# Terminal 1: serve the agent over HTTP
+foedus agent serve --agent foedus.HeuristicAgent --port 8080
+
+# Terminal 2: ping it
+curl http://localhost:8080/info
+```
+
+Or package it as a Docker image you can share:
+
+```sh
+foedus agent build heuristic:v1 --agent foedus.HeuristicAgent
+foedus agent run heuristic:v1 --port 8080 --name h1
+# (someone else can then docker pull and play against it)
+foedus agent stop h1
+```
+
+In Python:
+
+```python
+from foedus import GameConfig, HeuristicAgent, RandomAgent, play_game
+from foedus.remote import RemoteAgent  # pip install foedus[remote]
+
+agents = {
+    0: HeuristicAgent(),                           # in-process
+    1: RemoteAgent("http://localhost:8080"),       # over the wire
+    2: RandomAgent(),
+    3: RandomAgent(),
+}
+final = play_game(agents, config=GameConfig(num_players=4))
+```
+
+`HeuristicAgent` is a greedy-expansion baseline (BFS to nearest unowned
+supply, step toward it). It demonstrably beats `RandomAgent` over modest
+sample sizes — useful as the bar to clear when you train a real NN.
+
 ## The game in 30 seconds
 
 - Procedural hex map of ~37 nodes, freshly generated each game.
@@ -106,11 +200,13 @@ foedus/
   fog.py              per-player visible-state filtering
   legal.py            enumerate geometrically-valid orders for a unit
   loop.py             play_game(agents, config) -> final GameState
+  scoring.py          MatchResult and compute_match_result
+  rating.py           OpenSkill-backed RatingSystem  (extra: foedus[rating])
   cli.py              interactive REPL
   agents/
     base.py           Agent protocol
     random_agent.py   uniform-random reference agent
-tests/                96 tests, all passing in ~70ms
+tests/                161 tests, all passing in ~450ms
 ```
 
 ## Roadmap
