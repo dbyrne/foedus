@@ -18,9 +18,11 @@ from typing import Any
 
 from foedus.agents.base import Agent
 from foedus.core import (
+    ChatDraft,
     GameState,
     Order,
     PlayerId,
+    Press,
     UnitId,
 )
 from foedus.legal import legal_orders_for_unit
@@ -147,7 +149,6 @@ class GameSession:
         the initial state) AND after each finalize_round in
         submit_press_commit.
         """
-        from foedus.core import Press
         for player, agent in self.agents.items():
             if not self.is_active(player):
                 continue
@@ -171,7 +172,6 @@ class GameSession:
         `draft` is None or `{}` to skip. Otherwise must have `body` and
         optional `recipients`.
         """
-        from foedus.core import ChatDraft
         if not self.is_human(player):
             raise ValueError(f"seat {player} is not human (LLM seat)")
         if not self.is_active(player):
