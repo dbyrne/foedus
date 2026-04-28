@@ -179,6 +179,10 @@ class GameConfig:
         # Always reflect the current value back into peace_threshold for any
         # legacy reader that reads it directly from a GameConfig instance.
         self.peace_threshold = self.detente_threshold
+        # Coerce string archetype (e.g. from JSON wire) to the enum value so
+        # generate_map's dispatch by-equality works regardless of input type.
+        if isinstance(self.archetype, str):
+            self.archetype = Archetype(self.archetype)
 
 
 @dataclass
