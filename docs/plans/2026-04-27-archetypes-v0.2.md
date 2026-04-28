@@ -1,5 +1,14 @@
 # Archetypes v0.2 Implementation Plan
 
+> **Note (post-implementation):** After initial implementation,
+> ARCHIPELAGO was swapped out of the v0.2 archetype set in favor of
+> RIVERLANDS. Archipelago without convoy support left players
+> permanently isolated on separate islands, making the archetype
+> strategically degenerate; it is deferred to v0.3 paired with convoys.
+> Phase E and Task 7 references below still describe the original
+> Archipelago implementation as historical context — see commit history
+> for the swap.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement three procedural map archetypes (Highland Pass, Archipelago, Continental Sweep) plus a backward-compat UNIFORM archetype, per `docs/design/2026-04-27-archetypes-v0.2.md`.

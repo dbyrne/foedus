@@ -2,7 +2,7 @@
 
 The generator dispatches on `archetype`:
 - UNIFORM produces v1-compatible maps (no terrain types).
-- HIGHLAND_PASS / ARCHIPELAGO / CONTINENTAL_SWEEP produce maps with
+- HIGHLAND_PASS / RIVERLANDS / CONTINENTAL_SWEEP produce maps with
   archetype-specific terrain and structural variation.
 """
 
@@ -64,9 +64,9 @@ def generate_map(
 
     # Lazy import avoids any future circular dependency.
     from foedus.archetypes import (
-        _gen_archipelago,
         _gen_continental_sweep,
         _gen_highland_pass,
+        _gen_riverlands,
         _gen_uniform,
     )
 
@@ -76,6 +76,6 @@ def generate_map(
         return _gen_continental_sweep(num_players, rng, map_radius)
     if archetype == Archetype.HIGHLAND_PASS:
         return _gen_highland_pass(num_players, rng, map_radius)
-    if archetype == Archetype.ARCHIPELAGO:
-        return _gen_archipelago(num_players, rng, map_radius)
+    if archetype == Archetype.RIVERLANDS:
+        return _gen_riverlands(num_players, rng, map_radius)
     raise ValueError(f"Unknown archetype: {archetype}")

@@ -68,7 +68,7 @@ def test_play_game_propagates_archetype_to_mapgen() -> None:
 
     archetypes_with_terrain = [
         (Archetype.HIGHLAND_PASS, NodeType.MOUNTAIN),
-        (Archetype.ARCHIPELAGO, NodeType.WATER),
+        (Archetype.RIVERLANDS, NodeType.WATER),
     ]
     for arch, expected_terrain in archetypes_with_terrain:
         cfg = GameConfig(num_players=4, seed=42, max_turns=2,

@@ -140,10 +140,10 @@ Three archetypes for v0.2, each requiring minimal new mechanics:
   flavor: defensive grind, control of one key hex can hold off larger
   forces, coalitions form around pass control.
 
-- **Archipelago.** Heavy water; land breaks into 3–5 isolated regions;
-  each player's home on a different island. Water hexes are impassable
-  (no convoys in v1). Strategic flavor: long isolated buildup followed
-  by sudden contact; first-to-touch wins; encourages surprise alliances.
+- **Riverlands.** Snaking river divides the map into two regions
+  connected by exactly two crossings. Strategic flavor: control of
+  crossings is decisive; coalitions form around which crossing to
+  push through.
 
 - **Continental Sweep.** Mostly open plains, dense connectivity, no
   terrain barriers. Closest to current uniform foedus. Strategic
@@ -197,6 +197,10 @@ cheap to add:
   variant home placement.*
 - **City State.** Urban centers around home regions; surrounding
   hinterlands sparse. Wars contained to a few key locations.
+- **Archipelago.** Heavy water; land breaks into 3-5 isolated regions;
+  each player's home on a different island. Requires convoys for
+  cross-water movement (currently not implemented). Strategic flavor:
+  isolated buildup followed by sudden contact via convoy chains.
 
 ### B. Variable supply center values
 

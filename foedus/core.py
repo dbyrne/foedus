@@ -22,7 +22,7 @@ class NodeType(Enum):
 class Archetype(Enum):
     UNIFORM = "uniform"                       # v1 backward-compat (no terrain)
     HIGHLAND_PASS = "highland_pass"           # mountain ridges with passes
-    ARCHIPELAGO = "archipelago"               # water-separated islands
+    RIVERLANDS = "riverlands"                 # snaking river with two crossings
     CONTINENTAL_SWEEP = "continental_sweep"   # open plains, dense connectivity
 
 

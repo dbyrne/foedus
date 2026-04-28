@@ -15,12 +15,16 @@ III): *"Adding terrain types with movement/combat modifiers turns each
 generated map into a distinct strategic puzzle."*
 
 This proposal introduces three **map archetypes** — Highland Pass,
-Archipelago, and Continental Sweep — each with a recognizable
+Riverlands, and Continental Sweep — each with a recognizable
 strategic flavor. The generator picks (or is told) an archetype, then
 samples within that archetype's parameters. Specifics still vary
 between maps of the same archetype, preserving the procedural-variety
 mission, but each game has an identifiable character announced up
 front.
+
+(Archipelago was originally part of this set but was deferred to
+v0.3 paired with convoy support — without cross-water movement,
+players on separate islands cannot interact. See §12.)
 
 This is the smallest viable depth pass: no combat modifiers, no
 resources, no supply-chain mechanics. Just terrain shapes the playable
@@ -53,16 +57,16 @@ geometry, and that alone shifts strategy meaningfully.
 
 | Dimension | Decision |
 |---|---|
-| Archetype set | UNIFORM (v1 backward-compat) + HIGHLAND_PASS + ARCHIPELAGO + CONTINENTAL_SWEEP |
+| Archetype set | UNIFORM (v1 backward-compat) + HIGHLAND_PASS + RIVERLANDS + CONTINENTAL_SWEEP |
 | Selection mechanism | `GameConfig.archetype: Archetype = Archetype.UNIFORM`; default preserves v1 behavior |
 | Random selection | Standalone `random_archetype(rng_or_seed)` function returning a non-UNIFORM choice |
 | Map size | Fixed nominal (`map_radius=3` default); `map_radius` exposed as a flexible parameter for future archetypes |
 | Hex count consistency | Same total hex count across archetypes; archetypes vary the *playable* subset |
 | Terrain types | Two new node types: `MOUNTAIN` and `WATER`. Identical semantics in v0.2 (impassable, not ownable, not occupiable). Distinct rendering. Forward-compatible for future divergence (combat modifiers, convoys). |
 | Adjacency | MOUNTAIN/WATER hexes have empty edge sets; no node has them as neighbors. |
-| Supply density | UNIFORM 40% (unchanged); HIGHLAND_PASS ~35%; CONTINENTAL_SWEEP ~50%; ARCHIPELAGO ~45% (within islands) |
-| Connectivity per archetype | UNIFORM 0-3 cells removed (unchanged); CONTINENTAL_SWEEP 0-1; HIGHLAND_PASS minimal removal + ridge mountains; ARCHIPELAGO water replaces non-island cells |
-| Player count constraints | Archipelago raises `ValueError` if `num_players >= 5 and map_radius < 4` |
+| Supply density | UNIFORM 40% (unchanged); HIGHLAND_PASS ~35%; CONTINENTAL_SWEEP ~50%; RIVERLANDS ~40% |
+| Connectivity per archetype | UNIFORM 0-3 cells removed (unchanged); CONTINENTAL_SWEEP 0-1; HIGHLAND_PASS minimal removal + ridge mountains; RIVERLANDS minimal removal + snaking river WATER cells with two PLAIN crossings |
+| Player count constraints | None (all archetypes accept the supported 2..6 range at radius=3) |
 
 ## 4. Architecture
 
@@ -109,7 +113,7 @@ class NodeType(Enum):
 class Archetype(Enum):
     UNIFORM = "uniform"                       # v1 backward-compat
     HIGHLAND_PASS = "highland_pass"
-    ARCHIPELAGO = "archipelago"
+    RIVERLANDS = "riverlands"
     CONTINENTAL_SWEEP = "continental_sweep"
 ```
 
@@ -165,7 +169,7 @@ def random_archetype(seed: int | None = None) -> Archetype:
     """Return a random Archetype from the non-UNIFORM set.
 
     Caller can pass a seed for reproducibility. Returns one of:
-    HIGHLAND_PASS, ARCHIPELAGO, CONTINENTAL_SWEEP.
+    HIGHLAND_PASS, RIVERLANDS, CONTINENTAL_SWEEP.
     """
 ```
 
@@ -237,30 +241,33 @@ Same as UNIFORM with two parameter tweaks:
 re-roll the ridge direction up to N times (default 5). If still
 infeasible, fall back to fewer mountain cells along the ridge.
 
-### `ARCHIPELAGO`
+### `RIVERLANDS`
 
 ```
-1. Validate: if num_players >= 5 and map_radius < 4, raise ValueError
-   ("Archipelago archetype requires map_radius >= 4 for 5+ players").
-2. Generate hex disk of radius map_radius.
-3. Pick num_players seed cells spread evenly around the perimeter
-   (existing home-placement logic).
-4. BFS-grow each seed for floor(total_hexes / (num_players + 1))
-   hexes, claiming uncontested neighbor cells round-robin among
-   players. Each grown set forms an "island."
-5. Mark all unclaimed cells as WATER.
-6. Mark each player's seed cell as their HOME; remaining island cells
-   become PLAIN.
-7. ~45% of non-home cells per island as SUPPLY → each island has its
-   own viable economy.
-8. Build adjacency, excluding edges to/from WATER cells. Inter-island
-   movement is impossible by construction.
-9. Return Map.
+1. Generate hex disk of radius map_radius; remove 0-1 random cells
+   (minimal variation; the river itself supplies the structure).
+2. Pick two roughly opposite perimeter cells as the river endpoints.
+3. Compute a midpoint waypoint perpendicular-offset from the
+   straight ep_a->ep_b segment by a random amount (~30% of the
+   straight-line length); snap to the closest live coord. The two
+   hex line traces (ep_a->waypoint, waypoint->ep_b) form the snake.
+4. Gather all live cells whose center is within ~0.85 of either
+   line segment as river candidates.
+5. Pick exactly 2 evenly-spaced river candidates (sorted along the
+   path) as CROSSINGS — these stay passable. Endpoints (ep_a, ep_b)
+   are also forced to be passable (homes need them).
+6. Mark remaining river candidates as WATER.
+7. Place homes evenly along the passable perimeter.
+8. Verify all homes are mutually reachable through the crossings;
+   re-roll up to 5 attempts if not.
+9. ~40% of remaining (non-home, non-water) cells as SUPPLY.
+10. Build adjacency, excluding edges to/from WATER cells.
+11. Return Map.
 ```
 
-**Edge case:** if a player ends up with an island of fewer than 3
-hexes, re-roll the seed placement up to N times. If still infeasible,
-raise `ValueError` with a hint to use a larger `map_radius`.
+**Edge case:** if all 5 attempts fail (e.g., snake is too short or
+crossings can't connect both regions), fall back to UNIFORM with a
+logging.warning.
 
 ## 8. Adjacency and passability rules
 
@@ -318,7 +325,7 @@ are excluded from this set, so no change needed.
 ### `tests/test_archetypes.py` (new)
 
 - `test_archetype_enum_has_four_values` — UNIFORM, HIGHLAND_PASS,
-  ARCHIPELAGO, CONTINENTAL_SWEEP
+  RIVERLANDS, CONTINENTAL_SWEEP
 - `test_random_archetype_excludes_uniform` — sample 100 calls; UNIFORM
   never returned
 - `test_random_archetype_seeded_deterministic` — same seed → same
@@ -353,14 +360,14 @@ HIGHLAND_PASS:
 - `test_highland_pass_split_geography` — homes are split across the
   ridge (at least one home on each side)
 
-ARCHIPELAGO:
-- `test_archipelago_has_water` — at least one WATER node
-- `test_archipelago_islands_are_disconnected` — no path exists from
-  one home to another via passable cells (BFS confirms)
-- `test_archipelago_each_player_has_island` — each home is in a
-  connected component of passable cells with at least 3 cells total
-- `test_archipelago_5_players_radius_3_raises` — ValueError on
-  oversize player count + small map
+RIVERLANDS:
+- `test_riverlands_has_water` — at least one WATER node
+- `test_riverlands_no_mountain` — no MOUNTAIN cells
+- `test_riverlands_homes_reachable_through_crossings` — every home
+  reachable from every other home via passable cells (i.e., crossings
+  bridge the river)
+- `test_riverlands_water_cells_have_no_edges` — WATER nodes have empty
+  edge sets
 
 Generator general properties:
 - `test_all_archetypes_produce_valid_maps` — for each archetype, the
@@ -385,6 +392,12 @@ Generator general properties:
   Sea, City State) — all of which require new mechanics this spec
   doesn't introduce
 - Convoys / cross-water movement
+- **ARCHIPELAGO archetype.** Originally part of the v0.2 set, but
+  deferred to v0.3 paired with convoy support. Without cross-water
+  movement, players on separate islands cannot interact, making the
+  archetype strategically degenerate. RIVERLANDS replaces it as the
+  v0.2 water-themed archetype because the playable surface stays
+  connected through the crossings.
 - CLI `--archetype` flag (small follow-up)
 - Map rendering: cli.py needs ASCII chars for MOUNTAIN/WATER. Plan
   task will include this. Suggested: `^` for MOUNTAIN, `~` for WATER.
@@ -399,15 +412,15 @@ Generator general properties:
    may produce more recognizable maps.
 2. **Pass count formula.** `1 + num_players // 3` gives 1 pass for
    2-3 players, 2 for 4-5, 3 for 6. Is this the right scaling?
-3. **Archipelago island size minimum.** I picked 3 hexes per island
-   as the floor. With 4 players on radius=3, islands average 7-8
-   hexes. With 6 players on radius=3, this fails — hence the
-   ValueError. Is 3 the right minimum, or should it be 4-5?
+3. **Riverlands snake amplitude.** The waypoint perpendicular offset
+   is sampled uniformly from ±30% of the straight-line length. Larger
+   offsets create more dramatic snakes but more re-roll failures; is
+   30% the right ceiling?
 4. **Continental Sweep degree threshold.** What's the "right" average
    node degree for "denser than UNIFORM"? My test threshold is 4.5
    but it may need tuning post-implementation.
 5. **Archetype names.** Are these final, or do we want more evocative
-   names ("The Iron Pass" / "Scattered Sea" / "Open Steppe")?
+   names ("The Iron Pass" / "Two Fords" / "Open Steppe")?
 
 ## 14. Appendix — generator pseudocode flow
 
@@ -423,8 +436,8 @@ def generate_map(num_players, seed=None, archetype=Archetype.UNIFORM,
         return _gen_continental_sweep(num_players, rng, map_radius)
     elif archetype == Archetype.HIGHLAND_PASS:
         return _gen_highland_pass(num_players, rng, map_radius)
-    elif archetype == Archetype.ARCHIPELAGO:
-        return _gen_archipelago(num_players, rng, map_radius)
+    elif archetype == Archetype.RIVERLANDS:
+        return _gen_riverlands(num_players, rng, map_radius)
     else:
         raise ValueError(f"Unknown archetype: {archetype}")
 ```
