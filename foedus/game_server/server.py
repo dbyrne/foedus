@@ -319,7 +319,7 @@ def make_app() -> FastAPI:
                                 detail=f"unknown player {player}")
         if not sess.is_human(player):
             raise HTTPException(status_code=400,
-                                detail=f"player {player} is not LLM seat")
+                                detail=f"player {player} is not a human (LLM) seat")
         return render_chat_prompt(sess.state, player)
 
     @app.get("/games/{game_id}/commit-prompt/{player}",
@@ -333,7 +333,7 @@ def make_app() -> FastAPI:
                                 detail=f"unknown player {player}")
         if not sess.is_human(player):
             raise HTTPException(status_code=400,
-                                detail=f"player {player} is not LLM seat")
+                                detail=f"player {player} is not a human (LLM) seat")
         if not is_chat_phase_complete(sess.state):
             raise HTTPException(
                 status_code=425,
@@ -365,9 +365,11 @@ def make_app() -> FastAPI:
                 }
             chat_complete = is_chat_phase_complete(sess.state)
             if phase == "chat":
-                # Ready iff chat phase still open AND player not done.
-                if (not chat_complete
-                        and player not in sess.state.chat_done):
+                # Ready iff this player hasn't yet submitted their chat.
+                # (When chat_complete is True, this player is necessarily
+                # in chat_done already, so the check naturally falls
+                # through to the timeout retry path.)
+                if player not in sess.state.chat_done:
                     return {
                         "ready": True, "current_phase": "chat",
                         "turn": sess.state.turn, "is_terminal": False,

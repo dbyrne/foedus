@@ -158,6 +158,16 @@ class GameSession:
         Called once at session creation (after __post_init__ snapshots
         the initial state) AND after each finalize_round in
         submit_press_commit.
+
+        KNOWN LIMITATION: agent seats compute their press + orders BEFORE
+        any human chat or press tokens are written to state for the round.
+        For HeuristicAgent (which ignores chat/press) this is fine. For a
+        hypothetical agent that reads same-round chat or inbound intents
+        in choose_orders / choose_press, this would mean the agent acts on
+        stale information. If that becomes a real use case, defer agent
+        order computation to after `is_chat_phase_complete` returns True
+        (the same trigger point where finalize_round currently fires) —
+        an architectural change worth its own design pass.
         """
         for player, agent in self.agents.items():
             if not self.is_active(player):
