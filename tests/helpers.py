@@ -67,6 +67,9 @@ def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
         detente_threshold = peace_threshold
 
     ownership: dict[NodeId, PlayerId | None] = {n: None for n in m.nodes}
+    # Seed home node ownership from map's home_assignments.
+    for node, player in m.home_assignments.items():
+        ownership[node] = player
     for u in units:
         ownership[u.location] = u.owner
 
