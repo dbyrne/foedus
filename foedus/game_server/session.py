@@ -91,6 +91,14 @@ class GameSession:
     seats: dict[PlayerId, SeatSpec]
     agents: dict[PlayerId, Agent]                       # non-human seats only
     pending_orders: dict[PlayerId, dict[UnitId, Order]] = field(default_factory=dict)
+    # Snapshots for replay — index 0 is the initial state, index N is the
+    # state after `advance()` was called N times. The history grows
+    # monotonically; nothing in here is mutated retroactively.
+    history: list[GameState] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.history:
+            self.history.append(self.state)
 
     # --- query helpers -----------------------------------------------------
 
@@ -148,6 +156,7 @@ class GameSession:
         """Collect orders, resolve one turn, clear human submissions."""
         all_orders = self.collect_all_orders()
         self.state = resolve_turn(self.state, all_orders)
+        self.history.append(self.state)
         self.pending_orders.clear()
 
     def auto_advance(self, max_turns: int = 1000) -> int:
@@ -172,32 +181,57 @@ class GameSession:
         engine still applies fog at resolve time), legal orders per owned
         unit, current score, who else is being awaited, and game-end signals.
         """
+        return self._build_view(self.state, player, is_replay=False)
+
+    def view_at_turn(self, turn: int, player: PlayerId) -> dict[str, Any]:
+        """Replay view: state at snapshot index `turn`. Read-only; no
+        legal_orders since you can't act in the past.
+        """
+        if not 0 <= turn < len(self.history):
+            raise IndexError(
+                f"turn {turn} out of range; available 0..{len(self.history) - 1}"
+            )
+        return self._build_view(self.history[turn], player, is_replay=True)
+
+    def history_summary(self) -> dict[str, Any]:
+        return {
+            "current_turn": self.state.turn,
+            "snapshots": list(range(len(self.history))),
+        }
+
+    # --- internal helpers -------------------------------------------------
+
+    def _build_view(self, state: GameState, player: PlayerId,
+                    *, is_replay: bool) -> dict[str, Any]:
         from foedus.remote.wire import serialize_order, serialize_state
-        my_units = [u for u in self.state.units.values() if u.owner == player]
+        my_units = [u for u in state.units.values() if u.owner == player]
         legal: dict[str, list[dict[str, Any]]] = {}
-        for u in my_units:
-            legal[str(u.id)] = [serialize_order(o)
-                                for o in legal_orders_for_unit(self.state, u.id)]
+        if not is_replay:
+            for u in my_units:
+                legal[str(u.id)] = [
+                    serialize_order(o)
+                    for o in legal_orders_for_unit(state, u.id)
+                ]
 
         return {
             "game_id": self.game_id,
             "you": player,
-            "turn": self.state.turn,
-            "max_turns": self.state.config.max_turns,
-            "state": serialize_state(self.state),
+            "turn": state.turn,
+            "max_turns": state.config.max_turns,
+            "state": serialize_state(state),
             "your_units": [
                 {"id": u.id, "owner": u.owner, "location": u.location}
                 for u in my_units
             ],
             "legal_orders": legal,
-            "awaiting_humans": self.awaiting_humans(),
-            "submitted": self.has_submitted(player),
-            "is_terminal": self.state.is_terminal(),
-            "detente_reached": self.state.detente_reached,
-            "winner": self.state.winner,
-            "winners": self.state.winners(),
-            "scores": dict(self.state.scores),
-            "eliminated": sorted(self.state.eliminated),
+            "awaiting_humans": [] if is_replay else self.awaiting_humans(),
+            "submitted": False if is_replay else self.has_submitted(player),
+            "is_terminal": state.is_terminal(),
+            "detente_reached": state.detente_reached,
+            "winner": state.winner,
+            "winners": state.winners(),
+            "scores": dict(state.scores),
+            "eliminated": sorted(state.eliminated),
             "seats": {
                 str(p): {
                     "type": s.type,
@@ -207,4 +241,7 @@ class GameSession:
                 }
                 for p, s in self.seats.items()
             },
+            "is_replay": is_replay,
+            "current_turn": self.state.turn,
+            "snapshot_count": len(self.history),
         }

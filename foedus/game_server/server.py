@@ -211,6 +211,21 @@ def make_app() -> FastAPI:
         del sessions[game_id]
         return {"ok": True}
 
+    @app.get("/games/{game_id}/history")
+    def history_summary(game_id: str) -> dict[str, Any]:
+        return _session(game_id).history_summary()
+
+    @app.get("/games/{game_id}/history/{turn}/view/{player}")
+    def historical_view(game_id: str, turn: int, player: int) -> dict[str, Any]:
+        sess = _session(game_id)
+        if player not in sess.seats:
+            raise HTTPException(status_code=400,
+                                detail=f"unknown player {player}")
+        try:
+            return sess.view_at_turn(turn, player)
+        except IndexError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
     return app
 
 

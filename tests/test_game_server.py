@@ -221,3 +221,64 @@ def test_view_terminal_after_full_game(client: TestClient) -> None:
     assert view["is_terminal"] is True
     # Either there's a single winner or a winners list (détente / multi-tie).
     assert view["winner"] is not None or view["winners"]
+
+
+# --- replay history ---
+
+
+def test_history_summary_includes_initial_snapshot(client: TestClient) -> None:
+    gid = _create_all_agent_game(client, num_players=2, max_turns=5)
+    r = client.get(f"/games/{gid}/history")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["current_turn"] == 0
+    assert body["snapshots"] == [0]
+
+
+def test_history_grows_after_each_advance(client: TestClient) -> None:
+    gid = _create_all_agent_game(client, num_players=2, max_turns=10)
+    # Advance 3 turns one at a time.
+    for _ in range(3):
+        r = client.post(f"/games/{gid}/advance", json={"auto": False})
+        assert r.status_code == 200
+    body = client.get(f"/games/{gid}/history").json()
+    assert body["current_turn"] == 3
+    assert body["snapshots"] == [0, 1, 2, 3]
+
+
+def test_historical_view_reads_past_state(client: TestClient) -> None:
+    gid = _create_all_agent_game(client, num_players=2, max_turns=5)
+    client.post(f"/games/{gid}/advance", json={"auto": False})
+    client.post(f"/games/{gid}/advance", json={"auto": False})
+    # Past view at turn 1 should report turn=1 in the payload.
+    r = client.get(f"/games/{gid}/history/1/view/0")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["turn"] == 1
+    assert body["is_replay"] is True
+    # Replay views never carry legal_orders or awaiting_humans data.
+    assert body["legal_orders"] == {}
+    assert body["awaiting_humans"] == []
+    # Current turn is exposed alongside so clients can detect "live vs past."
+    assert body["current_turn"] == 2
+    assert body["snapshot_count"] == 3
+
+
+def test_historical_view_at_zero_returns_initial_state(client: TestClient) -> None:
+    gid = _create_all_agent_game(client, num_players=2, max_turns=5)
+    client.post(f"/games/{gid}/advance", json={"auto": False})
+    r = client.get(f"/games/{gid}/history/0/view/0")
+    assert r.status_code == 200
+    assert r.json()["turn"] == 0
+
+
+def test_historical_view_out_of_range_returns_404(client: TestClient) -> None:
+    gid = _create_all_agent_game(client, num_players=2, max_turns=5)
+    r = client.get(f"/games/{gid}/history/99/view/0")
+    assert r.status_code == 404
+
+
+def test_historical_view_unknown_player_returns_400(client: TestClient) -> None:
+    gid = _create_all_agent_game(client, num_players=2, max_turns=5)
+    r = client.get(f"/games/{gid}/history/0/view/9")
+    assert r.status_code == 400
