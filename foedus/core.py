@@ -15,6 +15,8 @@ class NodeType(Enum):
     PLAIN = "plain"
     SUPPLY = "supply"
     HOME = "home"
+    MOUNTAIN = "mountain"   # impassable, not ownable, not occupiable
+    WATER = "water"         # same semantics as MOUNTAIN; distinct render
 
 
 @dataclass(frozen=True)
@@ -135,6 +137,13 @@ class Map:
 
     def is_supply(self, n: NodeId) -> bool:
         return self.node_types[n] in (NodeType.SUPPLY, NodeType.HOME)
+
+    def is_passable(self, n: NodeId) -> bool:
+        """True iff a unit can occupy/move-through this node.
+
+        MOUNTAIN and WATER are impassable; PLAIN, SUPPLY, and HOME are passable.
+        """
+        return self.node_types[n] not in (NodeType.MOUNTAIN, NodeType.WATER)
 
 
 @dataclass

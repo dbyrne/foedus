@@ -89,3 +89,34 @@ def test_invalid_player_count_raises() -> None:
         generate_map(1)
     with pytest.raises(ValueError):
         generate_map(7)
+
+
+def test_node_type_has_mountain_and_water() -> None:
+    from foedus.core import NodeType
+    assert NodeType.MOUNTAIN.value == "mountain"
+    assert NodeType.WATER.value == "water"
+
+
+def test_map_is_passable_for_plain_supply_home() -> None:
+    from foedus.core import Map, NodeType
+    m = Map(
+        coords={0: (0, 0), 1: (1, 0), 2: (0, 1)},
+        edges={0: frozenset({1, 2}), 1: frozenset({0, 2}), 2: frozenset({0, 1})},
+        node_types={0: NodeType.PLAIN, 1: NodeType.SUPPLY, 2: NodeType.HOME},
+        home_assignments={2: 0},
+    )
+    assert m.is_passable(0) is True
+    assert m.is_passable(1) is True
+    assert m.is_passable(2) is True
+
+
+def test_map_is_passable_false_for_mountain_water() -> None:
+    from foedus.core import Map, NodeType
+    m = Map(
+        coords={0: (0, 0), 1: (1, 0)},
+        edges={0: frozenset(), 1: frozenset()},
+        node_types={0: NodeType.MOUNTAIN, 1: NodeType.WATER},
+        home_assignments={},
+    )
+    assert m.is_passable(0) is False
+    assert m.is_passable(1) is False
