@@ -273,3 +273,63 @@ def test_random_archetype_distribution() -> None:
     assert counts[Archetype.HIGHLAND_PASS] >= 100
     assert counts[Archetype.ARCHIPELAGO] >= 100
     assert counts[Archetype.CONTINENTAL_SWEEP] >= 100
+
+
+def test_all_archetypes_produce_valid_maps() -> None:
+    """For each archetype, the generated Map satisfies basic invariants."""
+    from foedus.core import Archetype, NodeType
+    from foedus.mapgen import generate_map
+    for arch in Archetype:
+        for n in [2, 3, 4]:
+            m = generate_map(num_players=n, seed=42, archetype=arch)
+            # Every home_assignment references a HOME cell.
+            for node, player in m.home_assignments.items():
+                assert m.node_types[node] == NodeType.HOME, \
+                    f"{arch}: home {node} has type {m.node_types[node]}"
+            # Every node has a node_type.
+            for n_id in m.coords:
+                assert n_id in m.node_types, \
+                    f"{arch}: node {n_id} missing node_type"
+            # Every node has an edges entry (possibly empty).
+            for n_id in m.coords:
+                assert n_id in m.edges, \
+                    f"{arch}: node {n_id} missing edges"
+
+
+def test_all_archetypes_homes_match_player_count() -> None:
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    for arch in Archetype:
+        for n in [2, 3, 4]:
+            m = generate_map(num_players=n, seed=42, archetype=arch)
+            assert len(m.home_assignments) == n, \
+                f"{arch} with {n} players: got {len(m.home_assignments)} homes"
+
+
+def test_all_archetypes_seeded_deterministic() -> None:
+    """Same seed → same Map for every archetype."""
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    for arch in Archetype:
+        m1 = generate_map(num_players=4, seed=42, archetype=arch)
+        m2 = generate_map(num_players=4, seed=42, archetype=arch)
+        assert m1.coords == m2.coords
+        assert m1.edges == m2.edges
+        assert m1.node_types == m2.node_types
+        assert m1.home_assignments == m2.home_assignments
+
+
+def test_all_archetypes_different_seeds_produce_different_maps() -> None:
+    """Sanity check: same archetype + different seed should not produce
+    identical maps (with very high probability)."""
+    from foedus.core import Archetype
+    from foedus.mapgen import generate_map
+    for arch in Archetype:
+        m1 = generate_map(num_players=4, seed=1, archetype=arch)
+        m2 = generate_map(num_players=4, seed=2, archetype=arch)
+        differs = (
+            m1.node_types != m2.node_types
+            or m1.home_assignments != m2.home_assignments
+            or m1.edges != m2.edges
+        )
+        assert differs, f"{arch}: seed=1 and seed=2 produced identical maps"
