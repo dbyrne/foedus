@@ -103,48 +103,17 @@ def _normalize(state: GameState, u_id: UnitId, order: Order,
 # --- Support-cut detection -------------------------------------------------
 
 
-def _is_cut(supporter: Unit, exclude_from: NodeId | None,
-            canon: dict[UnitId, Order], state: GameState) -> bool:
-    """Support is cut by any attack on supporter, except from `exclude_from`.
-    Same-owner attacks don't count.
-    """
-    for u_id, order in canon.items():
-        if u_id == supporter.id:
-            continue
-        if not isinstance(order, Move):
-            continue
-        if order.dest != supporter.location:
-            continue
-        attacker = state.units[u_id]
-        if attacker.owner == supporter.owner:
-            continue
-        if exclude_from is None or attacker.location != exclude_from:
-            return True
-    return False
-
-
-def _compute_cuts(canon: dict[UnitId, Order], state: GameState) -> set[UnitId]:
-    cut: set[UnitId] = set()
-    for u_id, order in canon.items():
-        unit = state.units[u_id]
-        if isinstance(order, SupportHold):
-            if _is_cut(unit, None, canon, state):
-                cut.add(u_id)
-        elif isinstance(order, SupportMove):
-            if _is_cut(unit, order.target_dest, canon, state):
-                cut.add(u_id)
-    return cut
-
-
 def _find_cutters(supporter: Unit, exclude_from: NodeId | None,
                   canon: dict[UnitId, Order],
                   state: GameState) -> list[UnitId]:
     """Return the unit_ids of all enemy units whose Move into `supporter.location`
-    cut this supporter's order. Mirrors _is_cut's filter exactly so reasons
-    surfaced in the log match the resolver's actual cut decision.
+    cuts this supporter's order. Same-owner attacks don't count; the
+    `exclude_from` location is exempted (it's the SupportMove's target_dest,
+    where the supporter is currently helping the attacker).
 
-    Used purely for logging (Haiku playtest UX gap: agents had no way to see
-    why their support failed).
+    The single source of truth for cut filtering: `_is_cut` is a thin wrapper
+    that returns `bool(_find_cutters(...))`, and the cut-event log loop in
+    `_resolve_orders` consumes the same list. Don't drift these.
     """
     cutters: list[UnitId] = []
     for u_id, order in canon.items():
@@ -160,6 +129,28 @@ def _find_cutters(supporter: Unit, exclude_from: NodeId | None,
         if exclude_from is None or attacker.location != exclude_from:
             cutters.append(u_id)
     return cutters
+
+
+def _is_cut(supporter: Unit, exclude_from: NodeId | None,
+            canon: dict[UnitId, Order], state: GameState) -> bool:
+    """Support is cut iff any enemy unit moves into the supporter's location
+    (excluding the SupportMove's target_dest). Delegates to `_find_cutters`
+    so the filter logic stays single-sourced.
+    """
+    return bool(_find_cutters(supporter, exclude_from, canon, state))
+
+
+def _compute_cuts(canon: dict[UnitId, Order], state: GameState) -> set[UnitId]:
+    cut: set[UnitId] = set()
+    for u_id, order in canon.items():
+        unit = state.units[u_id]
+        if isinstance(order, SupportHold):
+            if _is_cut(unit, None, canon, state):
+                cut.add(u_id)
+        elif isinstance(order, SupportMove):
+            if _is_cut(unit, order.target_dest, canon, state):
+                cut.add(u_id)
+    return cut
 
 
 # --- Strengths -------------------------------------------------------------

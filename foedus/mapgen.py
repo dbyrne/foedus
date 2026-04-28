@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import random
+import warnings
 
 from foedus.core import Archetype, Map, NodeId, NodeType
 
@@ -128,7 +129,10 @@ def generate_map(
             return _gen_riverlands(num_players, rng, map_radius)
         raise ValueError(f"Unknown archetype: {archetype}")
 
-    base = 0 if seed is None else seed
+    # Reroll seed namespace: keep the unseeded (`seed=None`) reroll path
+    # disjoint from the explicit `seed=0` path so collisions across the two
+    # call patterns don't reproduce the same imbalanced sequence.
+    base = -1 if seed is None else seed
     last_map: Map | None = None
     for attempt in range(_HOME_BALANCE_MAX_REROLLS):
         cur_seed: int | None = seed if attempt == 0 else base * 1000003 + attempt
@@ -137,7 +141,18 @@ def generate_map(
             return m
         last_map = m
     # All rerolls failed. Return the most recent attempt rather than raising
-    # so callers see a usable (if imperfect) map; in practice this is
-    # extraordinarily rare for any reasonable map_radius.
+    # so callers see a usable (if imperfect) map. In practice no
+    # archetype/radius combo we've measured exhausts the budget — but if it
+    # does, surface it loudly: a silent imbalanced map would mask deeper
+    # mapgen breakage.
+    warnings.warn(
+        f"generate_map exhausted {_HOME_BALANCE_MAX_REROLLS} rerolls for "
+        f"archetype={archetype.value} num_players={num_players} "
+        f"map_radius={map_radius} seed={seed}; "
+        f"returning last (imbalanced) attempt. This indicates a mapgen bug "
+        f"or pathological constraints — please report.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
     assert last_map is not None
     return last_map
