@@ -19,6 +19,13 @@ class NodeType(Enum):
     WATER = "water"         # same semantics as MOUNTAIN; distinct render
 
 
+class Archetype(Enum):
+    UNIFORM = "uniform"                       # v1 backward-compat (no terrain)
+    HIGHLAND_PASS = "highland_pass"           # mountain ridges with passes
+    ARCHIPELAGO = "archipelago"               # water-separated islands
+    CONTINENTAL_SWEEP = "continental_sweep"   # open plains, dense connectivity
+
+
 @dataclass(frozen=True)
 class Hold:
     pass
