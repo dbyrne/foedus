@@ -320,13 +320,15 @@ def _resolve_moves(canon: dict[UnitId, Order], move_str: dict[UnitId, int],
 # --- Top-level turn function ----------------------------------------------
 
 
-def resolve_turn(state: GameState,
-                 orders_by_player: dict[PlayerId, dict[UnitId, Order]]
-                 ) -> GameState:
-    """Apply one turn, returning the new GameState.
+def _resolve_orders(state: GameState,
+                    orders_by_player: dict[PlayerId, dict[UnitId, Order]]
+                    ) -> GameState:
+    """Internal: run order normalization, conflict resolution, build phase,
+    scoring, and elimination, returning the post-resolution GameState.
 
-    `orders_by_player[player][unit_id] = order`. Missing units default to Hold.
-    Spoofed orders (a player ordering another's unit) are dropped silently.
+    Called by both the legacy `resolve_turn` entry point and the new
+    `finalize_round` (in foedus.press) which adds press-specific steps
+    around the order resolution.
     """
     log: list[str] = [f"--- turn {state.turn + 1} ---"]
 
@@ -356,11 +358,9 @@ def resolve_turn(state: GameState,
 
     # 5. Apply: build new units dict, log moves and dislodgements.
     new_units: dict[UnitId, Unit] = {}
-    any_dislodged = False
     for u_id, unit in state.units.items():
         result = outcome.get(u_id)
         if result == "dislodged":
-            any_dislodged = True
             log.append(f"  u{u_id} (p{unit.owner}) dislodged at n{unit.location}")
             continue
         order = canon[u_id]
@@ -371,8 +371,6 @@ def resolve_turn(state: GameState,
             new_units[u_id] = unit
             if isinstance(order, Move):
                 log.append(f"  u{u_id} (p{unit.owner}) bounced at n{unit.location}")
-
-    new_peace_streak = 0 if any_dislodged else state.peace_streak + 1
 
     # 6. Ownership: any node with a unit at end-of-turn is owned by that player;
     #    empty nodes retain prior ownership.
@@ -438,5 +436,17 @@ def resolve_turn(state: GameState,
         next_unit_id=next_id,
         config=state.config,
         log=state.log + log,
-        peace_streak=new_peace_streak,
     )
+
+
+def resolve_turn(state: GameState,
+                 orders_by_player: dict[PlayerId, dict[UnitId, Order]]
+                 ) -> GameState:
+    """Backward-compat entry point. Equivalent to the no-press resolution path.
+
+    `orders_by_player[player][unit_id] = order`. Missing units default to Hold.
+    Spoofed orders (a player ordering another's unit) are dropped silently.
+
+    For new code prefer foedus.press.advance_turn or foedus.press.finalize_round.
+    """
+    return _resolve_orders(state, orders_by_player)

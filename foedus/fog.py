@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from foedus.core import GameState, NodeId, PlayerId
+from foedus.core import GameState, NodeId, PlayerId, Press, Stance
 
 
 def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
@@ -12,11 +12,12 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
 
     Public: ownership of all nodes, scores, eliminations, map structure, turn.
     Private: enemy unit positions are visible only on/adjacent to your units.
+    Press v0 fields: public_stance_matrix (everyone), your_inbound_intents
+    (recipient-only), your_chat (filtered), your_betrayals (betrayed-only).
     """
     own_units = [u for u in state.units.values() if u.owner == player]
     visible: set[NodeId] = set()
     for u in own_units:
-        # BFS from unit's location up to fog_radius hops.
         visible.add(u.location)
         frontier = {u.location}
         for _ in range(state.config.fog_radius):
@@ -29,13 +30,68 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
             frontier = next_frontier
 
     visible_units = [
-        {
-            "id": u.id,
-            "owner": u.owner,
-            "location": u.location,
-        }
+        {"id": u.id, "owner": u.owner, "location": u.location}
         for u in state.units.values()
         if u.owner == player or u.location in visible
+    ]
+
+    # Press v0 derivations from press_history[-1] (last completed round).
+    last_press: dict[PlayerId, Press] = (
+        state.press_history[-1] if state.press_history else {}
+    )
+
+    # Public stance matrix: stance[i][j] = stance of i toward j (string value).
+    public_stance_matrix: dict[PlayerId, dict[PlayerId, str]] = {}
+    for i in range(state.config.num_players):
+        if i in state.eliminated:
+            continue
+        public_stance_matrix[i] = {}
+        press_i = last_press.get(i, Press(stance={}, intents=[]))
+        for j in range(state.config.num_players):
+            if i == j or j in state.eliminated:
+                continue
+            public_stance_matrix[i][j] = press_i.stance.get(
+                j, Stance.NEUTRAL
+            ).value
+
+    # Inbound intents: intents from each sender where this player is in
+    # visible_to (or visible_to is None, meaning public).
+    your_inbound_intents: dict[PlayerId, list] = {}
+    for sender, press_s in last_press.items():
+        if sender == player:
+            continue
+        visible = [
+            intent for intent in press_s.intents
+            if intent.visible_to is None or player in intent.visible_to
+        ]
+        if visible:
+            your_inbound_intents[sender] = visible
+
+    # Outbound press history (this player's own press, all turns).
+    your_outbound_press = [
+        press_per_turn.get(player, Press(stance={}, intents=[]))
+        for press_per_turn in state.press_history
+    ]
+
+    # Chat filter: keep messages where the player is sender, named recipient,
+    # or where recipients is None (public broadcast).
+    last_chat = state.chat_history[-1] if state.chat_history else []
+    your_chat = [
+        m for m in last_chat
+        if m.recipients is None
+        or m.sender == player
+        or player in m.recipients
+    ]
+
+    your_betrayals = list(state.betrayals.get(player, []))
+
+    # Round-in-progress data (visible during NEGOTIATION phase).
+    your_pending_press = state.round_press_pending.get(player)
+    round_chat_so_far = [
+        m for m in state.round_chat
+        if m.recipients is None
+        or m.sender == player
+        or player in m.recipients
     ]
 
     return {
@@ -47,4 +103,12 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
         "visible_units": visible_units,
         "visible_nodes": sorted(visible),
         "supply_count_you": state.supply_count(player),
+        "public_stance_matrix": public_stance_matrix,
+        "your_outbound_press": your_outbound_press,
+        "your_inbound_intents": your_inbound_intents,
+        "your_chat": your_chat,
+        "your_betrayals": your_betrayals,
+        "your_pending_press": your_pending_press,
+        "round_chat_so_far": round_chat_so_far,
+        "current_round_phase": state.phase.value,
     }

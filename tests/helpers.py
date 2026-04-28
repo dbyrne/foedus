@@ -52,13 +52,20 @@ def triangle_map() -> Map:
 def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
                build_period: int = 999, max_turns: int = 20,
                turn: int = 0, fog_radius: int = 1,
-               peace_threshold: int = 0) -> GameState:
-    """Build a GameState with units placed and ownership inferred from unit positions.
+               detente_threshold: int | None = None,
+               peace_threshold: int | None = None) -> GameState:
+    """Build a GameState with units placed and ownership inferred from unit
+    positions.
 
-    `peace_threshold` defaults to 0 (détente disabled) so existing single-purpose
-    tests aren't accidentally terminated by the détente condition. Tests that
-    exercise détente should pass it explicitly.
+    `detente_threshold` (or its deprecated alias `peace_threshold`) defaults
+    to 0 (détente disabled) so single-purpose tests aren't accidentally
+    terminated by the détente condition.
     """
+    if detente_threshold is None and peace_threshold is None:
+        detente_threshold = 0
+    elif detente_threshold is None:
+        detente_threshold = peace_threshold
+
     ownership: dict[NodeId, PlayerId | None] = {n: None for n in m.nodes}
     for u in units:
         ownership[u.location] = u.owner
@@ -73,5 +80,5 @@ def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
         next_unit_id=max((u.id for u in units), default=-1) + 1,
         config=GameConfig(num_players=num_players, max_turns=max_turns,
                           build_period=build_period, fog_radius=fog_radius,
-                          peace_threshold=peace_threshold),
+                          detente_threshold=detente_threshold),
     )

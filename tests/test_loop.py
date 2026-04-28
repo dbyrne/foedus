@@ -33,9 +33,25 @@ def test_play_game_requires_state_or_config() -> None:
 
 
 def test_play_game_reproducible_with_seeds() -> None:
-    cfg = GameConfig(num_players=3, seed=999, max_turns=8, build_period=3)
+    """Reproducibility check. stagnation_cost=0 preserves the v1 behavior the
+    test was originally written for: random agents may produce identical
+    move-less rounds, so disabling stagnation isolates the assertion to the
+    deterministic-engine property the test cares about."""
+    cfg = GameConfig(num_players=3, seed=999, max_turns=8, build_period=3,
+                     stagnation_cost=0)
     a1 = play_game({p: RandomAgent(seed=p) for p in range(3)}, config=cfg)
     a2 = play_game({p: RandomAgent(seed=p) for p in range(3)}, config=cfg)
     assert {u.id: (u.owner, u.location) for u in a1.units.values()} == \
            {u.id: (u.owner, u.location) for u in a2.units.values()}
     assert a1.scores == a2.scores
+
+
+def test_play_game_populates_press_and_chat_history() -> None:
+    """After play_game, the GameState has press_history / chat_history fields
+    that grew per turn (even if empty per round)."""
+    cfg = GameConfig(num_players=2, seed=7, max_turns=3, build_period=999)
+    agents = {0: RandomAgent(seed=0), 1: RandomAgent(seed=1)}
+    final = play_game(agents, config=cfg)
+    # 3 turns played, so 3 entries in each history.
+    assert len(final.press_history) == 3
+    assert len(final.chat_history) == 3

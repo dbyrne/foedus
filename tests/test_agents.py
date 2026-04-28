@@ -56,3 +56,31 @@ def test_random_agent_returns_empty_for_player_with_no_units() -> None:
     agent = RandomAgent(seed=0)
     orders = agent.choose_orders(s, player=1)
     assert orders == {}
+
+
+def test_agent_protocol_has_choose_press_default() -> None:
+    from foedus.agents.random_agent import RandomAgent
+    from foedus.core import GameConfig, Press
+    from foedus.mapgen import generate_map
+    from foedus.resolve import initial_state
+
+    a = RandomAgent(seed=0)
+    cfg = GameConfig(num_players=2, seed=42)
+    s = initial_state(cfg, generate_map(2, seed=42))
+    p = a.choose_press(s, 0)
+    assert isinstance(p, Press)
+    assert p.stance == {}
+    assert p.intents == []
+
+
+def test_agent_protocol_has_chat_drafts_default() -> None:
+    from foedus.agents.random_agent import RandomAgent
+    from foedus.core import GameConfig
+    from foedus.mapgen import generate_map
+    from foedus.resolve import initial_state
+
+    a = RandomAgent(seed=0)
+    cfg = GameConfig(num_players=2, seed=42)
+    s = initial_state(cfg, generate_map(2, seed=42))
+    drafts = a.chat_drafts(s, 0)
+    assert drafts == []
