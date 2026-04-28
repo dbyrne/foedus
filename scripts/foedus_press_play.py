@@ -74,7 +74,9 @@ def cmd_init() -> None:
         max_turns=7,
         seed=42,
         archetype=Archetype.CONTINENTAL_SWEEP,
-        stagnation_cost=1.0,
+        # stagnation_cost left at its new default (0.0) — see core.py for
+        # rationale. Bundle 2's hold-or-dislodge rule already incentivizes
+        # commitment-to-hold; charging extra for it was a perverse penalty.
     )
     m = generate_map(cfg.num_players, seed=cfg.seed,
                      archetype=cfg.archetype, map_radius=cfg.map_radius)

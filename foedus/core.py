@@ -164,7 +164,14 @@ class GameConfig:
     # giving roomier negotiation as ordered-pair count grows. `0` disables the
     # détente condition entirely; any other positive int is honored verbatim.
     detente_threshold: int | None = None
-    stagnation_cost: float = 1.0  # score penalty for passive turns; 0 disables
+    # Score penalty per turn for players whose canon contains no Move or
+    # SupportMove (i.e. all-Hold turns). 0 disables. Default disabled (0.0)
+    # because under Bundle 2's hold-or-dislodge ownership rule, a single-unit
+    # player who Holds to lock in a freshly-walked-into supply was paying
+    # this cost to do exactly the strategically-correct thing — a perverse
+    # incentive. Callers who want the v1 behavior can still pass
+    # `stagnation_cost=1.0` explicitly.
+    stagnation_cost: float = 0.0
     chat_char_cap: int = 500  # chat message body length cap
     round_timer_seconds: float = 60.0  # default for live play; drivers
                                        # override to 0 in training/turn-based modes

@@ -105,17 +105,23 @@ def test_heuristic_returns_empty_for_player_with_no_units() -> None:
 
 
 def test_heuristic_beats_random_in_score_aggregate() -> None:
-    """Across 8 games, heuristic should outscore random in aggregate.
+    """Across 12 games, heuristic should outscore random in aggregate.
 
     Single games can swing on the random agent's lucky moves, so we
     aggregate across multiple seeds. The bar is loose intentionally —
     we want a reliable signal, not a fragile one.
+    Bundle 2 cadence: 12 seeds needed (up from 8) because the hold-or-dislodge
+    rule reduces heuristic's margin per game.
     """
     heuristic_total = 0.0
     random_total = 0.0
-    for seed in range(8):
+    for seed in range(12):
+        # Bundle 2 default change: stagnation_cost defaults to 0.0, but
+        # this regression test assumes the v1 dynamic where random's
+        # all-Hold turns are penalized — that's the gap heuristic exploits.
+        # Set stagnation_cost=1.0 explicitly to preserve the test's intent.
         cfg = GameConfig(num_players=4, seed=seed, max_turns=15,
-                         peace_threshold=99)
+                         peace_threshold=99, stagnation_cost=1.0)
         agents = {
             0: HeuristicAgent(),
             1: RandomAgent(seed=seed * 100 + 1),
@@ -130,14 +136,20 @@ def test_heuristic_beats_random_in_score_aggregate() -> None:
 
 
 def test_heuristic_match_result_payout_advantage() -> None:
-    """Across 8 games, heuristic should accrue more payout share than the
+    """Across 12 games, heuristic should accrue more payout share than the
     random average. Validates the scoring layer end-to-end with a real agent.
+    Bundle 2 cadence: 12 seeds needed (up from 8) because the hold-or-dislodge
+    rule reduces per-game payout margins.
     """
     heuristic_payout = 0.0
     random_payout_sum = 0.0
-    for seed in range(8):
+    for seed in range(12):
+        # Bundle 2 default change: stagnation_cost defaults to 0.0, but
+        # this regression test assumes the v1 dynamic where random's
+        # all-Hold turns are penalized — that's the gap heuristic exploits.
+        # Set stagnation_cost=1.0 explicitly to preserve the test's intent.
         cfg = GameConfig(num_players=4, seed=seed, max_turns=15,
-                         peace_threshold=99)
+                         peace_threshold=99, stagnation_cost=1.0)
         agents = {
             0: HeuristicAgent(),
             1: RandomAgent(seed=seed * 100 + 1),

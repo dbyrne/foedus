@@ -409,11 +409,66 @@ def _resolve_orders(state: GameState,
                     f"-> n{order.dest}"
                 )
 
-    # 6. Ownership: any node with a unit at end-of-turn is owned by that player;
-    #    empty nodes retain prior ownership.
+    # 6. Ownership update.
+    #
+    # Mechanic A (Bundle 2): supply/home ownership only flips on
+    # combat capture (a unit dislodged on the supply) OR after a unit
+    # has been on the supply for a full turn (held start-of-N to
+    # end-of-N).  Walk-ins onto undefended supplies do NOT flip
+    # ownership immediately — the walker must hold for the next full
+    # turn (rule (b) on turn N+1) to lock it in.
+    #
+    # Plain nodes flip every turn based on end-of-turn occupant
+    # (unchanged from prior behavior).
+    #
+    # Spec: docs/superpowers/specs/2026-04-29-supply-ownership-cadence-design.md
     new_owner = dict(state.ownership)
+
+    # Snapshot start-of-turn supply occupants from `state.units` (the
+    # input state, before this turn's moves resolved).
+    start_supply_occupants: dict[NodeId, PlayerId] = {}
+    for unit in state.units.values():
+        if state.map.is_supply(unit.location):
+            start_supply_occupants[unit.location] = unit.owner
+
+    # Rule (a) — dislodgement transfers ownership immediately.  Find
+    # the successful attacker who entered the dislodged unit's node.
+    for u_id, outcome_val in outcome.items():
+        if outcome_val != "dislodged":
+            continue
+        defender = state.units[u_id]
+        if not state.map.is_supply(defender.location):
+            continue
+        attacker_id = next(
+            (uid for uid, o in canon.items()
+             if isinstance(o, Move)
+             and o.dest == defender.location
+             and outcome.get(uid) == "success"),
+            None,
+        )
+        if attacker_id is not None:
+            new_owner[defender.location] = state.units[attacker_id].owner
+
+    # Rule (b) — same player on supply at start AND end of turn flips
+    # ownership.  Iterate end-of-turn supply occupants from new_units
+    # and check against the start-of-turn snapshot.
+    #
+    # Write-order safety: rule (b) cannot stomp rule (a)'s assignment
+    # for a freshly-dislodged supply, because the dislodging attacker
+    # was NOT at the defender's node at start of turn — so the
+    # start_supply_occupants check below is False and rule (b) does
+    # not fire for that node.  Don't reorder these two loops without
+    # re-checking this invariant.
     for unit in new_units.values():
-        new_owner[unit.location] = unit.owner
+        if not state.map.is_supply(unit.location):
+            continue
+        if start_supply_occupants.get(unit.location) == unit.owner:
+            new_owner[unit.location] = unit.owner
+
+    # Plain nodes: every-turn flip (unchanged).
+    for unit in new_units.values():
+        if not state.map.is_supply(unit.location):
+            new_owner[unit.location] = unit.owner
 
     # 7. Build phase (every config.build_period turns).
     next_id = state.next_unit_id

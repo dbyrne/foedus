@@ -211,6 +211,15 @@ def _stagnation_cost_deltas(
     `config.stagnation_cost`. Eliminated and unit-less players are exempt.
 
     If config.stagnation_cost == 0, returns an empty dict (disabled).
+
+    History: stagnation_cost was originally 1.0 by default (Bundle 1) to
+    discourage the v1 all-Hold détente-attractor degenerate game. Bundle 2's
+    hold-or-dislodge supply-ownership rule now incentivizes committed
+    Holds directly (you must Hold on a fresh capture to lock in ownership
+    via rule (b)), making the stagnation penalty perverse — a single-unit
+    player Holding to capture was paying for the strategically-correct play.
+    The default was therefore changed to 0.0 in Bundle 2. The penalty
+    mechanism is preserved here for callers who want the v1 behavior.
     """
     cost = state.config.stagnation_cost
     if cost == 0.0:
