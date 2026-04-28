@@ -250,22 +250,27 @@ def make_app() -> FastAPI:
     @app.post("/games/{game_id}/chat")
     def press_chat(game_id: str,
                     req: PressChatRequest) -> dict[str, Any]:
+        from foedus.game_server.session import ERR_ALREADY_CHAT_DONE
         sess = _session(game_id)
         try:
             return sess.submit_press_chat(req.player, req.draft)
         except ValueError as e:
             msg = str(e)
-            if "already chat_done" in msg:
+            if ERR_ALREADY_CHAT_DONE in msg:
                 raise HTTPException(status_code=409, detail=msg)
             raise HTTPException(status_code=400, detail=msg)
 
     @app.post("/games/{game_id}/commit")
     def press_commit(game_id: str,
                       req: PressCommitRequest) -> dict[str, Any]:
-        from foedus.remote.wire import deserialize_orders
-        from foedus.core import Hold, Intent, Move, Press, Stance, SupportHold, SupportMove
+        from foedus.core import Press, Stance
+        from foedus.game_server.session import (
+            ERR_ALREADY_COMMITTED,
+            ERR_CHAT_PHASE_NOT_COMPLETE,
+        )
+        from foedus.remote.wire import deserialize_intent, deserialize_orders
         sess = _session(game_id)
-        # Parse press.
+        # Parse stance.
         stance: dict[int, Stance] = {}
         for k, v in (req.press.get("stance") or {}).items():
             try:
@@ -275,35 +280,11 @@ def make_app() -> FastAPI:
                     status_code=400,
                     detail=f"bad stance entry {k}={v!r}: {e}",
                 )
+        # Parse intents (delegates to wire.deserialize_intent).
         intents = []
         for it_raw in (req.press.get("intents") or []):
             try:
-                t = it_raw["declared_order"]["type"]
-                if t == "Hold":
-                    declared = Hold()
-                elif t == "Move":
-                    declared = Move(dest=int(it_raw["declared_order"]["dest"]))
-                elif t == "SupportHold":
-                    declared = SupportHold(
-                        target=int(it_raw["declared_order"]["target"]),
-                    )
-                elif t == "SupportMove":
-                    declared = SupportMove(
-                        target=int(it_raw["declared_order"]["target"]),
-                        target_dest=int(
-                            it_raw["declared_order"]["target_dest"]
-                        ),
-                    )
-                else:
-                    raise ValueError(f"unknown order type: {t}")
-                vt_raw = it_raw.get("visible_to")
-                vt = (None if vt_raw is None
-                      else frozenset(int(x) for x in vt_raw))
-                intents.append(Intent(
-                    unit_id=int(it_raw["unit_id"]),
-                    declared_order=declared,
-                    visible_to=vt,
-                ))
+                intents.append(deserialize_intent(it_raw))
             except (KeyError, TypeError, ValueError) as e:
                 raise HTTPException(
                     status_code=400,
@@ -322,9 +303,9 @@ def make_app() -> FastAPI:
             return sess.submit_press_commit(req.player, press, orders)
         except ValueError as e:
             msg = str(e)
-            if "chat phase not complete" in msg:
+            if ERR_CHAT_PHASE_NOT_COMPLETE in msg:
                 raise HTTPException(status_code=425, detail=msg)
-            if "already committed" in msg:
+            if ERR_ALREADY_COMMITTED in msg:
                 raise HTTPException(status_code=409, detail=msg)
             raise HTTPException(status_code=400, detail=msg)
 

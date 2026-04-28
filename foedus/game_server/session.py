@@ -41,6 +41,16 @@ from foedus.press import (
 SeatType = str  # "human" | "agent" | "remote"
 
 
+# Bundle 6: sentinel error message fragments. The server.py HTTP layer
+# substring-matches on these to map ValueErrors to specific HTTP codes
+# (409 Conflict for duplicate signals, 425 Too Early for chat-phase).
+# Keep raise sites and matchers using these constants so the mapping
+# survives message refactors.
+ERR_ALREADY_CHAT_DONE = "already chat_done this round"
+ERR_ALREADY_COMMITTED = "already committed this round"
+ERR_CHAT_PHASE_NOT_COMPLETE = "chat phase not complete; cannot commit yet"
+
+
 @dataclass
 class SeatSpec:
     """Per-player seat specification, supplied at game creation."""
@@ -178,7 +188,7 @@ class GameSession:
             raise ValueError(f"player {player} is eliminated")
         if player in self.state.chat_done:
             raise ValueError(
-                f"player {player} already chat_done this round"
+                f"player {player} {ERR_ALREADY_CHAT_DONE}"
             )
         message_dropped = False
         drop_reason = None
@@ -228,11 +238,11 @@ class GameSession:
             raise ValueError(f"player {player} is eliminated")
         if not is_chat_phase_complete(self.state):
             raise ValueError(
-                "chat phase not complete; cannot commit yet"
+                ERR_CHAT_PHASE_NOT_COMPLETE
             )
         if player in self.state.round_done:
             raise ValueError(
-                f"player {player} already committed this round"
+                f"player {player} {ERR_ALREADY_COMMITTED}"
             )
         self.state = submit_press_tokens(self.state, player, press)
         self.pending_orders[player] = dict(orders)

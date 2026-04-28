@@ -154,3 +154,28 @@ def serialize_orders(orders: dict) -> dict[str, dict[str, Any]]:
 
 def deserialize_orders(data: dict[str, dict[str, Any]]) -> dict:
     return {int(uid): deserialize_order(od) for uid, od in data.items()}
+
+
+def deserialize_intent(data: dict[str, Any]) -> "Intent":
+    """Parse a JSON intent payload into a domain `Intent` object.
+
+    Schema:
+      {"unit_id": <int>, "declared_order": <order>, "visible_to": null | [<pid>, ...]}
+
+    Used by the press server's /commit endpoint and by orchestrator
+    scripts that read intents from JSON. Reuses `deserialize_order`
+    for the inner declared_order.
+    """
+    from foedus.core import Intent
+    unit_id = int(data["unit_id"])
+    declared_order = deserialize_order(data["declared_order"])
+    vt_raw = data.get("visible_to")
+    if vt_raw is None:
+        visible_to = None
+    else:
+        visible_to = frozenset(int(x) for x in vt_raw)
+    return Intent(
+        unit_id=unit_id,
+        declared_order=declared_order,
+        visible_to=visible_to,
+    )
