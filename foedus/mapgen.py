@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import random
 
-from foedus.core import Archetype, Map, NodeId, NodeType, PlayerId
+from foedus.core import Archetype, Map
 
 
 def _hex_neighbors(q: int, r: int) -> list[tuple[int, int]]:

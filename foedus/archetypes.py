@@ -6,11 +6,14 @@ a Map. They share hex utilities from foedus.mapgen.
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 
 from foedus.core import Archetype, Map, NodeId, NodeType, PlayerId
 from foedus.mapgen import _hex_disk, _hex_neighbors, _hex_to_xy, _ring_distance
+
+_log = logging.getLogger(__name__)
 
 
 def _gen_uniform(num_players: int, rng: random.Random,
@@ -281,7 +284,13 @@ def _gen_highland_pass(num_players: int, rng: random.Random,
             home_assignments=home_assignments,
         )
 
-    # Fall back to UNIFORM if all attempts fail.
+    # Fall back to UNIFORM if all attempts fail. Warn so callers who asked
+    # specifically for HIGHLAND_PASS don't silently receive a terrain-free map.
+    _log.warning(
+        "_gen_highland_pass: all 5 ridge attempts failed for "
+        "num_players=%d, map_radius=%d; falling back to UNIFORM map",
+        num_players, map_radius,
+    )
     return _gen_uniform(num_players, rng, map_radius)
 
 
