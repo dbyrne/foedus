@@ -13,10 +13,8 @@ from foedus.core import (
     Archetype,
     GameConfig,
     GameState,
-    Map,
     NodeType,
     Stance,
-    Unit,
 )
 from foedus.mapgen import generate_map
 from foedus.resolve import initial_state
@@ -58,8 +56,8 @@ def _state_with_supply_counts(supply_counts: dict[int, int]) -> GameState:
 
 def test_choose_press_allies_closest_supply_count() -> None:
     """ALLY toward the opponent whose supply count is nearest mine."""
-    # Supplies: p0=3, p1=2, p2=5, p3=6. p0 (me) is closest to p1 (diff=1).
-    s = _state_with_supply_counts({0: 3, 1: 2, 2: 5, 3: 6})
+    # Supplies: p0=3, p1=2, p2=5, p3=5. p0 (me) is closest to p1 (diff=1).
+    s = _state_with_supply_counts({0: 3, 1: 2, 2: 5, 3: 5})
     press = HeuristicAgent().choose_press(s, 0)
     assert press.stance == {1: Stance.ALLY}
     assert press.intents == []
