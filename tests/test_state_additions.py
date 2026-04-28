@@ -9,7 +9,9 @@ from foedus.resolve import initial_state
 
 def test_gameconfig_has_new_fields_with_defaults() -> None:
     cfg = GameConfig()
-    assert cfg.detente_threshold == 5
+    # detente_threshold default scales with table size: 4 + num_players.
+    # Default num_players=4, so the resolved default is 8. (Sonnet playtest.)
+    assert cfg.detente_threshold == 8
     assert cfg.stagnation_cost == 1.0
     assert cfg.chat_char_cap == 500
     assert cfg.round_timer_seconds == 60.0

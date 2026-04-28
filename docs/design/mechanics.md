@@ -104,7 +104,9 @@ See `docs/design/2026-04-27-press-v0.md` for full spec. Summary:
   non-senders for public intents). Bounce/dislodge outcomes are *not*
   betrayal signals — only what the player tried to do counts.
 - **Détente trigger:** fires when surviving players have all signaled
-  mutual ALLY for `detente_threshold` consecutive turns (default 5).
+  mutual ALLY for `detente_threshold` consecutive turns. The default
+  scales with table size as `4 + num_players` (so a 4-player game needs
+  8 consecutive mutual-ALLY turns; a 2-player game, 6); `0` disables.
   Replaces v1's "no dislodgement" timeout, which had a degenerate
   attractor.
 - **Stagnation cost:** -1.0 score per turn for players whose canon
