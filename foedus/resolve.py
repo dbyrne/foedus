@@ -452,6 +452,13 @@ def _resolve_orders(state: GameState,
     # Rule (b) — same player on supply at start AND end of turn flips
     # ownership.  Iterate end-of-turn supply occupants from new_units
     # and check against the start-of-turn snapshot.
+    #
+    # Write-order safety: rule (b) cannot stomp rule (a)'s assignment
+    # for a freshly-dislodged supply, because the dislodging attacker
+    # was NOT at the defender's node at start of turn — so the
+    # start_supply_occupants check below is False and rule (b) does
+    # not fire for that node.  Don't reorder these two loops without
+    # re-checking this invariant.
     for unit in new_units.values():
         if not state.map.is_supply(unit.location):
             continue
