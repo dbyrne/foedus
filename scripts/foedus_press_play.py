@@ -314,11 +314,167 @@ def cmd_apply_chat(player: int, path: str) -> None:
 
 # Commit phase commands (Task 5)
 def cmd_prompt_commit(player: int) -> None:
-    raise NotImplementedError("Task 5 will fill this in.")
+    """Phase-2 (commit) prompt. Player sees ALL same-turn chat visible
+    to them, plus map + legal orders, then submits press + orders."""
+    state = load()
+    view = visible_state_for(state, player)
+
+    print(f"=== TURN {state.turn + 1}/{state.config.max_turns}, "
+          f"PHASE: COMMIT (orders + press), YOU ARE PLAYER {player} ===\n")
+
+    # All chat visible to you this round.
+    if view["round_chat_so_far"]:
+        print(f"CHAT THIS ROUND ({len(view['round_chat_so_far'])} msgs):")
+        for m in view["round_chat_so_far"]:
+            recip = ("public" if m.recipients is None
+                     else f"to {sorted(m.recipients)}")
+            print(f"  [p{m.sender} -> {recip}]: {m.body}")
+        print()
+    else:
+        print("(no chat this round)\n")
+
+    # Map.
+    print("MAP (^ = mountain, ~ = water, $ = supply, H = home, "
+          "[node-type-owner], u<id>p<player> = unit):")
+    print(render_map(state))
+    print()
+    print(f"Your visible nodes: {view['visible_nodes']}")
+    print(f"Your supply count: {view['supply_count_you']}")
+    print(f"Scores: {view['scores']}")
+    print(f"Mutual-ally streak: {state.mutual_ally_streak}/"
+          f"{state.config.detente_threshold}")
+    print()
+
+    # Visible units.
+    print("VISIBLE UNITS:")
+    for u in view["visible_units"]:
+        marker = "(YOURS)" if u["owner"] == player else f"(player {u['owner']})"
+        print(f"  unit u{u['id']} at node {u['location']} {marker}")
+    print()
+
+    # Your units + legal orders.
+    print("YOUR UNITS — choose ONE order per unit:")
+    for u in state.units.values():
+        if u.owner != player:
+            continue
+        legal = legal_orders_for_unit(state, u.id)
+        print(f"  u{u.id} at node {u.location} (adj: "
+              f"{sorted(state.map.neighbors(u.location))})")
+        for i, o in enumerate(legal):
+            print(f"    [{i}] {order_to_str(o)}")
+    print()
+
+    print("=== RESPONSE FORMAT ===")
+    print("Reply with ONE JSON object combining press tokens and orders:")
+    print('{')
+    print('  "press": {')
+    print('    "stance": {"<other_pid>": "ally|neutral|hostile", ...},')
+    print('    "intents": [')
+    print('      {"unit_id": <int>,')
+    print('       "declared_order": <order>,')
+    print('       "visible_to": null | [<pid>, ...]}')
+    print('    ]')
+    print('  },')
+    print('  "orders": {"<unit_id>": <order>, ...}')
+    print('}')
+    print()
+    print("Order objects:")
+    print('  {"type": "Hold"}')
+    print('  {"type": "Move", "dest": <node_id>}')
+    print('  {"type": "SupportHold", "target": <unit_id>}')
+    print('  {"type": "SupportMove", "target": <unit_id>, "target_dest": <node_id>}')
+    print()
+    print("Notes:")
+    print("- press.stance / press.intents are optional; default empty.")
+    print("- visible_to=null means public broadcast; list = private group.")
+    print("- intents about units you don't own are silently dropped.")
+    print("- if your declared_order doesn't match your actual order at finalize,")
+    print("  recipients see a BetrayalObservation. Plan accordingly.")
+    print("- orders is required; default-Hold any owned unit you omit.")
+
+
+def _parse_stance(d: dict) -> dict[int, Stance]:
+    out: dict[int, Stance] = {}
+    for k, v in d.items():
+        try:
+            pid = int(k)
+            stance = Stance(v if isinstance(v, str) else v.value)
+            out[pid] = stance
+        except (TypeError, ValueError, AttributeError) as e:
+            print(f"WARN: bad stance entry {k}={v!r}: {e}; skipping")
+    return out
+
+
+def _parse_intent(d: dict) -> Intent | None:
+    try:
+        unit_id = int(d["unit_id"])
+        declared = parse_order(d["declared_order"])
+        vt_raw = d.get("visible_to")
+        if vt_raw is None:
+            vt: frozenset[int] | None = None
+        else:
+            vt = frozenset(int(x) for x in vt_raw)
+        return Intent(unit_id=unit_id, declared_order=declared,
+                      visible_to=vt)
+    except (KeyError, TypeError, ValueError) as e:
+        print(f"WARN: bad intent {d!r}: {e}; skipping")
+        return None
 
 
 def cmd_apply_commit(player: int, path: str) -> None:
-    raise NotImplementedError("Task 5 will fill this in.")
+    """Parse {press, orders} JSON, submit press, store orders for advance."""
+    state = load()
+    raw = json.loads(Path(path).read_text())
+
+    # Press (optional).
+    press_raw = raw.get("press") or {}
+    stance = _parse_stance(press_raw.get("stance") or {})
+    intents = []
+    for it_raw in press_raw.get("intents") or []:
+        parsed = _parse_intent(it_raw)
+        if parsed is not None:
+            intents.append(parsed)
+    press = Press(stance=stance, intents=intents)
+    state = submit_press_tokens(state, player, press)
+    save(state)
+
+    # Orders (required).
+    orders_raw = raw.get("orders") or {}
+    parsed_orders: dict[UnitId, Order] = {}
+    for uid_s, od in orders_raw.items():
+        try:
+            uid = int(uid_s)
+        except ValueError:
+            print(f"WARN: non-int unit_id key {uid_s!r}; skipping")
+            continue
+        unit = state.units.get(uid)
+        if unit is None:
+            print(f"WARN: unit u{uid} doesn't exist; skipping")
+            continue
+        if unit.owner != player:
+            print(f"WARN: unit u{uid} not owned by p{player}; skipping")
+            continue
+        try:
+            parsed_orders[uid] = parse_order(od)
+        except (KeyError, ValueError) as e:
+            print(f"WARN: bad order for u{uid}: {e}; defaulting to Hold")
+            parsed_orders[uid] = Hold()
+    # Default-Hold any owned unit the LLM omitted.
+    for u in state.units.values():
+        if u.owner == player:
+            parsed_orders.setdefault(u.id, Hold())
+    with ORDERS_PICKLE(player).open("wb") as f:
+        pickle.dump(parsed_orders, f)
+
+    # Summary line.
+    stance_s = ", ".join(f"p{p}={s.value}" for p, s in stance.items()) or "(empty)"
+    intents_s = f"{len(intents)} intent(s)" if intents else "no intents"
+    orders_s = ", ".join(
+        f"u{uid}={order_to_str(o)}"
+        for uid, o in sorted(parsed_orders.items())
+    )
+    print(f"player {player} press: stance={{{stance_s}}}, {intents_s}")
+    print(f"player {player} orders: {orders_s}")
 
 
 # Advance (Task 6)
