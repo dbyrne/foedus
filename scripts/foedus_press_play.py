@@ -437,6 +437,12 @@ def cmd_apply_commit(player: int, path: str) -> None:
     press = Press(stance=stance, intents=intents)
     state = submit_press_tokens(state, player, press)
     save(state)
+    # Note: there's a small atomicity gap between this save() and the
+    # orders pickle write below. If the process crashes between the
+    # two, state on disk has press submitted but no orders file. The
+    # next `advance` will sys.exit(2) on the missing orders file;
+    # recovery is to re-`init` the game (a partial round can't be
+    # resumed cleanly). Acceptable for a one-off playtest tool.
 
     # Orders (required).
     orders_raw = raw.get("orders") or {}
@@ -491,6 +497,17 @@ def cmd_advance() -> None:
         p for p in range(state.config.num_players)
         if p not in state.eliminated
     ]
+
+    # Pre-flight: warn if any LLM seat hasn't submitted press yet (the
+    # `apply_commit` step). The engine treats missing press as empty
+    # silently, which corrupts playtest data without any visible signal.
+    missing_llm_press = sorted(
+        p for p in survivors
+        if p in LLM_SEATS and p not in state.round_press_pending
+    )
+    if missing_llm_press:
+        print(f"WARN: LLM seats {missing_llm_press} have no press submitted "
+              f"(missing apply_commit?); finalize_round will treat as empty Press")
 
     agent = HeuristicAgent()
 
