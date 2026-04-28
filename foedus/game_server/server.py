@@ -21,7 +21,10 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+import os
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from foedus.core import GameConfig
@@ -61,6 +64,17 @@ class SubmitOrdersRequest(BaseModel):
 class AdvanceRequest(BaseModel):
     auto: bool = False           # keep advancing while no humans block
     max_turns: int = 1000        # safety bound for auto
+
+
+class PressChatRequest(BaseModel):
+    player: int
+    draft: dict | None = None  # null/empty = skip
+
+
+class PressCommitRequest(BaseModel):
+    player: int
+    press: dict = Field(default_factory=dict)
+    orders: dict[str, dict] = Field(default_factory=dict)
 
 
 def make_app() -> FastAPI:
@@ -230,6 +244,170 @@ def make_app() -> FastAPI:
             return sess.view_at_turn(turn, player)
         except IndexError as e:
             raise HTTPException(status_code=404, detail=str(e))
+
+    # --- Press v0 flow endpoints (Bundle 6) ----------------------------------
+
+    @app.post("/games/{game_id}/chat")
+    def press_chat(game_id: str,
+                    req: PressChatRequest) -> dict[str, Any]:
+        sess = _session(game_id)
+        try:
+            return sess.submit_press_chat(req.player, req.draft)
+        except ValueError as e:
+            msg = str(e)
+            if "already chat_done" in msg:
+                raise HTTPException(status_code=409, detail=msg)
+            raise HTTPException(status_code=400, detail=msg)
+
+    @app.post("/games/{game_id}/commit")
+    def press_commit(game_id: str,
+                      req: PressCommitRequest) -> dict[str, Any]:
+        from foedus.remote.wire import deserialize_orders
+        from foedus.core import Hold, Intent, Move, Press, Stance, SupportHold, SupportMove
+        sess = _session(game_id)
+        # Parse press.
+        stance: dict[int, Stance] = {}
+        for k, v in (req.press.get("stance") or {}).items():
+            try:
+                stance[int(k)] = Stance(v)
+            except (ValueError, TypeError) as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"bad stance entry {k}={v!r}: {e}",
+                )
+        intents = []
+        for it_raw in (req.press.get("intents") or []):
+            try:
+                t = it_raw["declared_order"]["type"]
+                if t == "Hold":
+                    declared = Hold()
+                elif t == "Move":
+                    declared = Move(dest=int(it_raw["declared_order"]["dest"]))
+                elif t == "SupportHold":
+                    declared = SupportHold(
+                        target=int(it_raw["declared_order"]["target"]),
+                    )
+                elif t == "SupportMove":
+                    declared = SupportMove(
+                        target=int(it_raw["declared_order"]["target"]),
+                        target_dest=int(
+                            it_raw["declared_order"]["target_dest"]
+                        ),
+                    )
+                else:
+                    raise ValueError(f"unknown order type: {t}")
+                vt_raw = it_raw.get("visible_to")
+                vt = (None if vt_raw is None
+                      else frozenset(int(x) for x in vt_raw))
+                intents.append(Intent(
+                    unit_id=int(it_raw["unit_id"]),
+                    declared_order=declared,
+                    visible_to=vt,
+                ))
+            except (KeyError, TypeError, ValueError) as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"bad intent {it_raw!r}: {e}",
+                )
+        press = Press(stance=stance, intents=intents)
+        # Parse orders.
+        try:
+            orders = deserialize_orders(req.orders)
+        except (KeyError, ValueError) as e:
+            raise HTTPException(
+                status_code=400, detail=f"invalid orders: {e}",
+            )
+        # Submit.
+        try:
+            return sess.submit_press_commit(req.player, press, orders)
+        except ValueError as e:
+            msg = str(e)
+            if "chat phase not complete" in msg:
+                raise HTTPException(status_code=425, detail=msg)
+            if "already committed" in msg:
+                raise HTTPException(status_code=409, detail=msg)
+            raise HTTPException(status_code=400, detail=msg)
+
+    @app.get("/games/{game_id}/chat-prompt/{player}",
+             response_class=PlainTextResponse)
+    def chat_prompt(game_id: str, player: int) -> str:
+        from foedus.game_server.render import render_chat_prompt
+        sess = _session(game_id)
+        if player not in sess.seats:
+            raise HTTPException(status_code=404,
+                                detail=f"unknown player {player}")
+        if not sess.is_human(player):
+            raise HTTPException(status_code=400,
+                                detail=f"player {player} is not LLM seat")
+        return render_chat_prompt(sess.state, player)
+
+    @app.get("/games/{game_id}/commit-prompt/{player}",
+             response_class=PlainTextResponse)
+    def commit_prompt(game_id: str, player: int) -> str:
+        from foedus.game_server.render import render_commit_prompt
+        from foedus.press import is_chat_phase_complete
+        sess = _session(game_id)
+        if player not in sess.seats:
+            raise HTTPException(status_code=404,
+                                detail=f"unknown player {player}")
+        if not sess.is_human(player):
+            raise HTTPException(status_code=400,
+                                detail=f"player {player} is not LLM seat")
+        if not is_chat_phase_complete(sess.state):
+            raise HTTPException(
+                status_code=425,
+                detail="chat phase not complete; call /wait/{p}/commit",
+            )
+        return render_commit_prompt(sess.state, player)
+
+    @app.get("/games/{game_id}/wait/{player}/{phase}")
+    async def wait_for_phase(game_id: str, player: int,
+                              phase: str) -> dict[str, Any]:
+        import asyncio
+        from foedus.press import is_chat_phase_complete
+        if phase not in ("chat", "commit"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"phase must be 'chat' or 'commit'",
+            )
+        max_wait_seconds = float(
+            os.environ.get("FOEDUS_PRESS_WAIT_TIMEOUT", "30")
+        )
+        poll_interval = 0.5
+        elapsed = 0.0
+        while elapsed < max_wait_seconds:
+            sess = _session(game_id)
+            if sess.state.is_terminal():
+                return {
+                    "ready": False, "current_phase": None,
+                    "turn": sess.state.turn, "is_terminal": True,
+                }
+            chat_complete = is_chat_phase_complete(sess.state)
+            if phase == "chat":
+                # Ready iff chat phase still open AND player not done.
+                if (not chat_complete
+                        and player not in sess.state.chat_done):
+                    return {
+                        "ready": True, "current_phase": "chat",
+                        "turn": sess.state.turn, "is_terminal": False,
+                    }
+            else:  # commit
+                # Ready iff chat complete AND player not yet committed.
+                if (chat_complete
+                        and player not in sess.state.round_done):
+                    return {
+                        "ready": True, "current_phase": "commit",
+                        "turn": sess.state.turn, "is_terminal": False,
+                    }
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+        # Timeout — return current snapshot for client to retry.
+        sess = _session(game_id)
+        return {
+            "ready": False, "current_phase": phase,
+            "turn": sess.state.turn,
+            "is_terminal": sess.state.is_terminal(),
+        }
 
     return app
 
