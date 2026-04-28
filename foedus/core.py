@@ -223,6 +223,7 @@ class GameState:
     round_chat: list["ChatMessage"] = field(default_factory=list)
     round_press_pending: dict[PlayerId, "Press"] = field(default_factory=dict)
     round_done: set[PlayerId] = field(default_factory=set)
+    chat_done: set[PlayerId] = field(default_factory=set)
 
     def units_of(self, player: PlayerId) -> list[Unit]:
         return [u for u in self.units.values() if u.owner == player]
