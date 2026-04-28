@@ -209,11 +209,107 @@ def cmd_feedback(player: int) -> None:
 
 # Chat phase commands (Task 4)
 def cmd_prompt_chat(player: int) -> None:
-    raise NotImplementedError("Task 4 will fill this in.")
+    """Phase-1 (chat) prompt. Player sees inbound chat earlier in this
+    round + last round's press, may submit ONE chat draft (or skip)."""
+    state = load()
+    view = visible_state_for(state, player)
+    print(f"=== TURN {state.turn + 1}/{state.config.max_turns}, "
+          f"PHASE: NEGOTIATION (chat round), YOU ARE PLAYER {player} ===\n")
+
+    print(f"Active opponents: {sorted(p for p in range(state.config.num_players) if p != player and p not in state.eliminated)}")
+    print(f"Your supply count: {view['supply_count_you']}")
+    print(f"Scores: {view['scores']}")
+    print(f"Mutual-ally streak: {state.mutual_ally_streak}/"
+          f"{state.config.detente_threshold} (détente fires at threshold)")
+    print()
+
+    # Public stance matrix from last round.
+    if view["public_stance_matrix"]:
+        print("PUBLIC STANCE MATRIX (last round):")
+        for sender, stances in view["public_stance_matrix"].items():
+            entries = ", ".join(
+                f"p{tgt}={st}" for tgt, st in sorted(stances.items())
+            )
+            print(f"  p{sender}: {entries or '(none declared)'}")
+        print()
+
+    # Inbound intents from last round.
+    if view["your_inbound_intents"]:
+        print("INBOUND INTENTS YOU RECEIVED (last round):")
+        for sender, intents in view["your_inbound_intents"].items():
+            for it in intents:
+                print(f"  p{sender} declared u{it.unit_id} -> "
+                      f"{order_to_str(it.declared_order)} "
+                      f"(visible_to={'public' if it.visible_to is None else sorted(it.visible_to)})")
+        print()
+
+    # Betrayals against you.
+    if view["your_betrayals"]:
+        print(f"BETRAYALS observed (cumulative, {len(view['your_betrayals'])}):")
+        for b in view["your_betrayals"][-5:]:
+            print(f"  turn {b.turn}: p{b.betrayer} declared "
+                  f"u{b.intent.unit_id} -> {order_to_str(b.intent.declared_order)}, "
+                  f"actually issued {order_to_str(b.actual_order)}")
+        print()
+
+    # Round chat so far (other players' chat earlier in this round).
+    if view["round_chat_so_far"]:
+        print(f"CHAT THIS ROUND SO FAR ({len(view['round_chat_so_far'])} msgs):")
+        for m in view["round_chat_so_far"]:
+            recip = ("public" if m.recipients is None
+                     else f"to {sorted(m.recipients)}")
+            print(f"  [p{m.sender} -> {recip}]: {m.body}")
+        print()
+    else:
+        print("No chat yet this round.\n")
+
+    print("=== INSTRUCTIONS ===")
+    print(f"You may send ONE chat message this round (max "
+          f"{state.config.chat_char_cap} chars), or skip.")
+    print()
+    print("RESPOND with a single JSON object — one of:")
+    print('  {"recipients": null, "body": "..."}            // public broadcast')
+    print('  {"recipients": [0, 2], "body": "..."}          // private to listed pids')
+    print('  {}                                              // skip (no chat)')
+    print()
+    print("Strategic context: this game has Press v0. Stance + intents are")
+    print("submitted in the COMMIT phase later. Use chat NOW to coordinate")
+    print("alliances, share plans, threaten, deceive. Betrayal observations")
+    print("are recorded if you declare an intent and don't follow through.")
 
 
 def cmd_apply_chat(player: int, path: str) -> None:
-    raise NotImplementedError("Task 4 will fill this in.")
+    """Read chat draft JSON from file. Empty {} -> skip."""
+    raw = json.loads(Path(path).read_text())
+    if not raw:
+        print(f"player {player}: chat skipped (empty draft)")
+        return
+    if "body" not in raw:
+        print(f"WARN: chat draft for p{player} missing 'body'; skipping")
+        return
+    recipients_raw = raw.get("recipients")
+    if recipients_raw is None:
+        recipients = None
+    else:
+        try:
+            recipients = frozenset(int(r) for r in recipients_raw)
+        except (TypeError, ValueError):
+            print(f"WARN: bad recipients for p{player}: {recipients_raw}; skipping")
+            return
+    draft = ChatDraft(recipients=recipients, body=str(raw["body"]))
+    state = load()
+    new_state = record_chat_message(state, player, draft)
+    if new_state is state or len(new_state.round_chat) == len(state.round_chat):
+        # Engine silently dropped (e.g. exceeded char cap, eliminated player).
+        # Surface this to the orchestrator so the caller sees something happened.
+        print(f"WARN: engine dropped chat from p{player} "
+              f"(len={len(draft.body)}, cap={state.config.chat_char_cap}); "
+              f"check eliminations, char cap, or phase")
+        return
+    save(new_state)
+    recip_s = ("public" if recipients is None else f"to {sorted(recipients)}")
+    print(f"player {player} chat ({recip_s}): {draft.body[:80]}"
+          f"{'...' if len(draft.body) > 80 else ''}")
 
 
 # Commit phase commands (Task 5)
