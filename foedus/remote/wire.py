@@ -55,12 +55,15 @@ def serialize_config(c: GameConfig) -> dict[str, Any]:
         "max_turns": c.max_turns,
         "fog_radius": c.fog_radius,
         "build_period": c.build_period,
-        "peace_threshold": c.peace_threshold,
+        "detente_threshold": c.detente_threshold,
         "seed": c.seed,
     }
 
 
 def deserialize_config(data: dict[str, Any]) -> GameConfig:
+    # Accept either canonical "detente_threshold" or legacy "peace_threshold"
+    # for forward-compat with older serialized blobs. GameConfig's __post_init__
+    # mirrors them either way.
     return GameConfig(**data)
 
 
@@ -80,12 +83,19 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         "eliminated": sorted(state.eliminated),
         "next_unit_id": state.next_unit_id,
         "config": serialize_config(state.config),
-        "peace_streak": state.peace_streak,
+        "mutual_ally_streak": state.mutual_ally_streak,
         # `log` deliberately omitted (grows unbounded; not strategic).
+        # Press v0 fields (press_history, chat_history, betrayals, phase, and
+        # round-in-progress scratch) are also omitted from this minimal wire
+        # format — they're not needed for `choose_orders`. Add when a client
+        # (e.g. foedus-godot) needs them.
     }
 
 
 def deserialize_state(data: dict[str, Any]) -> GameState:
+    # Accept either canonical "mutual_ally_streak" or legacy "peace_streak"
+    # for forward-compat with older serialized blobs.
+    streak = data.get("mutual_ally_streak", data.get("peace_streak", 0))
     return GameState(
         turn=data["turn"],
         map=deserialize_map(data["map"]),
@@ -98,7 +108,7 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
         eliminated=set(data["eliminated"]),
         next_unit_id=data["next_unit_id"],
         config=deserialize_config(data["config"]),
-        peace_streak=data.get("peace_streak", 0),
+        mutual_ally_streak=streak,
         log=[],
     )
 

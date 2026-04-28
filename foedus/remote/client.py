@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from foedus.core import GameState, Order, PlayerId, UnitId
+from foedus.core import ChatDraft, GameState, Order, PlayerId, Press, UnitId
 from foedus.remote.wire import (
     deserialize_orders,
     serialize_state,
@@ -45,6 +45,16 @@ class RemoteAgent:
         r.raise_for_status()
         body = r.json()
         return deserialize_orders(body["orders"])
+
+    def choose_press(self, state: GameState, player: PlayerId) -> Press:
+        """Default empty press. Press v0 over the wire is not yet implemented;
+        when it is, this should call a /press endpoint analogous to /act."""
+        return Press(stance={}, intents=[])
+
+    def chat_drafts(self, state: GameState,
+                    player: PlayerId) -> list[ChatDraft]:
+        """Default no chat. RemoteAgents speak via /act only for now."""
+        return []
 
     def info(self) -> dict[str, Any]:
         r = self._http.get("/info")
