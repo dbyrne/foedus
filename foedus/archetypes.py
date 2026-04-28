@@ -71,7 +71,64 @@ def _gen_uniform(num_players: int, rng: random.Random,
 
 def _gen_continental_sweep(num_players: int, rng: random.Random,
                            map_radius: int) -> Map:
-    raise NotImplementedError("Implemented in Task 5")
+    """Open plains, dense connectivity, resource-rich.
+
+    Like UNIFORM but with 0-1 cells removed (denser connectivity) and
+    ~50% supply density instead of ~40%. No MOUNTAIN/WATER terrain.
+    """
+    coords = _hex_disk(map_radius)
+    perimeter = [c for c in coords if _ring_distance(c) == map_radius]
+
+    def angle(c: tuple[int, int]) -> float:
+        x, y = _hex_to_xy(*c)
+        return math.atan2(y, x)
+
+    perimeter.sort(key=angle)
+    home_coords = [perimeter[(i * len(perimeter)) // num_players]
+                   for i in range(num_players)]
+
+    # Continental: remove only 0-1 cells (denser connectivity than UNIFORM).
+    removable = [c for c in coords if c not in home_coords and c != (0, 0)]
+    rng.shuffle(removable)
+    removed = set(removable[: rng.randint(0, 1)])
+
+    final_coords = sorted(c for c in coords if c not in removed)
+    node_id_of = {c: i for i, c in enumerate(final_coords)}
+    coord_of = {i: c for c, i in node_id_of.items()}
+
+    edges: dict[NodeId, set[NodeId]] = {i: set() for i in node_id_of.values()}
+    for c, i in node_id_of.items():
+        for nbr in _hex_neighbors(*c):
+            if nbr in node_id_of:
+                edges[i].add(node_id_of[nbr])
+    edges_frozen = {n: frozenset(s) for n, s in edges.items()}
+
+    home_assignments: dict[NodeId, PlayerId] = {
+        node_id_of[hc]: i for i, hc in enumerate(home_coords)
+    }
+
+    non_home_ids = [n for n in node_id_of.values()
+                    if n not in home_assignments]
+    rng.shuffle(non_home_ids)
+    # Continental: 50% supply density (vs UNIFORM's 40%).
+    num_supply = max(num_players, int(len(non_home_ids) * 0.5))
+    supply_set = set(non_home_ids[:num_supply])
+
+    node_types: dict[NodeId, NodeType] = {}
+    for n in node_id_of.values():
+        if n in home_assignments:
+            node_types[n] = NodeType.HOME
+        elif n in supply_set:
+            node_types[n] = NodeType.SUPPLY
+        else:
+            node_types[n] = NodeType.PLAIN
+
+    return Map(
+        coords=coord_of,
+        edges=edges_frozen,
+        node_types=node_types,
+        home_assignments=home_assignments,
+    )
 
 
 def _gen_highland_pass(num_players: int, rng: random.Random,
