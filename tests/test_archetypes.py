@@ -236,3 +236,40 @@ def test_archipelago_is_deterministic() -> None:
     assert m1.coords == m2.coords
     assert m1.edges == m2.edges
     assert m1.node_types == m2.node_types
+
+
+def test_random_archetype_returns_archetype() -> None:
+    from foedus.archetypes import random_archetype
+    from foedus.core import Archetype
+    a = random_archetype(seed=42)
+    assert isinstance(a, Archetype)
+
+
+def test_random_archetype_excludes_uniform() -> None:
+    """random_archetype must never return UNIFORM."""
+    from foedus.archetypes import random_archetype
+    from foedus.core import Archetype
+    seen = set()
+    for seed in range(100):
+        seen.add(random_archetype(seed=seed))
+    assert Archetype.UNIFORM not in seen
+
+
+def test_random_archetype_seeded_deterministic() -> None:
+    from foedus.archetypes import random_archetype
+    a1 = random_archetype(seed=42)
+    a2 = random_archetype(seed=42)
+    assert a1 == a2
+
+
+def test_random_archetype_distribution() -> None:
+    """Across 600 samples, each non-UNIFORM archetype appears >= 100 times."""
+    from collections import Counter
+    from foedus.archetypes import random_archetype
+    from foedus.core import Archetype
+    counts: Counter[Archetype] = Counter()
+    for seed in range(600):
+        counts[random_archetype(seed=seed)] += 1
+    assert counts[Archetype.HIGHLAND_PASS] >= 100
+    assert counts[Archetype.ARCHIPELAGO] >= 100
+    assert counts[Archetype.CONTINENTAL_SWEEP] >= 100

@@ -419,3 +419,17 @@ def _gen_archipelago(num_players: int, rng: random.Random,
     raise ValueError(
         "Archipelago generation failed after 5 attempts; try larger map_radius"
     )
+
+
+def random_archetype(seed: int | None = None) -> Archetype:
+    """Return a random Archetype from the non-UNIFORM set.
+
+    Caller can pass a seed for reproducibility. Useful for picking a
+    fresh archetype per game when running test pilots or human play.
+    """
+    rng = random.Random(seed)
+    return rng.choice([
+        Archetype.HIGHLAND_PASS,
+        Archetype.ARCHIPELAGO,
+        Archetype.CONTINENTAL_SWEEP,
+    ])
