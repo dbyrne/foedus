@@ -1,6 +1,20 @@
 # Alliance bonus + Cooperator — quick experiment
 
-**Status:** Q&D experiment, not a feature. Gated behind `FOEDUS_ALLIANCE_BONUS` env var; defaults to 0 (off). Cooperator heuristic added to ROSTER. Result feeds into a future Bundle 4 spec, not committed-to mechanic.
+**Status (post-merge):** Soft-shipped. Default `FOEDUS_ALLIANCE_BONUS=3`
+(the empirical sweet spot from this experiment). `Cooperator` and
+`DishonestCooperator` heuristics live in the roster. Set
+`FOEDUS_ALLIANCE_BONUS=0` (or `--alliance-bonus 0` on the sweep CLI)
+to revert to v1 scoring.
+
+**The freerider exploit (DC vs Cooperator) is unfixed.** Bundle 4's
+real spec must add Intent-break / cooperation-consistency
+consequences before the mechanism is robust to dishonest agents. See
+"Implications for Bundle 4" below.
+
+**Original status (before merge):** Q&D experiment, not a feature.
+Gated behind `FOEDUS_ALLIANCE_BONUS` env var; defaults to 0 (off).
+Cooperator heuristic added to ROSTER. Result feeds into a future
+Bundle 4 spec, not committed-to mechanic.
 
 **Question:** Does rewarding cross-player SupportMove on captured supplies open a second top-tier strategy alongside GreedyHold?
 

@@ -510,14 +510,33 @@ def _resolve_orders(state: GameState,
         new_scores[player] = new_scores.get(player, 0.0) + supply
 
     # 8b. EXPERIMENTAL: alliance-capture bonus.
-    # Quick-and-dirty knob to test whether rewarding cooperation reshapes
-    # the dominant-strategy landscape (currently a 3-way tie among single-
-    # player GreedyHold variants). Enabled via env var FOEDUS_ALLIANCE_BONUS;
-    # value is the score bonus applied to BOTH the capturing player and the
-    # supporting player when a Move lands on a supply AND a different-owner
-    # SupportMove with matching target+target_dest exists in this turn's
-    # canon. Defaults to 0 (off) — this is an experiment, not a feature.
-    bonus = float(os.environ.get("FOEDUS_ALLIANCE_BONUS", "0") or 0)
+    #
+    # When a Move successfully captures a supply AND a SupportMove from a
+    # DIFFERENT player exists this turn with matching (target_unit,
+    # target_dest), both the capturing player and each cross-player
+    # supporter receive `bonus` extra score. This rewards genuine
+    # cross-player cooperation (the press system carries the signal —
+    # supporters read the captor's declared Intents to know where to
+    # support) and creates a second viable top-tier strategy alongside
+    # solo GreedyHold expansion.
+    #
+    # Default value: 3.0 (the empirical sweet spot from 5000-game sweeps;
+    # see docs/research/2026-04-29-alliance-bonus-experiment.md). At
+    # bonus=3, a Cooperator heuristic outscores GreedyHold by +1.7 in the
+    # full random pool, but doesn't dominate. Lower bonus → no incentive
+    # to cooperate; higher bonus → cooperation becomes the new monopoly.
+    #
+    # Set FOEDUS_ALLIANCE_BONUS=0 to revert to v1 scoring (no bonus).
+    #
+    # KNOWN EXPLOIT: a freerider that publishes Move-on-supply Intents
+    # (so genuine cooperators support its attacks) but never reciprocates
+    # outscores cooperators dramatically in fixed-seat tests (DC +10.7 vs
+    # 3 Coop at bonus=0; +12.0 at bonus=3). The exploit is invisible in
+    # random-pool sweeps because dishonest agents are diluted out of
+    # cooperator-rich neighborhoods. Bundle 4's full design needs paired
+    # Intent-break consequences before this stops being abusable.
+    # Until then, this is a soft-ship: real but not yet hardened.
+    bonus = float(os.environ.get("FOEDUS_ALLIANCE_BONUS", "3") or 0)
     if bonus:
         # Build a quick lookup: (target_unit_id, target_dest) -> [supporter pids]
         support_index: dict[tuple[UnitId, NodeId], list[PlayerId]] = defaultdict(list)

@@ -160,6 +160,12 @@ def main():
                              "(consecutive mutual-ALLY turns required). "
                              "Default 99 disables détente. Pass 0 to use "
                              "the engine default (4 + num_players).")
+    parser.add_argument("--alliance-bonus", type=str, default=None,
+                        help="Score bonus per alliance-capture event "
+                             "(both attacker and cross-player supporter "
+                             "receive it). Sets FOEDUS_ALLIANCE_BONUS for "
+                             "this run only. Engine default is 3; pass 0 "
+                             "to revert to v1 scoring.")
     parser.add_argument("--roster", default="",
                         help="comma-separated heuristic names; default: all")
     parser.add_argument("--seats", default="",
@@ -176,6 +182,8 @@ def main():
     args = parser.parse_args()
 
     archetype = Archetype(args.archetype)
+    if args.alliance_bonus is not None:
+        os.environ["FOEDUS_ALLIANCE_BONUS"] = args.alliance_bonus
     fixed_seats: list[str] | None = None
     if args.seats:
         fixed_seats = args.seats.split(",")
