@@ -235,10 +235,12 @@ class GameConfig:
     betrayal_resets_detente: bool = True
     # --- Bundle 5b (C3): variable supply values ---
     # Fraction of non-HOME SUPPLY nodes marked as high-value (worth +2/turn
-    # instead of +1). 0.0 reverts to v1 uniform-value scoring. First-pass
-    # default is 0.05 (5%); raise gradually after measurement. Generation
-    # is deterministic from config.seed.
-    high_value_supply_fraction: float = 0.05
+    # instead of +1). 0.0 reverts to v1 uniform-value scoring. Default 0.20
+    # — sweep evidence (see spec §7) shows the mechanic is invisible at 5%
+    # but ValueGreedy breaks above GreedyHold (+1.04) at 20%, with modest
+    # variance increase and a small Coop-DC differentiation bonus
+    # (+2.02 → +3.06). Generation is deterministic from config.seed.
+    high_value_supply_fraction: float = 0.20
     # Score yield assigned to high-value supplies. First-pass keeps it at 2
     # (one step up from the default 1). Future bundles may add a tier of
     # value=3 supplies on a smaller fraction.
