@@ -13,10 +13,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from foedus.core import (
-    ChatDraft, GameState, Hold, Move, NodeId, Order, PlayerId, Press,
-    Stance, UnitId,
-)
+from foedus.core import Hold, Move, Order, Press, Stance, UnitId
 
 
 class AntiLeader:
@@ -41,11 +38,11 @@ class AntiLeader:
                 if u.owner == player:
                     orders[u.id] = Hold()
             return orders
-        # Find leader's owned supply nodes.
-        leader_supplies = [
+        # Find leader's owned supply nodes (set for O(1) membership).
+        leader_supplies = {
             n for n, o in state.ownership.items() if o == leader
             and state.map.is_supply(n)
-        ]
+        }
         for unit in state.units.values():
             if unit.owner != player:
                 continue
@@ -67,7 +64,7 @@ class AntiLeader:
             return Hold()
         target = min(
             leader_supplies,
-            key=lambda n: self._dist(state, unit.location, n),
+            key=lambda n: (self._dist(state, unit.location, n), n),
         )
         next_step = self._step_toward(state, unit.location, target)
         if next_step is None:

@@ -12,9 +12,7 @@ Strategy:
 from __future__ import annotations
 
 from foedus.agents.heuristics.greedy_hold import GreedyHold
-from foedus.core import (
-    ChatDraft, GameState, Order, PlayerId, Press, Stance, UnitId,
-)
+from foedus.core import GameState, Order, PlayerId, Press, Stance, UnitId
 
 
 class Bandwagon:

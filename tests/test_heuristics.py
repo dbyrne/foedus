@@ -192,3 +192,56 @@ def test_bandwagon_press_allies_everyone(state_4p):
     assert all(s == Stance.ALLY for s in p.stance.values())
     # Should have 3 entries (3 opponents in 4-player game).
     assert len(p.stance) == 3
+
+
+def test_anti_leader_targets_lowest_pid_on_tie(state_4p):
+    """At turn 0 supply counts tie; tie-break should pick the lowest pid
+    opponent, which from P0's perspective is player 1."""
+    p = AntiLeader().choose_press(state_4p, 0)
+    assert p.stance.get(1) == Stance.HOSTILE
+
+
+def test_aggressive_uses_supportmove_when_paired():
+    """When two own units are both adjacent to an enemy unit on a supply,
+    Aggressive must produce a (Move, SupportMove) pair, not two solo Moves."""
+    from foedus.core import (
+        GameConfig, GameState, Map, NodeType, SupportMove, Unit,
+    )
+    # 4-node line: A - B - C - D. C is a supply with an enemy unit; B and D
+    # belong to player 0. A is unowned plain.
+    coords = {0: (0, 0), 1: (1, 0), 2: (2, 0), 3: (3, 0)}
+    edges = {
+        0: frozenset({1}),
+        1: frozenset({0, 2}),
+        2: frozenset({1, 3}),
+        3: frozenset({2}),
+    }
+    node_types = {
+        0: NodeType.PLAIN,
+        1: NodeType.PLAIN,
+        2: NodeType.SUPPLY,
+        3: NodeType.PLAIN,
+    }
+    m = Map(coords=coords, edges=edges, node_types=node_types,
+            home_assignments={})
+    cfg = GameConfig(num_players=2, max_turns=5, seed=0)
+    units = {
+        0: Unit(id=0, owner=0, location=1),  # P0 at B (adj to C)
+        1: Unit(id=1, owner=0, location=3),  # P0 at D (adj to C)
+        2: Unit(id=2, owner=1, location=2),  # P1 enemy at C (supply)
+    }
+    state = GameState(
+        turn=0, map=m, units=units,
+        ownership={0: None, 1: 0, 2: 1, 3: 0},
+        scores={0: 0.0, 1: 0.0}, eliminated=set(),
+        next_unit_id=3, config=cfg,
+    )
+    orders = Aggressive().choose_orders(state, 0)
+    kinds = {type(orders[uid]).__name__ for uid in (0, 1)}
+    assert kinds == {"Move", "SupportMove"}, \
+        f"expected one Move + one SupportMove, got {orders}"
+    # The SupportMove must target the other unit moving to node 2.
+    sm = next(o for o in orders.values() if isinstance(o, SupportMove))
+    mv_uid = next(uid for uid, o in orders.items()
+                  if not isinstance(o, SupportMove))
+    assert sm.target == mv_uid and sm.target_dest == 2

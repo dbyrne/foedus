@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections import deque
 
 from foedus.core import (
-    ChatDraft, GameState, Hold, Move, NodeId, Order, PlayerId, Press,
+    GameState, Hold, Move, Order, PlayerId, Press,
     Stance, SupportMove, UnitId,
 )
 
@@ -37,6 +37,12 @@ class Aggressive:
         m = state.map
         used_supporters: set[UnitId] = set()
         for u in my_units:
+            # Skip if u is already assigned (as attacker or supporter on a
+            # prior iteration). Without this guard, a unit promoted to
+            # SupportMove on iteration i could be reassigned to Move on
+            # iteration j and silently strand its attacker.
+            if u.id in orders:
+                continue
             adj = m.neighbors(u.location)
             for nbr in sorted(adj):
                 # Look for enemy on supply at nbr.
