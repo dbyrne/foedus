@@ -83,8 +83,9 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
     order_counts: Counter = Counter()
     dislodgement_count = 0
     aid_spends_count = 0
-    leverage_bonuses_fired = 0
     alliance_bonuses_fired = 0
+    combat_rewards_fired = 0
+    supporter_rewards_fired = 0
     detente_streak_resets = 0
     prev_streak = 0
     log_seen_len = 0
@@ -130,19 +131,27 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
         # Scan only NEW resolution-log entries for combat/scoring bonuses.
         # NOTE: these counters are derived from substring matches on
         # free-form resolution-log entries. They are brittle to log-message
-        # edits in foedus/resolve.py.
-        # - "alliance bonus" — emitted at foedus/resolve.py:578 (today).
-        # - "leverage bonus" — NOT emitted on main; will be emitted by
-        #   PR #15 (bundle-4-trust-and-aid). Counter stays 0 until merge.
-        # TODO(bundle-4): once PR #15 lands, verify the leverage emit
-        # uses this exact phrase, or update the constant.
+        # edits in foedus/resolve.py. The phrases below match the strings
+        # emitted on bundle-4-trust-and-aid (verified 2026-04-29):
+        # - "alliance bonus +N to ..." — gated on AidSpend by default
+        #   (alliance_requires_aid=True). Pre-Bundle-4: rare; Bundle 4+:
+        #   fires when SupportMove is backed by AidSpend.
+        # - "combat reward +N to pX for dislodging ..." — Bundle 4+ only.
+        # - "supporter reward +N to pX (via uY) for dislodgement ..." — Bundle 4+ only.
+        # On main these phrases don't appear; counters stay 0 (correct).
+        # The leverage strength bonus has NO log emit on Bundle 4 — it is
+        # added inline at strength computation. To count leverage fires we
+        # would need an engine change (add a log.append, or expose a
+        # GameState counter). Deferred.
         log = getattr(state, "resolution_log", None) or []
         new_log = log[log_seen_len:]
         for entry in new_log:
-            if "leverage bonus" in entry:
-                leverage_bonuses_fired += 1
             if "alliance bonus" in entry:
                 alliance_bonuses_fired += 1
+            if "combat reward" in entry:
+                combat_rewards_fired += 1
+            if "supporter reward" in entry:
+                supporter_rewards_fired += 1
         log_seen_len = len(log)
         cur_streak = getattr(state, "mutual_ally_streak", 0)
         if prev_streak > 0 and cur_streak == 0:
@@ -175,8 +184,9 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
             for p in range(num_players)
         ],
         "aid_spends_count": aid_spends_count,
-        "leverage_bonuses_fired": leverage_bonuses_fired,
         "alliance_bonuses_fired": alliance_bonuses_fired,
+        "combat_rewards_fired": combat_rewards_fired,
+        "supporter_rewards_fired": supporter_rewards_fired,
         "betrayals_observed": sum(
             len(state.betrayals.get(p, []))
             for p in range(num_players)

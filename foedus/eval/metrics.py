@@ -42,8 +42,9 @@ def engagement_from_records(records: Iterable[Record]) -> dict[str, float]:
     totals = {
         "dislodgements_per_game": sum(r.get("dislodgement_count", 0) for r in records),
         "aid_spends_per_game": sum(r.get("aid_spends_count", 0) for r in records),
-        "leverage_bonuses_per_game": sum(r.get("leverage_bonuses_fired", 0) for r in records),
         "alliance_bonuses_per_game": sum(r.get("alliance_bonuses_fired", 0) for r in records),
+        "combat_rewards_per_game": sum(r.get("combat_rewards_fired", 0) for r in records),
+        "supporter_rewards_per_game": sum(r.get("supporter_rewards_fired", 0) for r in records),
         "betrayals_per_game": sum(r.get("betrayals_observed", 0) for r in records),
         "detente_resets_per_game": sum(r.get("detente_streak_resets", 0) for r in records),
     }

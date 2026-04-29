@@ -8,8 +8,9 @@ from pathlib import Path
 
 REQUIRED_FIELDS = (
     "aid_spends_count",
-    "leverage_bonuses_fired",
     "alliance_bonuses_fired",
+    "combat_rewards_fired",
+    "supporter_rewards_fired",
     "betrayals_observed",
     "detente_streak_resets",
 )

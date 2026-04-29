@@ -35,3 +35,10 @@ Thumbs.db
 *.log
 *.bak
 *.tmp
+
+# Depth-eval auto-generated artifacts. Hand-written research writeups
+# (e.g. 2026-04-29-bundle4-evaluation.md) are committed by adding them
+# explicitly with `git add -f`. The README and the auto-rendered .md/json
+# pairs are not tracked — research docs link out and document repro.
+docs/research/depth/*.json
+!docs/research/depth/README.md
