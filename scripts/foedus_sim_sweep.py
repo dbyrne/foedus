@@ -1,0 +1,167 @@
+"""Bulk simulation harness — runs N foedus games with random heuristic
+pairings and emits one JSONL line per game.
+
+Usage:
+    PYTHONPATH=. python3 scripts/foedus_sim_sweep.py \
+        --num-games 5000 --max-turns 15
+
+Spec: docs/superpowers/specs/2026-04-29-sim-sweep-design.md
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import sys
+import time
+from collections import Counter
+from pathlib import Path
+
+from foedus.agents.heuristics import ROSTER
+from foedus.core import (
+    Archetype, GameConfig, Hold, Move, Press, SupportHold, SupportMove,
+)
+from foedus.mapgen import generate_map
+from foedus.press import (
+    finalize_round, signal_chat_done, signal_done, submit_press_tokens,
+)
+from foedus.resolve import initial_state
+
+
+ORDER_TYPE_NAMES = {
+    Hold: "Hold", Move: "Move",
+    SupportHold: "SupportHold", SupportMove: "SupportMove",
+}
+
+
+def _order_type_name(order):
+    return ORDER_TYPE_NAMES.get(type(order), "Unknown")
+
+
+def run_one_game(game_id: int, seed: int, agent_names: list[str],
+                 max_turns: int, archetype: Archetype,
+                 num_players: int) -> dict:
+    """Run a single game, return the per-game JSONL record."""
+    cfg = GameConfig(
+        num_players=num_players, max_turns=max_turns, seed=seed,
+        archetype=archetype, peace_threshold=99,
+    )
+    m = generate_map(num_players, seed=seed,
+                     archetype=archetype, map_radius=cfg.map_radius)
+    state = initial_state(cfg, m)
+
+    agents = []
+    for i, name in enumerate(agent_names):
+        if name == "Random":
+            agents.append(ROSTER[name](seed=seed * 1000 + i))
+        else:
+            agents.append(ROSTER[name]())
+
+    supply_per_turn: dict[int, list[int]] = {}
+    score_per_turn: dict[int, list[float]] = {}
+    order_counts: Counter = Counter()
+    dislodgement_count = 0
+
+    while not state.is_terminal():
+        survivors = [
+            p for p in range(num_players) if p not in state.eliminated
+        ]
+        # Press round.
+        for p in survivors:
+            press = agents[p].choose_press(state, p)
+            state = submit_press_tokens(state, p, press)
+            state = signal_chat_done(state, p)
+            state = signal_done(state, p)
+        # Collect orders.
+        orders = {p: agents[p].choose_orders(state, p) for p in survivors}
+        # Count order types.
+        for p_orders in orders.values():
+            for order in p_orders.values():
+                order_counts[_order_type_name(order)] += 1
+        # Finalize.
+        prev_units = dict(state.units)
+        state = finalize_round(state, orders)
+        # Count dislodgements: units in prev_units NOT in new state.units.
+        for uid in prev_units:
+            if uid not in state.units:
+                dislodgement_count += 1
+        # Snapshot.
+        supply_per_turn[state.turn] = [
+            state.supply_count(p) for p in range(num_players)
+        ]
+        score_per_turn[state.turn] = [
+            state.scores.get(p, 0.0) for p in range(num_players)
+        ]
+
+    return {
+        "game_id": game_id,
+        "seed": seed,
+        "agents": agent_names,
+        "max_turns_reached": max_turns,
+        "total_turns": state.turn,
+        "is_terminal": state.is_terminal(),
+        "winners": state.winners(),
+        "final_scores": [state.scores.get(p, 0.0)
+                         for p in range(num_players)],
+        "supply_counts_per_turn": {str(k): v for k, v in supply_per_turn.items()},
+        "score_per_turn": {str(k): v for k, v in score_per_turn.items()},
+        "order_type_counts": dict(order_counts),
+        "dislodgement_count": dislodgement_count,
+        "betrayal_count_per_player": [
+            len(state.betrayals.get(p, []))
+            for p in range(num_players)
+        ],
+        "detente_reached": state.detente_reached,
+        "eliminated": sorted(state.eliminated),
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num-games", type=int, default=5000)
+    parser.add_argument("--seed-offset", type=int, default=0)
+    parser.add_argument("--max-turns", type=int, default=15)
+    parser.add_argument("--archetype", default="continental_sweep")
+    parser.add_argument("--num-players", type=int, default=4)
+    parser.add_argument("--roster", default="",
+                        help="comma-separated heuristic names; default: all")
+    parser.add_argument("--out", default="")
+    args = parser.parse_args()
+
+    archetype = Archetype(args.archetype)
+    roster_names = (args.roster.split(",") if args.roster
+                    else list(ROSTER.keys()))
+    for n in roster_names:
+        if n not in ROSTER:
+            print(f"ERR: unknown heuristic {n!r}", file=sys.stderr)
+            return 1
+
+    out_path = Path(args.out) if args.out else \
+        Path(f"/tmp/foedus_sim_sweep_{int(time.time())}.jsonl")
+    rng = random.Random(args.seed_offset)
+
+    t0 = time.time()
+    with out_path.open("w") as f:
+        for game_id in range(args.num_games):
+            seed = args.seed_offset + game_id
+            agent_names = [rng.choice(roster_names)
+                           for _ in range(args.num_players)]
+            record = run_one_game(
+                game_id, seed, agent_names, args.max_turns,
+                archetype, args.num_players,
+            )
+            f.write(json.dumps(record) + "\n")
+            if (game_id + 1) % 100 == 0:
+                elapsed = time.time() - t0
+                rate = (game_id + 1) / elapsed
+                print(f"[{game_id+1}/{args.num_games}] {elapsed:.1f}s "
+                      f"({rate:.1f} games/s)", file=sys.stderr)
+    elapsed = time.time() - t0
+    print(f"Wrote {args.num_games} games to {out_path} in {elapsed:.1f}s",
+          file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
