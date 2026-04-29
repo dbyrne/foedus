@@ -1,12 +1,12 @@
-"""Bandwagon — ALLY everyone, mirror the leader's behavior.
+"""Bandwagon — ALLY everyone, play GreedyHold under the hood.
 
 Strategy:
-  Identify leader = opponent with most supplies.
-  Press: ALLY toward all active opponents.
-  Orders: fall back to GreedyHold (mirror "expansion" since most leaders
-    expand). The "mirror leader's last-round order pattern" idea is hard
-    to implement without engine-side per-turn order log; GreedyHold is
-    a reasonable proxy for "do what successful expanders do".
+  Press: ALLY toward all active opponents (no enemies).
+  Orders: delegate to GreedyHold — a reasonable proxy for "do what
+    successful expanders do". The original design called for mirroring
+    the leader's last-round order pattern, but that requires a per-turn
+    order log not currently exposed via GameState; GreedyHold is the
+    pragmatic stand-in.
 """
 
 from __future__ import annotations
