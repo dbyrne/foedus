@@ -43,11 +43,11 @@ def _order_type_name(order):
 
 def run_one_game(game_id: int, seed: int, agent_names: list[str],
                  max_turns: int, archetype: Archetype,
-                 num_players: int) -> dict:
+                 num_players: int, map_radius: int = 3) -> dict:
     """Run a single game, return the per-game JSONL record."""
     cfg = GameConfig(
         num_players=num_players, max_turns=max_turns, seed=seed,
-        archetype=archetype, peace_threshold=99,
+        archetype=archetype, map_radius=map_radius, peace_threshold=99,
     )
     m = generate_map(num_players, seed=seed,
                      archetype=archetype, map_radius=cfg.map_radius)
@@ -138,6 +138,9 @@ def main():
     parser.add_argument("--max-turns", type=int, default=15)
     parser.add_argument("--archetype", default="continental_sweep")
     parser.add_argument("--num-players", type=int, default=4)
+    parser.add_argument("--map-radius", type=int, default=3,
+                        help="hex map radius (3 = ~37 nodes; 4 = ~61; "
+                             "5 = ~91)")
     parser.add_argument("--roster", default="",
                         help="comma-separated heuristic names; default: all")
     parser.add_argument("--out", default="")
@@ -168,7 +171,7 @@ def main():
         agent_names = [rng.choice(roster_names)
                        for _ in range(args.num_players)]
         tasks.append((game_id, seed, agent_names, args.max_turns,
-                      archetype, args.num_players))
+                      archetype, args.num_players, args.map_radius))
 
     workers = args.workers if args.workers > 0 else (os.cpu_count() or 1)
     t0 = time.time()
