@@ -82,6 +82,12 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
     score_per_turn: dict[int, list[float]] = {}
     order_counts: Counter = Counter()
     dislodgement_count = 0
+    aid_spends_count = 0
+    leverage_bonuses_fired = 0
+    alliance_bonuses_fired = 0
+    detente_streak_resets = 0
+    prev_streak = 0
+    _log_seen_len = 0
 
     while not state.is_terminal():
         survivors = [
@@ -100,6 +106,10 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
                     state = submit_aid_spends(state, p, aid)
             state = signal_chat_done(state, p)
             state = signal_done(state, p)
+        # Accumulate aid spends submitted this round (Bundle 4; absent on main).
+        round_pending = getattr(state, "round_aid_pending", {})
+        for spends in round_pending.values():
+            aid_spends_count += len(spends)
         # Collect orders.
         orders = {p: agents[p].choose_orders(state, p) for p in survivors}
         # Count order types.
@@ -117,6 +127,19 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
         for uid in prev_units:
             if uid not in state.units:
                 dislodgement_count += 1
+        # Scan only NEW resolution-log entries for combat/scoring bonuses.
+        log = getattr(state, "resolution_log", None) or []
+        new_log = log[_log_seen_len:]
+        for entry in new_log:
+            if "leverage bonus" in entry:
+                leverage_bonuses_fired += 1
+            if "alliance bonus" in entry:
+                alliance_bonuses_fired += 1
+        _log_seen_len = len(log)
+        cur_streak = getattr(state, "mutual_ally_streak", 0)
+        if cur_streak < prev_streak:
+            detente_streak_resets += 1
+        prev_streak = cur_streak
         # Snapshot.
         supply_per_turn[state.turn] = [
             state.supply_count(p) for p in range(num_players)
@@ -143,6 +166,14 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
             len(state.betrayals.get(p, []))
             for p in range(num_players)
         ],
+        "aid_spends_count": aid_spends_count,
+        "leverage_bonuses_fired": leverage_bonuses_fired,
+        "alliance_bonuses_fired": alliance_bonuses_fired,
+        "betrayals_observed": sum(
+            len(state.betrayals.get(p, []))
+            for p in range(num_players)
+        ),
+        "detente_streak_resets": detente_streak_resets,
         "detente_reached": state.detente_reached,
         "eliminated": sorted(state.eliminated),
     }
@@ -159,7 +190,8 @@ def _run_game_task(args_tuple):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-games", type=int, default=5000)
-    parser.add_argument("--seed-offset", type=int, default=0)
+    parser.add_argument("--seed-offset", "--seed", type=int, default=0,
+                        dest="seed_offset")
     parser.add_argument("--max-turns", type=int, default=15)
     parser.add_argument("--archetype", default="continental_sweep")
     parser.add_argument("--num-players", type=int, default=4)
@@ -222,7 +254,7 @@ def main():
                              "game and --roster is ignored. Use to stress "
                              "specific matchups (e.g. 'TitForTat,Sycophant,"
                              "Sycophant,Sycophant').")
-    parser.add_argument("--out", default="")
+    parser.add_argument("--out", "--output", default="", dest="out")
     parser.add_argument("--workers", type=int, default=1,
                         help="parallel worker processes (default 1; "
                              "0 = os.cpu_count())")
