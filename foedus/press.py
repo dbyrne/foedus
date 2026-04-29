@@ -11,6 +11,7 @@ from collections import defaultdict
 from dataclasses import replace
 
 from foedus.core import (
+    AidSpend,
     BetrayalObservation,
     ChatDraft,
     ChatMessage,
@@ -23,6 +24,7 @@ from foedus.core import (
     PlayerId,
     Press,
     Stance,
+    SupportHold,
     SupportMove,
     UnitId,
 )
@@ -77,6 +79,69 @@ def submit_press_tokens(state: GameState, player: PlayerId,
     new_pending[player] = cleaned
 
     return replace(state, round_press_pending=new_pending)
+
+
+def submit_aid_spends(state: GameState, player: PlayerId,
+                      spends: list[AidSpend]) -> GameState:
+    """Set/replace `player`'s pending aid spends for the current round.
+
+    Each spend pays one aid token to add +1 strength to the named ally unit's
+    canon order this turn (and accumulate trust ledger if the recipient
+    follows through). Spends are filtered:
+    - target_unit unknown or eliminated-player-owned → dropped
+    - target_unit owned by the spender themselves → dropped (can't aid self)
+    - recipient not mutual ALLY in the previous turn's locked press → dropped
+    Token balance is checked at submit time; if `len(filtered) >
+    state.aid_tokens[player]`, only the prefix that fits the balance is kept.
+
+    Multiple calls overwrite (revisability until done).
+    Returns state unchanged if phase != NEGOTIATION, player eliminated, or
+    player has signaled done.
+    """
+    if state.phase != Phase.NEGOTIATION:
+        return state
+    if player in state.eliminated:
+        return state
+    if player in state.round_done:
+        return state
+
+    cleaned: list[AidSpend] = []
+    survivors = {
+        p for p in range(state.config.num_players) if p not in state.eliminated
+    }
+    last_press = state.press_history[-1] if state.press_history else {}
+    for spend in spends:
+        target = state.units.get(spend.target_unit)
+        if target is None:
+            continue
+        if target.owner == player:
+            continue
+        if target.owner not in survivors:
+            continue
+        # Mutual-ALLY gate from previous turn's locked press.
+        my_prev = last_press.get(player)
+        their_prev = last_press.get(target.owner)
+        if my_prev is None or their_prev is None:
+            # No archived press yet (turn 0): allow, since there's no prior
+            # stance to gate on. Players can establish initial alliances.
+            cleaned.append(spend)
+            continue
+        if my_prev.stance.get(target.owner, Stance.NEUTRAL) != Stance.ALLY:
+            continue
+        if their_prev.stance.get(player, Stance.NEUTRAL) != Stance.ALLY:
+            continue
+        cleaned.append(spend)
+
+    # Cap by token balance. Tokens are consumed at finalize regardless of
+    # whether the aid "lands" (recipient may not follow through), so we cap
+    # the COMMITMENT here rather than refunding wasted aid later.
+    balance = state.aid_tokens.get(player, 0)
+    if len(cleaned) > balance:
+        cleaned = cleaned[:balance]
+
+    new_pending = dict(state.round_aid_pending)
+    new_pending[player] = cleaned
+    return replace(state, round_aid_pending=new_pending)
 
 
 def signal_done(state: GameState, player: PlayerId) -> GameState:
@@ -309,8 +374,16 @@ def finalize_round(state: GameState,
     for p, delta in deltas.items():
         new_scores[p] = new_scores.get(p, 0.0) + delta
 
-    # Update mutual_ally_streak.
-    new_streak = state.mutual_ally_streak + 1 if streak_increment else 0
+    # Update mutual_ally_streak. Bundle 4: any observed betrayal this turn
+    # resets the streak to 0 (subject to config.betrayal_resets_detente).
+    # This closes the "détente by lying" bug where Sycophant tables declare
+    # ALLY but break their declared intents under the hood.
+    if streak_increment:
+        new_streak = state.mutual_ally_streak + 1
+    else:
+        new_streak = 0
+    if state.config.betrayal_resets_detente and new_betrayals:
+        new_streak = 0
 
     # Merge betrayals into the persistent dict. Carry forward from the
     # PRE-resolution state, not s_after — _resolve_orders constructs a fresh
@@ -319,6 +392,46 @@ def finalize_round(state: GameState,
     merged_betrayals = {p: list(v) for p, v in state.betrayals.items()}
     for p, obs_list in new_betrayals.items():
         merged_betrayals.setdefault(p, []).extend(obs_list)
+
+    # Bundle 4: update aid_given ledger and aid_tokens balances.
+    # _resolve_orders already applied combat reward, alliance bonus gating,
+    # and aid-strength bonuses to s_after.scores. Here we just propagate the
+    # bookkeeping that lives outside the order-resolution loop.
+    new_aid_given = dict(state.aid_given)
+    new_aid_tokens = dict(state.aid_tokens)
+    survivors_post = [
+        p for p in range(state.config.num_players) if p not in s_after.eliminated
+    ]
+
+    # Determine which spends "landed" (recipient's canon matched target_order).
+    for spender, spends in state.round_aid_pending.items():
+        if spender in s_after.eliminated:
+            # Spender eliminated mid-turn: their spends are still consumed
+            # token-wise but treat as non-landing (no leverage gained).
+            continue
+        balance = new_aid_tokens.get(spender, 0)
+        # Tokens are consumed regardless of landing.
+        new_aid_tokens[spender] = max(0, balance - len(spends))
+        for spend in spends:
+            target_unit = state.units.get(spend.target_unit)
+            if target_unit is None:
+                continue
+            recipient = target_unit.owner
+            if recipient in state.eliminated:
+                continue
+            recipient_canon = canon.get(spend.target_unit)
+            if recipient_canon != spend.target_order:
+                continue  # didn't land
+            key = (spender, recipient)
+            new_aid_given[key] = new_aid_given.get(key, 0) + 1
+
+    # Token regeneration: floor(supply_count / divisor), capped.
+    divisor = max(1, state.config.aid_generation_divisor)
+    cap = state.config.aid_token_cap
+    for p in survivors_post:
+        # supply_count uses ownership; s_after has the new ownership.
+        gen = s_after.supply_count(p) // divisor
+        new_aid_tokens[p] = min(cap, new_aid_tokens.get(p, 0) + gen)
 
     # Archive press and chat (carry forward from `state`, append new round).
     new_press_history = list(state.press_history)
@@ -333,12 +446,15 @@ def finalize_round(state: GameState,
         press_history=new_press_history,
         chat_history=new_chat_history,
         betrayals=merged_betrayals,
+        aid_tokens=new_aid_tokens,
+        aid_given=new_aid_given,
         # Reset round scratch fields for next turn.
         phase=Phase.NEGOTIATION,
         round_chat=[],
         round_press_pending={},
         round_done=set(),
         chat_done=set(),
+        round_aid_pending={},
     )
 
 

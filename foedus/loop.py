@@ -9,6 +9,7 @@ from foedus.press import (
     finalize_round,
     record_chat_message,
     signal_done,
+    submit_aid_spends,
     submit_press_tokens,
 )
 from foedus.resolve import initial_state
@@ -40,11 +41,20 @@ def play_game(
 
     while not state.is_terminal():
         # 1. Press phase: each survivor submits press, may emit chat, signals done.
+        # First pass: collect press from all players (so aid_spends can read
+        # everyone's declared intents in a coherent same-turn snapshot).
         for player_id, agent in agents.items():
             if player_id in state.eliminated:
                 continue
             press = agent.choose_press(state, player_id)
             state = submit_press_tokens(state, player_id, press)
+        # Second pass: aid spends + chat + done.
+        for player_id, agent in agents.items():
+            if player_id in state.eliminated:
+                continue
+            aid = agent.choose_aid(state, player_id) if hasattr(agent, "choose_aid") else []
+            if aid:
+                state = submit_aid_spends(state, player_id, aid)
             for draft in agent.chat_drafts(state, player_id):
                 state = record_chat_message(state, player_id, draft)
             state = signal_done(state, player_id)

@@ -104,6 +104,21 @@ class ChatMessage:
 
 
 @dataclass(frozen=True)
+class AidSpend:
+    """A token spent on an ally's order this turn.
+
+    `target_unit` is the unit being aided; `target_order` is the order the
+    spender expects the recipient to issue. The aid only "lands" (yields
+    +1 strength on the recipient's order, fires alliance bonus eligibility,
+    and increments the trust ledger) if the recipient's canon order this
+    turn matches `target_order` exactly. Mismatches consume the token but
+    have no other effect — this incentivizes accurate coordination.
+    """
+    target_unit: UnitId
+    target_order: "Order"
+
+
+@dataclass(frozen=True)
 class BetrayalObservation:
     """End-of-turn signal that someone broke an intent visible to me.
 
@@ -178,6 +193,30 @@ class GameConfig:
     archetype: Archetype = Archetype.UNIFORM
     map_radius: int = 3
     seed: int | None = None
+    # --- Bundle 4: trust, aid, and combat incentives ---
+    # Aid-token generation per turn = floor(supply_count / aid_generation_divisor)
+    # capped at aid_token_cap. Tokens persist (no decay) and are spent on AidSpends
+    # to back ally units' orders.
+    aid_generation_divisor: int = 3
+    aid_token_cap: int = 10
+    # Permanent directional trust ledger drives a combat bonus on attacks
+    # against the indebted player: +min(leverage_bonus_max, leverage // leverage_ratio)
+    # strength on Moves whose target hex is owned by the indebted player.
+    leverage_bonus_max: int = 2
+    leverage_ratio: int = 2
+    # Direct score reward per dislodgement: combat_reward to the attacker;
+    # supporter_combat_reward to each uncut supporter of the dislodging attack.
+    combat_reward: float = 1.0
+    supporter_combat_reward: float = 1.0
+    # Alliance-capture bonus (env var FOEDUS_ALLIANCE_BONUS, default 3) only
+    # fires when the supporter spent an AidSpend on the moving unit's order.
+    # Set False to revert to v1 cross-player-SupportMove gating.
+    alliance_requires_aid: bool = True
+    # Détente streak resets on any BetrayalObservation observed this turn.
+    # Bug fix for v1's "détente by lying" (a table of all-Sycophant declares
+    # ALLY but secretly racing for supplies, closing peaceful collective
+    # victory while breaking publicly declared intents).
+    betrayal_resets_detente: bool = True
     # Deprecated alias for detente_threshold; kept for one minor version.
     peace_threshold: int | None = None
 
@@ -224,6 +263,19 @@ class GameState:
     round_press_pending: dict[PlayerId, "Press"] = field(default_factory=dict)
     round_done: set[PlayerId] = field(default_factory=set)
     chat_done: set[PlayerId] = field(default_factory=set)
+
+    # --- Bundle 4: aid resource + permanent leverage ledger ---
+    # Per-player current aid-token balances. Generated each turn from
+    # controlled supplies; spent on AidSpends; never decay.
+    aid_tokens: dict[PlayerId, int] = field(default_factory=dict)
+    # Cumulative directional aid ledger; aid_given[(A, B)] = tokens A has
+    # successfully spent on B over the entire game. Never decays. Public.
+    aid_given: dict[tuple[PlayerId, PlayerId], int] = field(default_factory=dict)
+    # Round-in-progress: aid spends committed by each spender for this turn.
+    # Cleared at finalize_round.
+    round_aid_pending: dict[PlayerId, list["AidSpend"]] = field(
+        default_factory=dict
+    )
 
     def units_of(self, player: PlayerId) -> list[Unit]:
         return [u for u in self.units.values() if u.owner == player]
@@ -309,3 +361,23 @@ class GameState:
     def final_scores(self) -> list[tuple[PlayerId, float]]:
         """Players paired with their cumulative scores, sorted descending."""
         return sorted(self.scores.items(), key=lambda kv: -kv[1])
+
+    # --- Bundle 4 helpers ---
+
+    def leverage(self, attacker: PlayerId, defender: PlayerId) -> int:
+        """Net unreciprocated aid from attacker toward defender.
+
+        Positive when attacker has given more aid than they've received from
+        defender. Drives the combat bonus on attacker's Moves into hexes
+        owned by defender.
+        """
+        g = self.aid_given.get((attacker, defender), 0)
+        r = self.aid_given.get((defender, attacker), 0)
+        return g - r
+
+    def leverage_bonus(self, attacker: PlayerId, defender: PlayerId) -> int:
+        """Capped combat-strength bonus derived from leverage(attacker, defender)."""
+        lev = self.leverage(attacker, defender)
+        if lev <= 0:
+            return 0
+        return min(self.config.leverage_bonus_max, lev // self.config.leverage_ratio)
