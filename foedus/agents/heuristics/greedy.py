@@ -44,6 +44,8 @@ class Greedy:
     """
 
     def __init__(self) -> None:
+        # No state — pure function of GameState. Stateless agents are
+        # easier to reason about and trivially serializable.
         pass
 
     def choose_orders(self, state: GameState,
@@ -56,6 +58,12 @@ class Greedy:
         return orders
 
     def choose_press(self, state: GameState, player: PlayerId) -> Press:
+        """ALLY toward the active opponent whose supply count is closest
+        to mine; NEUTRAL toward all others (omitted from the dict).
+        Ties broken by lower player_id. No intents.
+
+        Spec: docs/superpowers/specs/2026-04-28-press-driver-design.md
+        """
         my_supply = state.supply_count(player)
         active_opponents = [
             p for p in range(state.config.num_players)
@@ -63,6 +71,7 @@ class Greedy:
         ]
         if not active_opponents:
             return Press(stance={}, intents=[])
+        # min() with tuple key gives us closest-distance, then lower-pid.
         closest = min(
             active_opponents,
             key=lambda p: (abs(state.supply_count(p) - my_supply), p),
@@ -78,12 +87,16 @@ class Greedy:
         target = self._nearest_unowned_supply(state, player, unit.location)
         if target is None:
             return Hold()
+
         m = state.map
+        # If we're adjacent, move in directly (unless blocked by an own unit).
         if m.is_adjacent(unit.location, target):
             occupant = state.unit_at(target)
             if occupant is None or occupant.owner != player:
                 return Move(dest=target)
             return Hold()
+
+        # Otherwise step along a shortest path to the target.
         next_step = self._step_toward(state, unit.location, target)
         if next_step is None:
             return Hold()
@@ -95,6 +108,11 @@ class Greedy:
     @staticmethod
     def _nearest_unowned_supply(state: GameState, player: PlayerId,
                                 start: NodeId) -> NodeId | None:
+        """BFS from `start` to the closest supply node not owned by `player`.
+
+        Returns the target NodeId, or None if no such node is reachable.
+        Ties are broken deterministically by NodeId (sorted neighbor walk).
+        """
         m = state.map
         visited: set[NodeId] = {start}
         q: deque[NodeId] = deque([start])
@@ -112,6 +130,12 @@ class Greedy:
     @staticmethod
     def _step_toward(state: GameState, from_node: NodeId,
                      to_node: NodeId) -> NodeId | None:
+        """Return a neighbor of `from_node` on a shortest path to `to_node`.
+
+        Implementation: BFS from `to_node` outward; pick the neighbor of
+        `from_node` with the smallest distance back. Deterministic (sorted
+        node iteration breaks ties).
+        """
         m = state.map
         dist: dict[NodeId, int] = {to_node: 0}
         q: deque[NodeId] = deque([to_node])
