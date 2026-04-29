@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import itertools
 import json
 import os
 import subprocess
@@ -117,26 +118,72 @@ def _select_probes(names_csv: str) -> list[Probe]:
     return out
 
 
+def _unique_seat_permutations(seats: tuple[str, ...]) -> list[tuple[str, ...]]:
+    """All distinct seat permutations for a probe.
+
+    For seats with duplicates (e.g. 4×Cooperator → 1 unique perm; 1 DC + 3
+    Coop → 4 unique perms; 2 TC + 2 Patron → 6 unique perms). Returns a
+    sorted list for deterministic ordering.
+    """
+    return sorted(set(itertools.permutations(seats)))
+
+
 def _run_one_probe(probe_args):
-    """Worker entrypoint — runs one probe sweep and returns records."""
+    """Worker entrypoint — runs one probe sweep across all unique seat
+    permutations and concatenates the resulting records.
+
+    Splits the requested `n` games evenly across the unique permutations
+    of `probe.seats`. This averages out the player-ID-tiebreak seat bias
+    (~5% residual after PR #13's spawn fix) so the score_diff measures
+    the *role* effect, not the seat effect.
+
+    All permutations use the same base seed → same random maps → same
+    games, just with the agents reassigned. This gives the cleanest
+    comparison.
+    """
     (repo_root, probe, n, seed, max_turns, map_radius, workers) = probe_args
-    with tempfile.NamedTemporaryFile(
-        suffix=".jsonl", delete=False, dir=repo_root
-    ) as tmp:
-        tmp_path = Path(tmp.name)
-    try:
-        records = _run_sweep(
-            repo_root, tmp_path,
-            num_games=n, seed=seed, seats=probe.seats,
-            max_turns=max_turns, map_radius=map_radius,
-            workers=workers,
-        )
-        return probe.name, records
-    finally:
+    perms = _unique_seat_permutations(probe.seats)
+    if len(perms) == 1:
+        # All-same probe: permutation is identity, just run once.
+        with tempfile.NamedTemporaryFile(
+            suffix=".jsonl", delete=False, dir=repo_root
+        ) as tmp:
+            tmp_path = Path(tmp.name)
         try:
-            tmp_path.unlink()
-        except FileNotFoundError:
-            pass
+            records = _run_sweep(
+                repo_root, tmp_path,
+                num_games=n, seed=seed, seats=probe.seats,
+                max_turns=max_turns, map_radius=map_radius,
+                workers=workers,
+            )
+            return probe.name, records
+        finally:
+            try:
+                tmp_path.unlink()
+            except FileNotFoundError:
+                pass
+    # Distribute n across perms; round up so total >= n.
+    n_per_perm = (n + len(perms) - 1) // len(perms)
+    all_records: list[dict] = []
+    for perm in perms:
+        with tempfile.NamedTemporaryFile(
+            suffix=".jsonl", delete=False, dir=repo_root
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            recs = _run_sweep(
+                repo_root, tmp_path,
+                num_games=n_per_perm, seed=seed, seats=perm,
+                max_turns=max_turns, map_radius=map_radius,
+                workers=workers,
+            )
+            all_records.extend(recs)
+        finally:
+            try:
+                tmp_path.unlink()
+            except FileNotFoundError:
+                pass
+    return probe.name, all_records
 
 
 def main() -> int:
@@ -220,18 +267,26 @@ def main() -> int:
     tier2_out = []
     for p in probes:
         recs = probe_results.get(p.name, [])
-        diff = probe_score_diff(recs, p.subject_index)
+        # Identify the subject by **agent class** (the class that lived at
+        # subject_index in the original probe definition). This is robust
+        # to seat permutation: the subject's diff is computed against
+        # whichever seats the subject's class lands in each game.
+        subject_agent = p.seats[p.subject_index]
+        diff = probe_score_diff(recs, subject_agent=subject_agent)
         ci = None
         if args.bootstrap and recs:
-            ci = list(bootstrap_ci_mean(
-                probe_per_game_diffs(recs, p.subject_index),
-                n_resamples=args.bootstrap_n,
-                seed=seed,
-            ))
+            per_game = probe_per_game_diffs(recs, subject_agent=subject_agent)
+            if per_game:
+                ci = list(bootstrap_ci_mean(
+                    per_game,
+                    n_resamples=args.bootstrap_n,
+                    seed=seed,
+                ))
         tier2_out.append({
             "name": p.name,
             "description": p.description,
             "seats": list(p.seats),
+            "subject_agent": subject_agent,
             "subject_index": p.subject_index,
             "n": len(recs),
             "score_diff": diff,

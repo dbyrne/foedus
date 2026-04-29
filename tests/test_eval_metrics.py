@@ -71,3 +71,48 @@ def test_probe_score_diff_subject_vs_others():
     ]
     diff = probe_score_diff(recs, subject_index=0)
     assert diff == pytest.approx(10.0)
+
+
+def test_probe_score_diff_by_agent_works_with_permutation():
+    """Agent-class identification handles permuted seat assignments.
+
+    Same DC-vs-3-Coop scenario, but DC is at different seats per game.
+    The diff should still be 10.0 since the subject's score is always
+    the same relative to the others'.
+    """
+    recs = [
+        _make_record(
+            ["DishonestCooperator", "Cooperator", "Cooperator", "Cooperator"],
+            [20, 10, 8, 12],  # DC=20, others mean=10
+        ),
+        _make_record(
+            ["Cooperator", "DishonestCooperator", "Cooperator", "Cooperator"],
+            [10, 20, 8, 12],  # DC=20, others mean=10
+        ),
+    ]
+    diff = probe_score_diff(recs, subject_agent="DishonestCooperator")
+    assert diff == pytest.approx(10.0)
+
+
+def test_probe_score_diff_by_agent_handles_duplicate_subject_seats():
+    """When the subject class occupies multiple seats (e.g. 2 TC + 2 Patron),
+    the diff is mean(subject seats) - mean(other seats)."""
+    recs = [
+        _make_record(
+            ["TrustfulCooperator", "TrustfulCooperator", "Patron", "Patron"],
+            [80, 70, 50, 40],  # TC mean=75, Patron mean=45
+        ),
+    ]
+    diff = probe_score_diff(recs, subject_agent="TrustfulCooperator")
+    assert diff == pytest.approx(30.0)
+
+
+def test_probe_score_diff_by_agent_skips_all_same():
+    """When every seat is the subject, no contrast group → empty diff list."""
+    recs = [
+        _make_record(
+            ["Cooperator"] * 4, [70, 71, 72, 73],
+        ),
+    ]
+    diff = probe_score_diff(recs, subject_agent="Cooperator")
+    assert diff == 0.0  # no comparison possible

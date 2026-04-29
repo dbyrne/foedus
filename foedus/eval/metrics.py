@@ -100,23 +100,45 @@ def pairwise_winrate_from_records(records: Iterable[Record]) -> dict:
     return {"row_agents": all_agents, "col_agents": all_agents, "matrix": matrix}
 
 
-def probe_score_diff(records: Iterable[Record], subject_index: int) -> float:
-    """For a fixed-seat probe: mean of (subject - mean(others)) per game."""
-    diffs = []
-    for rec in records:
-        scores = rec["final_scores"]
-        subject = scores[subject_index]
-        others = [s for i, s in enumerate(scores) if i != subject_index]
-        diffs.append(subject - (sum(others) / len(others)))
-    return sum(diffs) / len(diffs) if diffs else 0.0
+def probe_per_game_diffs(records: Iterable[Record],
+                         subject_agent: str | None = None,
+                         subject_index: int | None = None
+                         ) -> list[float]:
+    """Per-game diffs for a fixed-seat probe.
 
+    Identifies the subject by **agent class** when `subject_agent` is set
+    (preferred — works with seat permutation); falls back to fixed seat
+    index when only `subject_index` is provided. Per game, the diff is
+    `mean(scores of subject seats) - mean(scores of non-subject seats)`.
 
-def probe_per_game_diffs(records: Iterable[Record], subject_index: int) -> list[float]:
-    """Same as probe_score_diff but returns the per-game list (for bootstrap)."""
-    diffs = []
+    Games where every seat is the subject (e.g. mutual_coop with 4
+    Cooperators when subject_agent="Cooperator") are skipped — there is
+    no "others" group to contrast against. Returns an empty list in that
+    case.
+    """
+    if subject_agent is None and subject_index is None:
+        raise ValueError("must pass subject_agent or subject_index")
+    diffs: list[float] = []
     for rec in records:
+        agents = rec["agents"]
         scores = rec["final_scores"]
-        subject = scores[subject_index]
-        others = [s for i, s in enumerate(scores) if i != subject_index]
-        diffs.append(subject - (sum(others) / len(others)))
+        if subject_agent is not None:
+            subj = [s for a, s in zip(agents, scores) if a == subject_agent]
+            other = [s for a, s in zip(agents, scores) if a != subject_agent]
+        else:
+            subj = [scores[subject_index]]  # type: ignore[index]
+            other = [s for i, s in enumerate(scores) if i != subject_index]
+        if not subj or not other:
+            continue  # all-same probe with no contrast group
+        diffs.append((sum(subj) / len(subj)) - (sum(other) / len(other)))
     return diffs
+
+
+def probe_score_diff(records: Iterable[Record],
+                     subject_agent: str | None = None,
+                     subject_index: int | None = None) -> float:
+    """Mean per-game diff. See `probe_per_game_diffs`."""
+    diffs = probe_per_game_diffs(
+        records, subject_agent=subject_agent, subject_index=subject_index,
+    )
+    return sum(diffs) / len(diffs) if diffs else 0.0
