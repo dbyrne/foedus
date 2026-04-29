@@ -143,7 +143,7 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
         # added inline at strength computation. To count leverage fires we
         # would need an engine change (add a log.append, or expose a
         # GameState counter). Deferred.
-        log = getattr(state, "resolution_log", None) or []
+        log = getattr(state, "log", None) or []
         new_log = log[log_seen_len:]
         for entry in new_log:
             if "alliance bonus" in entry:

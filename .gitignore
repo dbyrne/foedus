@@ -35,6 +35,8 @@ Thumbs.db
 *.log
 *.bak
 *.tmp
+*.local
+.nexus-mcp.json
 
 # Depth-eval auto-generated artifacts. Hand-written research writeups
 # (e.g. 2026-04-29-bundle4-evaluation.md) are committed by adding them
