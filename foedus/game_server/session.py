@@ -235,9 +235,10 @@ class GameSession:
 
     def submit_press_commit(self, player: PlayerId,
                             press: "Press",
-                            orders: dict[UnitId, Order]) -> dict:
-        """Submit press tokens + orders + implicit signal_done for
-        `player`. If this commit completes the round, runs
+                            orders: dict[UnitId, Order],
+                            aid_spends: list | None = None) -> dict:
+        """Submit press tokens + (optional) aid spends + orders + implicit
+        signal_done for `player`. If this commit completes the round, runs
         finalize_round and re-initializes for the next round.
 
         Returns whether the round was advanced and the resulting turn.
@@ -255,6 +256,9 @@ class GameSession:
                 f"player {player} {ERR_ALREADY_COMMITTED}"
             )
         self.state = submit_press_tokens(self.state, player, press)
+        if aid_spends:
+            from foedus.press import submit_aid_spends
+            self.state = submit_aid_spends(self.state, player, aid_spends)
         self.pending_orders[player] = dict(orders)
         self.state = signal_done(self.state, player)
         round_advanced = False
@@ -352,7 +356,11 @@ class GameSession:
 
     def _build_view(self, state: GameState, player: PlayerId,
                     *, is_replay: bool) -> dict[str, Any]:
-        from foedus.remote.wire import serialize_order, serialize_state
+        from foedus.remote.wire import (
+            serialize_aid_spend,
+            serialize_order,
+            serialize_state,
+        )
         my_units = [u for u in state.units.values() if u.owner == player]
         legal: dict[str, list[dict[str, Any]]] = {}
         if not is_replay:
@@ -362,12 +370,57 @@ class GameSession:
                     for o in legal_orders_for_unit(state, u.id)
                 ]
 
+        # Bundle 4: surface the player's own tokens, the public trust ledger,
+        # their committed aid spends this round (for revisability display),
+        # and the betrayal observations they've received this game.
+        my_betrayals = [
+            {
+                "turn": b.turn,
+                "betrayer": b.betrayer,
+                "intent": {
+                    "unit_id": b.intent.unit_id,
+                    "declared_order": serialize_order(b.intent.declared_order),
+                    "visible_to": (None if b.intent.visible_to is None
+                                   else sorted(b.intent.visible_to)),
+                },
+                "actual_order": serialize_order(b.actual_order),
+            }
+            for b in state.betrayals.get(player, [])
+        ]
+        # Last turn's locked press (so the client can render previous-round
+        # stance / public intents from other players for context).
+        last_press = state.press_history[-1] if state.press_history else {}
+        last_press_serialized = {
+            str(p): {
+                "stance": {str(q): s.value for q, s in pr.stance.items()},
+                "intents": [
+                    {
+                        "unit_id": i.unit_id,
+                        "declared_order": serialize_order(i.declared_order),
+                        "visible_to": (None if i.visible_to is None
+                                       else sorted(i.visible_to)),
+                    }
+                    for i in pr.intents
+                    # Filter private intents not addressed to `player`.
+                    if i.visible_to is None or player in i.visible_to
+                ],
+            }
+            for p, pr in last_press.items()
+        }
+
         return {
             "game_id": self.game_id,
             "you": player,
             "turn": state.turn,
             "max_turns": state.config.max_turns,
             "state": serialize_state(state),
+            "your_aid_tokens": state.aid_tokens.get(player, 0),
+            "your_aid_pending": [
+                serialize_aid_spend(s)
+                for s in state.round_aid_pending.get(player, [])
+            ],
+            "your_betrayals": my_betrayals,
+            "last_press": last_press_serialized,
             "your_units": [
                 {"id": u.id, "owner": u.owner, "location": u.location}
                 for u in my_units

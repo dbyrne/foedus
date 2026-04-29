@@ -163,3 +163,56 @@ def test_full_press_round_via_http(client: TestClient) -> None:
     # Verify state via existing /games/{gid}/view/0 endpoint.
     view = client.get(f"/games/{gid}/view/0").json()
     assert view["turn"] == 1
+
+
+def test_commit_accepts_aid_spends(client: TestClient) -> None:
+    """/commit accepts an `aid_spends` field; spends are deserialized and
+    forwarded to submit_aid_spends.
+    """
+    gid = _create_press_game(client, num_llm=2, num_agents=0)
+    # Set up turn-1 state with prior mutual-ALLY and tokens. We're going
+    # to roll one turn first to populate press_history with mutual-ALLY,
+    # then on turn 2 submit aid spends.
+    for p in (0, 1):
+        client.post(f"/games/{gid}/chat",
+                    json={"player": p, "draft": None})
+    client.post(f"/games/{gid}/commit", json={
+        "player": 0,
+        "press": {"stance": {"1": "ally"}, "intents": []},
+        "orders": {},
+    })
+    client.post(f"/games/{gid}/commit", json={
+        "player": 1,
+        "press": {"stance": {"0": "ally"}, "intents": []},
+        "orders": {},
+    })
+    # Now turn 2: but tokens regen from supplies. With 1 home each (= 1
+    # supply) and divisor=3, players get floor(1/3)=0 tokens. So aid won't
+    # actually land. But the endpoint should still accept and round-trip
+    # the AidSpend payload without error.
+    for p in (0, 1):
+        client.post(f"/games/{gid}/chat",
+                    json={"player": p, "draft": None})
+    r = client.post(f"/games/{gid}/commit", json={
+        "player": 0,
+        "press": {"stance": {"1": "ally"}, "intents": []},
+        "orders": {},
+        "aid_spends": [
+            {"target_unit": 1, "target_order": {"type": "Hold"}},
+        ],
+    })
+    assert r.status_code == 200, r.text
+
+
+def test_commit_aid_spend_with_bad_payload_returns_400(client: TestClient) -> None:
+    gid = _create_press_game(client, num_llm=2, num_agents=0)
+    for p in (0, 1):
+        client.post(f"/games/{gid}/chat",
+                    json={"player": p, "draft": None})
+    r = client.post(f"/games/{gid}/commit", json={
+        "player": 0,
+        "press": {},
+        "orders": {},
+        "aid_spends": [{"target_unit": 1}],  # missing target_order
+    })
+    assert r.status_code == 400
