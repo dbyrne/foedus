@@ -11,6 +11,7 @@ v1 simplifications vs. full DATC Diplomacy:
 
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from dataclasses import replace
 
@@ -507,6 +508,58 @@ def _resolve_orders(state: GameState,
                      if t in (NodeType.SUPPLY, NodeType.HOME)
                      and new_owner.get(n) == player)
         new_scores[player] = new_scores.get(player, 0.0) + supply
+
+    # 8b. EXPERIMENTAL: alliance-capture bonus.
+    # Quick-and-dirty knob to test whether rewarding cooperation reshapes
+    # the dominant-strategy landscape (currently a 3-way tie among single-
+    # player GreedyHold variants). Enabled via env var FOEDUS_ALLIANCE_BONUS;
+    # value is the score bonus applied to BOTH the capturing player and the
+    # supporting player when a Move lands on a supply AND a different-owner
+    # SupportMove with matching target+target_dest exists in this turn's
+    # canon. Defaults to 0 (off) — this is an experiment, not a feature.
+    bonus = float(os.environ.get("FOEDUS_ALLIANCE_BONUS", "0") or 0)
+    if bonus:
+        # Build a quick lookup: (target_unit_id, target_dest) -> [supporter pids]
+        support_index: dict[tuple[UnitId, NodeId], list[PlayerId]] = defaultdict(list)
+        for sup_id, s_order in canon.items():
+            if not isinstance(s_order, SupportMove):
+                continue
+            sup_unit = state.units.get(sup_id)
+            if sup_unit is None:
+                continue
+            # Only count if the support wasn't cut.
+            if sup_id in cut:
+                continue
+            support_index[(s_order.target, s_order.target_dest)].append(
+                sup_unit.owner
+            )
+        for u_id, order in canon.items():
+            if not isinstance(order, Move):
+                continue
+            if outcome.get(u_id) != "success":
+                continue
+            if not state.map.is_supply(order.dest):
+                continue
+            mover = state.units.get(u_id)
+            if mover is None:
+                continue
+            supporters = [s for s in support_index.get((u_id, order.dest), [])
+                          if s != mover.owner]  # alliance = different player
+            if not supporters:
+                continue
+            # Both mover and each cross-player supporter get the bonus.
+            new_scores[mover.owner] = (
+                new_scores.get(mover.owner, 0.0) + bonus
+            )
+            for sup_pid in supporters:
+                new_scores[sup_pid] = (
+                    new_scores.get(sup_pid, 0.0) + bonus
+                )
+            log.append(
+                f"  alliance bonus +{bonus:g} to p{mover.owner} (mover) "
+                f"and p{','.join(str(s) for s in supporters)} (supporter) "
+                f"for capture at n{order.dest}"
+            )
 
     # 9. Eliminations: 0 units AND 0 supply centers => out.
     new_elim = set(state.eliminated)
