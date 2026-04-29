@@ -60,3 +60,39 @@ FOEDUS_ALLIANCE_BONUS=3 PYTHONPATH=. python3 scripts/foedus_sim_sweep.py \
 `Cooperator` is in `foedus/agents/heuristics/cooperator.py`; the bonus
 logic is in `foedus/resolve.py` step 8b. Both intentionally hacky;
 both gated on env var so the default behavior on `main` is unchanged.
+
+## Update — DishonestCooperator probe
+
+Added a `DishonestCooperator` (declares cross-support Intents like Cooperator, but never reciprocates — pure GreedyHold orders) and tested the predicted freerider exploit.
+
+### 1 DC vs 3 Cooperator — the controlled setup
+
+| bonus | DC | Coop avg | DC − Coop |
+|---|---|---|---|
+| 0 | **64.0** | 53.3 | **+10.7** |
+| 3 | 73.1 | 61.1 | +12.0 |
+| 10 | 94.5 | 79.4 | +15.1 |
+
+**The exploit works even at bonus=0** (+10.7). The score bonus widens it but isn't the source. Two structural advantages compound:
+
+1. **Free attack-success** — Cooperators support DC's published Move intents, so DC's attacks succeed where they'd otherwise bounce.
+2. **Time arbitrage** — Cooperators waste ~30% of their turns supporting; DC spends 100% on expansion (it's pure GreedyHold under the hood).
+
+### 13-heuristic random pool — the result reverses
+
+| bonus | Cooperator | DC | Δ |
+|---|---|---|---|
+| 0 | 62.6 | 63.0 | DC +0.4 |
+| 3 | **65.0** | 63.8 | **Coop +1.2** |
+| 10 | **70.5** | 65.8 | **Coop +4.7** |
+
+In random pools, Cooperator-at-a-table-with-another-Cooperator is more productive (mutual support, ~40% SupportMove rate, two-way bonuses) than DC-at-a-table-with-one-Cooperator (unilateral support, one-way bonus). Cooperator pairs self-select into local cooperative cliques where they outscore the diluted-freerider DC.
+
+### Implications for Bundle 4
+
+1. **The exploit is real and invisible.** A random-pool sweep would *miss* it (in fact would show Cooperator winning). Bundle 4 evaluation MUST include a fixed-seat exploit test (e.g. `1 DC vs 3 Coop`, `2 DC vs 2 Coop`) — random pairings hide the structural problem because dishonest agents are diluted out of cooperator-rich neighborhoods.
+
+2. **The structural exploit is bonus-independent.** Bundle 4 needs Intent-break consequences regardless of the bonus value: the time-arbitrage advantage exists at any positive bonus and even at zero. *Detecting* a broken cross-support Intent is straightforward (Cooperator declared they'd attack supply X with their unit U, but at order-resolution time U is held or moved elsewhere). The penalty design is what needs the brainstorm.
+
+3. **Cooperator pair coordination is fragile.** Two Cooperators outscore solo GreedyHold *only* when both publish honest intents. A meta where 1/3 of agents are dishonest would invert the equilibrium — Cooperator pairs become unsafe and the strategy collapses. The bonus mechanism without intent-break consequences would *destabilize* cooperation rather than create it.
+
