@@ -174,3 +174,20 @@ def test_deserialize_state_without_bundle4_fields_defaults_empty() -> None:
     assert s2.aid_tokens == {}
     assert s2.aid_given == {}
     assert s2.round_aid_pending == {}
+
+
+def test_map_roundtrip_with_supply_values() -> None:
+    """Bundle 5b (C3): supply_values round-trips through serialize_map."""
+    m = generate_map(4, seed=42)
+    m = replace(m, supply_values={k: 2 for k in list(m.coords.keys())[:3]})
+    out = deserialize_map(serialize_map(m))
+    assert out.supply_values == m.supply_values
+
+
+def test_map_deserialize_without_supply_values_defaults_empty() -> None:
+    """Pre-Bundle-5b blobs (no supply_values key) deserialize cleanly."""
+    m = generate_map(4, seed=42)
+    blob = serialize_map(m)
+    blob.pop("supply_values", None)
+    out = deserialize_map(blob)
+    assert out.supply_values == {}
