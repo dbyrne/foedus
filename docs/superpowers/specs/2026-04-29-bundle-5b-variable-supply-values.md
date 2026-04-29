@@ -28,7 +28,7 @@ Bundle 5b introduces **variable supply values** as a heterogeneity-injection: ~5
 | Dimension | Decision |
 |---|---|
 | Eligible nodes | Non-HOME `SUPPLY` nodes only (HOMEs always yield 1) |
-| Default fraction | `0.05` (5% of eligible nodes) |
+| Default fraction | `0.20` (20% of eligible nodes) — see §7 sweep curve |
 | Default high-value yield | `2` (one step above default 1) |
 | Distribution | Uniform random across eligible nodes (not archetype-specific in v1) |
 | Determinism | Seeded from `(config.seed * 17 + 7)`; same seed → same value placement |
@@ -71,7 +71,7 @@ The check `if not m.supply_values:` skips re-assignment when the input Map alrea
 ## 6. Sweep CLI
 
 ```sh
-# Default (Bundle 5b on, fraction=0.05):
+# Default (Bundle 5b on, fraction=0.20):
 PYTHONPATH=. python3 scripts/foedus_sim_sweep.py --num-games 5000 \
     --max-turns 15 --workers 8 --out /tmp/sweep_b5b.jsonl
 
@@ -80,15 +80,29 @@ PYTHONPATH=. python3 scripts/foedus_sim_sweep.py --num-games 5000 \
     --max-turns 15 --workers 8 --high-value-fraction 0 \
     --out /tmp/sweep_v1.jsonl
 
-# Aggressive heterogeneity (10% high-value):
+# Conservative — 5% (mechanic on but barely visible):
 PYTHONPATH=. python3 scripts/foedus_sim_sweep.py --num-games 5000 \
-    --max-turns 15 --workers 8 --high-value-fraction 0.10 \
-    --out /tmp/sweep_b5b_high.jsonl
+    --max-turns 15 --workers 8 --high-value-fraction 0.05 \
+    --out /tmp/sweep_b5b_low.jsonl
 ```
 
 ## 7. Validation plan
 
-Sweeps to run after merge:
+Empirical sweep curve (n=5000 random pool, full 16-heuristic roster) over
+high-value fraction (where VG = ValueGreedy, GH = GreedyHold):
+
+| Fraction | VG | GH | VG−GH | Coop−DC | dislodge/game | tier-1 sd |
+|---|---|---|---|---|---|---|
+| OFF (0.00) | (≡ GH) | 60.7 | — | +2.02 | 1.88 | 19.0 |
+| 5% | 62.5 | 62.9 | −0.35 | +3.00 | 1.60 | 20.5 |
+| 10% | 66.1 | 65.7 | +0.37 | +2.76 | 1.61 | 22.0 |
+| 15% | 66.1 | 65.7 | +0.37 | +2.76 | 1.61 | 22.0 |
+| **20% (default)** | **69.6** | **68.6** | **+1.04** | **+3.06** | **1.60** | **23.3** |
+
+The default of 20% was chosen because it's the lowest fraction at which
+VG demonstrably breaks above GH in the random pool. Lower fractions (5%)
+leave the mechanic invisible; higher fractions (>30%) over-skew variance
+without proportional differentiation gain. Sweeps to run after merge:
 
 | Test | Expectation |
 |---|---|
