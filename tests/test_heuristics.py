@@ -22,7 +22,10 @@ from foedus.agents.heuristics import (
     Defensive,
     Greedy,
     GreedyHold,
+    OpportunisticBetrayer,
     RandomAgent,
+    Sycophant,
+    TitForTat,
 )
 from foedus.core import GameConfig, Hold, Move, Press, Stance, Unit
 from foedus.legal import legal_orders_for_unit
@@ -245,3 +248,62 @@ def test_aggressive_uses_supportmove_when_paired():
     mv_uid = next(uid for uid, o in orders.items()
                   if not isinstance(o, SupportMove))
     assert sm.target == mv_uid and sm.target_dest == 2
+
+
+# ------- Sycophant -------
+
+def test_sycophant_orders_all_legal(state_4p):
+    _all_orders_legal(Sycophant, state_4p, 0)
+
+
+def test_sycophant_press_allies_everyone(state_4p):
+    p = Sycophant().choose_press(state_4p, 0)
+    assert all(s == Stance.ALLY for s in p.stance.values())
+
+
+def test_sycophant_chat_includes_cooperation_pitch(state_4p):
+    drafts = Sycophant().chat_drafts(state_4p, 0)
+    assert len(drafts) == 1
+    assert "ally" in drafts[0].body.lower() or \
+           "cooperate" in drafts[0].body.lower()
+
+
+# ------- OpportunisticBetrayer -------
+
+def test_opportunistic_betrayer_orders_all_legal(state_4p):
+    _all_orders_legal(OpportunisticBetrayer, state_4p, 0)
+
+
+def test_opportunistic_betrayer_press_includes_intents(state_4p):
+    p = OpportunisticBetrayer().choose_press(state_4p, 0)
+    assert len(p.intents) >= 1, "should declare at least one Intent"
+
+
+# ------- TitForTat -------
+
+def test_tit_for_tat_orders_all_legal(state_4p):
+    _all_orders_legal(TitForTat, state_4p, 0)
+
+
+def test_tit_for_tat_starts_ally_toward_all(state_4p):
+    """No prior betrayals → all ally."""
+    p = TitForTat().choose_press(state_4p, 0)
+    assert all(s == Stance.ALLY for s in p.stance.values())
+
+
+def test_tit_for_tat_retaliates_against_betrayer(state_4p):
+    """If state.betrayals[player] has an entry, that betrayer becomes
+    HOSTILE."""
+    from foedus.core import BetrayalObservation, Hold, Intent
+    agent = TitForTat()
+    # Inject a fake betrayal: P1 betrayed P0.
+    fake_intent = Intent(unit_id=2, declared_order=Hold(),
+                         visible_to=None)
+    obs = BetrayalObservation(
+        turn=0, betrayer=1, intent=fake_intent,
+        actual_order=Hold(),
+    )
+    state_4p.betrayals[0] = [obs]
+    p = agent.choose_press(state_4p, 0)
+    assert p.stance.get(1) == Stance.HOSTILE
+    assert p.stance.get(2) == Stance.ALLY  # Other opponents unchanged

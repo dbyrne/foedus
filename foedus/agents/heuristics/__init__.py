@@ -1,13 +1,4 @@
-"""Heuristic agents for foedus.
-
-Each heuristic is a single-purpose strategy implementation. They share
-the foedus.agents.base.Agent Protocol (choose_orders, choose_press,
-chat_drafts).
-
-The roster is intentionally diverse so bulk simulation sweeps can
-measure rock-paper-scissors dynamics, betrayal teeth, and other
-depth-indicator metrics.
-"""
+"""Heuristic agents for foedus."""
 
 from __future__ import annotations
 
@@ -18,11 +9,15 @@ from foedus.agents.heuristics.conservative_builder import ConservativeBuilder
 from foedus.agents.heuristics.defensive import Defensive
 from foedus.agents.heuristics.greedy import Greedy
 from foedus.agents.heuristics.greedy_hold import GreedyHold
+from foedus.agents.heuristics.opportunistic_betrayer import OpportunisticBetrayer
 from foedus.agents.heuristics.random_agent import RandomAgent
+from foedus.agents.heuristics.sycophant import Sycophant
+from foedus.agents.heuristics.tit_for_tat import TitForTat
 
 __all__ = [
     "Aggressive", "AntiLeader", "Bandwagon", "ConservativeBuilder",
-    "Defensive", "Greedy", "GreedyHold", "RandomAgent",
+    "Defensive", "Greedy", "GreedyHold", "OpportunisticBetrayer",
+    "RandomAgent", "Sycophant", "TitForTat",
 ]
 
 ROSTER = {
@@ -34,4 +29,7 @@ ROSTER = {
     "AntiLeader": AntiLeader,
     "Bandwagon": Bandwagon,
     "ConservativeBuilder": ConservativeBuilder,
+    "Sycophant": Sycophant,
+    "OpportunisticBetrayer": OpportunisticBetrayer,
+    "TitForTat": TitForTat,
 }
