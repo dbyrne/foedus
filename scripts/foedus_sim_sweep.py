@@ -143,6 +143,13 @@ def main():
                              "5 = ~91)")
     parser.add_argument("--roster", default="",
                         help="comma-separated heuristic names; default: all")
+    parser.add_argument("--seats", default="",
+                        help="comma-separated agent names, exactly one per "
+                             "seat (length must equal --num-players). When "
+                             "set, this fixed assignment is used for every "
+                             "game and --roster is ignored. Use to stress "
+                             "specific matchups (e.g. 'TitForTat,Sycophant,"
+                             "Sycophant,Sycophant').")
     parser.add_argument("--out", default="")
     parser.add_argument("--workers", type=int, default=1,
                         help="parallel worker processes (default 1; "
@@ -150,12 +157,25 @@ def main():
     args = parser.parse_args()
 
     archetype = Archetype(args.archetype)
-    roster_names = (args.roster.split(",") if args.roster
-                    else list(ROSTER.keys()))
-    for n in roster_names:
-        if n not in ROSTER:
-            print(f"ERR: unknown heuristic {n!r}", file=sys.stderr)
+    fixed_seats: list[str] | None = None
+    if args.seats:
+        fixed_seats = args.seats.split(",")
+        if len(fixed_seats) != args.num_players:
+            print(f"ERR: --seats has {len(fixed_seats)} entries but "
+                  f"--num-players is {args.num_players}", file=sys.stderr)
             return 1
+        for n in fixed_seats:
+            if n not in ROSTER:
+                print(f"ERR: unknown heuristic {n!r}", file=sys.stderr)
+                return 1
+        roster_names = fixed_seats
+    else:
+        roster_names = (args.roster.split(",") if args.roster
+                        else list(ROSTER.keys()))
+        for n in roster_names:
+            if n not in ROSTER:
+                print(f"ERR: unknown heuristic {n!r}", file=sys.stderr)
+                return 1
 
     out_path = Path(args.out) if args.out else \
         Path(f"/tmp/foedus_sim_sweep_{int(time.time())}.jsonl")
@@ -168,8 +188,11 @@ def main():
     tasks = []
     for game_id in range(args.num_games):
         seed = args.seed_offset + game_id
-        agent_names = [rng.choice(roster_names)
-                       for _ in range(args.num_players)]
+        if fixed_seats is not None:
+            agent_names = list(fixed_seats)
+        else:
+            agent_names = [rng.choice(roster_names)
+                           for _ in range(args.num_players)]
         tasks.append((game_id, seed, agent_names, args.max_turns,
                       archetype, args.num_players, args.map_radius))
 
