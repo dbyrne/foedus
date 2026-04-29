@@ -11,6 +11,7 @@ REQUIRED_FIELDS = (
     "alliance_bonuses_fired",
     "combat_rewards_fired",
     "supporter_rewards_fired",
+    "leverage_bonuses_fired",
     "betrayals_observed",
     "detente_streak_resets",
 )
