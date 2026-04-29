@@ -176,9 +176,9 @@ def main():
                              "specific matchups (e.g. 'TitForTat,Sycophant,"
                              "Sycophant,Sycophant').")
     parser.add_argument("--out", default="")
-    parser.add_argument("--workers", type=int, default=1,
-                        help="parallel worker processes (default 1; "
-                             "0 = os.cpu_count())")
+    parser.add_argument("--workers", type=int, default=0,
+                        help="parallel worker processes (default 0 = "
+                             "os.cpu_count(); pass 1 for serial)")
     args = parser.parse_args()
 
     archetype = Archetype(args.archetype)

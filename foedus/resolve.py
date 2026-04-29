@@ -537,48 +537,77 @@ def _resolve_orders(state: GameState,
     # Intent-break consequences before this stops being abusable.
     # Until then, this is a soft-ship: real but not yet hardened.
     bonus = float(os.environ.get("FOEDUS_ALLIANCE_BONUS", "3") or 0)
-    if bonus:
-        # Build a quick lookup: (target_unit_id, target_dest) -> [supporter pids]
-        support_index: dict[tuple[UnitId, NodeId], list[PlayerId]] = defaultdict(list)
-        for sup_id, s_order in canon.items():
-            if not isinstance(s_order, SupportMove):
-                continue
-            sup_unit = state.units.get(sup_id)
-            if sup_unit is None:
-                continue
-            # Only count if the support wasn't cut.
-            if sup_id in cut:
-                continue
-            support_index[(s_order.target, s_order.target_dest)].append(
-                sup_unit.owner
-            )
-        for u_id, order in canon.items():
-            if not isinstance(order, Move):
-                continue
-            if outcome.get(u_id) != "success":
-                continue
-            if not state.map.is_supply(order.dest):
-                continue
-            mover = state.units.get(u_id)
-            if mover is None:
-                continue
-            supporters = [s for s in support_index.get((u_id, order.dest), [])
-                          if s != mover.owner]  # alliance = different player
-            if not supporters:
-                continue
-            # Both mover and each cross-player supporter get the bonus.
+    # Reciprocity gate: when set (FOEDUS_ALLIANCE_RECIPROCITY=1, default
+    # off for now while we're A/B-testing it), the alliance bonus only
+    # fires if BOTH the attacker and the supporter are themselves "active
+    # supporters" this turn — i.e. each issued at least one cross-player
+    # SupportMove for someone else's unit. Closes the DishonestCooperator
+    # freerider exploit (which receives supports but never reciprocates)
+    # by requiring active participation in the cooperative network.
+    reciprocity = os.environ.get("FOEDUS_ALLIANCE_RECIPROCITY", "0") == "1"
+
+    # Always compute the cross-support index so we can emit alliance log
+    # lines even when bonus=0 (agents can use this to track reciprocity).
+    support_index: dict[tuple[UnitId, NodeId], list[PlayerId]] = defaultdict(list)
+    active_supporters: set[PlayerId] = set()
+    for sup_id, s_order in canon.items():
+        if not isinstance(s_order, SupportMove):
+            continue
+        sup_unit = state.units.get(sup_id)
+        if sup_unit is None:
+            continue
+        if sup_id in cut:
+            continue
+        target_unit = state.units.get(s_order.target)
+        if target_unit is None:
+            continue
+        if target_unit.owner == sup_unit.owner:
+            continue  # cross-player only
+        support_index[(s_order.target, s_order.target_dest)].append(
+            sup_unit.owner
+        )
+        active_supporters.add(sup_unit.owner)
+
+    for u_id, order in canon.items():
+        if not isinstance(order, Move):
+            continue
+        if outcome.get(u_id) != "success":
+            continue
+        if not state.map.is_supply(order.dest):
+            continue
+        mover = state.units.get(u_id)
+        if mover is None:
+            continue
+        supporters = [s for s in support_index.get((u_id, order.dest), [])
+                      if s != mover.owner]
+        if not supporters:
+            continue
+        # Always emit an alliance event log line (used by reciprocity-aware
+        # heuristics to track who's supported them). Includes bonus=0
+        # so the signal exists even when the scoring mechanic is off.
+        applied_bonus = bonus
+        applied_supporters = supporters
+        if reciprocity and bonus:
+            if mover.owner not in active_supporters:
+                applied_bonus = 0
+            else:
+                applied_supporters = [s for s in supporters
+                                      if s in active_supporters]
+                if not applied_supporters:
+                    applied_bonus = 0
+        if applied_bonus:
             new_scores[mover.owner] = (
-                new_scores.get(mover.owner, 0.0) + bonus
+                new_scores.get(mover.owner, 0.0) + applied_bonus
             )
-            for sup_pid in supporters:
+            for sup_pid in applied_supporters:
                 new_scores[sup_pid] = (
-                    new_scores.get(sup_pid, 0.0) + bonus
+                    new_scores.get(sup_pid, 0.0) + applied_bonus
                 )
-            log.append(
-                f"  alliance bonus +{bonus:g} to p{mover.owner} (mover) "
-                f"and p{','.join(str(s) for s in supporters)} (supporter) "
-                f"for capture at n{order.dest}"
-            )
+        log.append(
+            f"  alliance bonus +{applied_bonus:g} to p{mover.owner} (mover) "
+            f"and p{','.join(str(s) for s in supporters)} (supporter) "
+            f"for capture at n{order.dest}"
+        )
 
     # 9. Eliminations: 0 units AND 0 supply centers => out.
     new_elim = set(state.eliminated)

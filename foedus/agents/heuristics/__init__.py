@@ -13,14 +13,15 @@ from foedus.agents.heuristics.greedy import Greedy
 from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.agents.heuristics.opportunistic_betrayer import OpportunisticBetrayer
 from foedus.agents.heuristics.random_agent import RandomAgent
+from foedus.agents.heuristics.reciprocal_cooperator import ReciprocalCooperator
 from foedus.agents.heuristics.sycophant import Sycophant
 from foedus.agents.heuristics.tit_for_tat import TitForTat
 
 __all__ = [
     "Aggressive", "AntiLeader", "Bandwagon", "ConservativeBuilder",
     "Cooperator", "Defensive", "DishonestCooperator", "Greedy",
-    "GreedyHold", "OpportunisticBetrayer", "RandomAgent", "Sycophant",
-    "TitForTat",
+    "GreedyHold", "OpportunisticBetrayer", "RandomAgent",
+    "ReciprocalCooperator", "Sycophant", "TitForTat",
 ]
 
 ROSTER = {
@@ -34,6 +35,7 @@ ROSTER = {
     "ConservativeBuilder": ConservativeBuilder,
     "Cooperator": Cooperator,
     "DishonestCooperator": DishonestCooperator,
+    "ReciprocalCooperator": ReciprocalCooperator,
     "Sycophant": Sycophant,
     "OpportunisticBetrayer": OpportunisticBetrayer,
     "TitForTat": TitForTat,
