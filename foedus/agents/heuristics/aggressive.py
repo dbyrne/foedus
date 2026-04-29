@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections import deque
 
+from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.core import (
     GameState, Hold, Move, Order, PlayerId, Press,
     Stance, SupportMove, UnitId,
@@ -43,8 +44,7 @@ class Aggressive:
             # iteration j and silently strand its attacker.
             if u.id in orders:
                 continue
-            adj = m.neighbors(u.location)
-            for nbr in sorted(adj):
+            for nbr in shuffled_neighbors(state, player, u.location):
                 # Look for enemy on supply at nbr.
                 target_unit = state.unit_at(nbr)
                 if (target_unit is None
@@ -87,7 +87,7 @@ class Aggressive:
             if occupant is None or occupant.owner != player:
                 return Move(dest=target)
             return Hold()
-        next_step = self._step_toward(state, unit.location, target)
+        next_step = self._step_toward(state, player, unit.location, target)
         if next_step is None:
             return Hold()
         occupant = state.unit_at(next_step)
@@ -117,26 +117,26 @@ class Aggressive:
             if node != start and m.is_supply(node) \
                     and state.ownership.get(node) != player:
                 return node
-            for nbr in sorted(m.neighbors(node)):
+            for nbr in shuffled_neighbors(state, player, node):
                 if nbr not in visited:
                     visited.add(nbr)
                     q.append(nbr)
         return None
 
     @staticmethod
-    def _step_toward(state, from_node, to_node):
+    def _step_toward(state, player, from_node, to_node):
         m = state.map
         dist = {to_node: 0}
         q = deque([to_node])
         while q:
             node = q.popleft()
-            for nbr in sorted(m.neighbors(node)):
+            for nbr in shuffled_neighbors(state, player, node):
                 if nbr not in dist:
                     dist[nbr] = dist[node] + 1
                     q.append(nbr)
         best = None
         best_d = float("inf")
-        for nbr in sorted(m.neighbors(from_node)):
+        for nbr in shuffled_neighbors(state, player, from_node):
             d = dist.get(nbr, float("inf"))
             if d < best_d:
                 best_d = d
