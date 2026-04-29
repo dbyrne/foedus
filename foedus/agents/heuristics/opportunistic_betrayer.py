@@ -20,8 +20,7 @@ from __future__ import annotations
 
 from foedus.agents.heuristics.greedy import Greedy
 from foedus.core import (
-    ChatDraft, GameState, Hold, Intent, Move, Order, PlayerId, Press,
-    Stance, UnitId,
+    GameState, Intent, Move, Order, PlayerId, Press, Stance, UnitId,
 )
 
 
