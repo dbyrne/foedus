@@ -87,7 +87,7 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
     alliance_bonuses_fired = 0
     detente_streak_resets = 0
     prev_streak = 0
-    _log_seen_len = 0
+    log_seen_len = 0
 
     while not state.is_terminal():
         survivors = [
@@ -128,16 +128,24 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
             if uid not in state.units:
                 dislodgement_count += 1
         # Scan only NEW resolution-log entries for combat/scoring bonuses.
+        # NOTE: these counters are derived from substring matches on
+        # free-form resolution-log entries. They are brittle to log-message
+        # edits in foedus/resolve.py.
+        # - "alliance bonus" — emitted at foedus/resolve.py:578 (today).
+        # - "leverage bonus" — NOT emitted on main; will be emitted by
+        #   PR #15 (bundle-4-trust-and-aid). Counter stays 0 until merge.
+        # TODO(bundle-4): once PR #15 lands, verify the leverage emit
+        # uses this exact phrase, or update the constant.
         log = getattr(state, "resolution_log", None) or []
-        new_log = log[_log_seen_len:]
+        new_log = log[log_seen_len:]
         for entry in new_log:
             if "leverage bonus" in entry:
                 leverage_bonuses_fired += 1
             if "alliance bonus" in entry:
                 alliance_bonuses_fired += 1
-        _log_seen_len = len(log)
+        log_seen_len = len(log)
         cur_streak = getattr(state, "mutual_ally_streak", 0)
-        if cur_streak < prev_streak:
+        if prev_streak > 0 and cur_streak == 0:
             detente_streak_resets += 1
         prev_streak = cur_streak
         # Snapshot.
