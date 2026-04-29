@@ -157,29 +157,77 @@ def _compute_cuts(canon: dict[UnitId, Order], state: GameState) -> set[UnitId]:
 # --- Strengths -------------------------------------------------------------
 
 
-def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId]
+def _compute_aid_per_unit(state: GameState,
+                          canon: dict[UnitId, Order]) -> dict[UnitId, int]:
+    """Bundle 4: count AidSpends that landed on each unit's canon order.
+
+    A spend "lands" iff the recipient's canon order this turn equals the
+    spend's `target_order` exactly. Multiple spenders aiding the same unit
+    stack additively.
+    """
+    out: dict[UnitId, int] = defaultdict(int)
+    for spender, spends in state.round_aid_pending.items():
+        if spender in state.eliminated:
+            continue
+        for spend in spends:
+            target_unit = state.units.get(spend.target_unit)
+            if target_unit is None:
+                continue
+            if target_unit.owner == spender:
+                continue  # can't aid self
+            recipient_canon = canon.get(spend.target_unit)
+            if recipient_canon != spend.target_order:
+                continue  # didn't land
+            out[spend.target_unit] += 1
+    return dict(out)
+
+
+def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
+                       state: GameState,
+                       aid_per_unit: dict[UnitId, int]
                        ) -> tuple[dict[UnitId, int], dict[UnitId, int]]:
-    """Return (move_strength, hold_strength) per unit_id."""
+    """Return (move_strength, hold_strength) per unit_id.
+
+    Bundle 4 additions:
+    - +`aid_per_unit[u]` to a unit's own strength (its move or its hold).
+    - +`aid_per_unit[v]` to a support's contribution (so aided SupportMove
+      contributes 2 to the supported unit's strength rather than 1).
+    - Leverage bonus on Moves: when A's Move targets a hex owned by player B
+      (or containing B's unit), add `state.leverage_bonus(A, B)` to A's
+      move strength.
+    """
     move_str: dict[UnitId, int] = {}
     hold_str: dict[UnitId, int] = {}
     for u_id, order in canon.items():
+        unit = state.units[u_id]
         if isinstance(order, Move):
-            s = 1
+            s = 1 + aid_per_unit.get(u_id, 0)
+            # Leverage bonus: pick the most-relevant defender at dest.
+            target_pid: PlayerId | None = None
+            occupant = state.unit_at(order.dest)
+            if occupant is not None and occupant.owner != unit.owner:
+                target_pid = occupant.owner
+            else:
+                ow = state.ownership.get(order.dest)
+                if ow is not None and ow != unit.owner:
+                    target_pid = ow
+            if target_pid is not None:
+                s += state.leverage_bonus(unit.owner, target_pid)
             for v_id, v_order in canon.items():
                 if v_id == u_id or v_id in cut:
                     continue
                 if (isinstance(v_order, SupportMove)
                         and v_order.target == u_id
                         and v_order.target_dest == order.dest):
-                    s += 1
+                    s += 1 + aid_per_unit.get(v_id, 0)
             move_str[u_id] = s
         else:
-            s = 1
+            s = 1 + aid_per_unit.get(u_id, 0)
             for v_id, v_order in canon.items():
                 if v_id == u_id or v_id in cut:
                     continue
                 if isinstance(v_order, SupportHold) and v_order.target == u_id:
-                    s += 1
+                    s += 1 + aid_per_unit.get(v_id, 0)
             hold_str[u_id] = s
     return move_str, hold_str
 
@@ -383,7 +431,8 @@ def _resolve_orders(state: GameState,
                 f"  u{supporter_id} (p{supporter.owner}) support cut "
                 f"by attack from {cutter_s}"
             )
-    move_str, hold_str = _compute_strengths(canon, cut)
+    aid_per_unit = _compute_aid_per_unit(state, canon)
+    move_str, hold_str = _compute_strengths(canon, cut, state, aid_per_unit)
 
     # 4. Resolve.
     h2h = _resolve_h2h(canon, move_str, state)
@@ -538,6 +587,26 @@ def _resolve_orders(state: GameState,
     # Until then, this is a soft-ship: real but not yet hardened.
     bonus = float(os.environ.get("FOEDUS_ALLIANCE_BONUS", "3") or 0)
     if bonus:
+        # Bundle 4: alliance bonus is gated on aid-spend (when
+        # config.alliance_requires_aid is True). A SupportMove without an
+        # AidSpend backing the mover's order contributes combat support but
+        # does NOT trigger the alliance bonus. This collapses two mechanics
+        # (alliance bonus + aid resource) into one: aid is the alliance
+        # currency, naked SupportMove is tactical-only.
+        require_aid = state.config.alliance_requires_aid
+
+        def _is_aided(supporter_pid: PlayerId, mover_unit: UnitId,
+                     mover_dest: NodeId) -> bool:
+            if not require_aid:
+                return True
+            spends = state.round_aid_pending.get(supporter_pid, [])
+            for sp in spends:
+                if (sp.target_unit == mover_unit
+                        and isinstance(sp.target_order, Move)
+                        and sp.target_order.dest == mover_dest):
+                    return True
+            return False
+
         # Build a quick lookup: (target_unit_id, target_dest) -> [supporter pids]
         support_index: dict[tuple[UnitId, NodeId], list[PlayerId]] = defaultdict(list)
         for sup_id, s_order in canon.items():
@@ -548,6 +617,13 @@ def _resolve_orders(state: GameState,
                 continue
             # Only count if the support wasn't cut.
             if sup_id in cut:
+                continue
+            # Cross-player only.
+            mover = state.units.get(s_order.target)
+            if mover is None or mover.owner == sup_unit.owner:
+                continue
+            # Bundle 4: gate on aid-spend.
+            if not _is_aided(sup_unit.owner, s_order.target, s_order.target_dest):
                 continue
             support_index[(s_order.target, s_order.target_dest)].append(
                 sup_unit.owner
@@ -579,6 +655,60 @@ def _resolve_orders(state: GameState,
                 f"and p{','.join(str(s) for s in supporters)} (supporter) "
                 f"for capture at n{order.dest}"
             )
+
+    # 8c. Bundle 4: combat reward.
+    #
+    # `combat_reward` to the attacker for each successful dislodgement;
+    # `supporter_combat_reward` to each uncut cross-player supporter of the
+    # dislodging attack. Same-owner supports don't get the reward (the
+    # attacker's own player already got combat_reward). Both knobs default
+    # to 1.0 each; set to 0.0 for v1 behavior.
+    cr = state.config.combat_reward
+    sr = state.config.supporter_combat_reward
+    if cr != 0.0 or sr != 0.0:
+        for u_id, outcome_val in outcome.items():
+            if outcome_val != "dislodged":
+                continue
+            defender = state.units[u_id]
+            attacker_id = next(
+                (uid for uid, o in canon.items()
+                 if isinstance(o, Move)
+                 and o.dest == defender.location
+                 and outcome.get(uid) == "success"),
+                None,
+            )
+            if attacker_id is None:
+                continue
+            attacker = state.units[attacker_id]
+            if cr != 0.0:
+                new_scores[attacker.owner] = (
+                    new_scores.get(attacker.owner, 0.0) + cr
+                )
+                log.append(
+                    f"  combat reward +{cr:g} to p{attacker.owner} "
+                    f"for dislodging u{u_id} at n{defender.location}"
+                )
+            if sr != 0.0:
+                for sup_id, s_order in canon.items():
+                    if not isinstance(s_order, SupportMove):
+                        continue
+                    if sup_id in cut:
+                        continue
+                    if (s_order.target != attacker_id
+                            or s_order.target_dest != defender.location):
+                        continue
+                    sup_unit = state.units.get(sup_id)
+                    if sup_unit is None:
+                        continue
+                    if sup_unit.owner == attacker.owner:
+                        continue  # cross-player only
+                    new_scores[sup_unit.owner] = (
+                        new_scores.get(sup_unit.owner, 0.0) + sr
+                    )
+                    log.append(
+                        f"  supporter reward +{sr:g} to p{sup_unit.owner} "
+                        f"(via u{sup_id}) for dislodgement at n{defender.location}"
+                    )
 
     # 9. Eliminations: 0 units AND 0 supply centers => out.
     new_elim = set(state.eliminated)

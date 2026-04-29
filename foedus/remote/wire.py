@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from foedus.core import (
+    AidSpend,
     GameConfig,
     GameState,
     Hold,
@@ -85,10 +86,19 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         "config": serialize_config(state.config),
         "mutual_ally_streak": state.mutual_ally_streak,
         "chat_done": sorted(state.chat_done),
+        # Bundle 4: aid resource + permanent leverage ledger.
+        "aid_tokens": {str(p): n for p, n in state.aid_tokens.items()},
+        # aid_given keys are (PlayerId, PlayerId) tuples; flatten to "A,B" strings.
+        "aid_given": {f"{a},{b}": n
+                      for (a, b), n in state.aid_given.items()},
+        "round_aid_pending": {
+            str(p): [serialize_aid_spend(s) for s in spends]
+            for p, spends in state.round_aid_pending.items()
+        },
         # `log` deliberately omitted (grows unbounded; not strategic).
         # Press v0 fields (press_history, chat_history, betrayals, phase, and
-        # round-in-progress scratch) are also omitted from this minimal wire
-        # format — they're not needed for `choose_orders`. Add when a client
+        # round_press_pending) are also omitted from this minimal wire format
+        # — they're not needed for `choose_orders`. Add when a client
         # (e.g. foedus-godot) needs them.
     }
 
@@ -97,6 +107,17 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
     # Accept either canonical "mutual_ally_streak" or legacy "peace_streak"
     # for forward-compat with older serialized blobs.
     streak = data.get("mutual_ally_streak", data.get("peace_streak", 0))
+    aid_given_raw = data.get("aid_given", {}) or {}
+    aid_given: dict[tuple[int, int], int] = {}
+    for k, v in aid_given_raw.items():
+        a_str, b_str = k.split(",", 1)
+        aid_given[(int(a_str), int(b_str))] = int(v)
+    aid_tokens = {int(p): int(n)
+                  for p, n in (data.get("aid_tokens") or {}).items()}
+    round_aid_pending = {
+        int(p): [deserialize_aid_spend(s) for s in (spends or [])]
+        for p, spends in (data.get("round_aid_pending") or {}).items()
+    }
     return GameState(
         turn=data["turn"],
         map=deserialize_map(data["map"]),
@@ -111,6 +132,9 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
         config=deserialize_config(data["config"]),
         mutual_ally_streak=streak,
         chat_done=set(data.get("chat_done", [])),
+        aid_tokens=aid_tokens,
+        aid_given=aid_given,
+        round_aid_pending=round_aid_pending,
         log=[],
     )
 
@@ -154,6 +178,21 @@ def serialize_orders(orders: dict) -> dict[str, dict[str, Any]]:
 
 def deserialize_orders(data: dict[str, dict[str, Any]]) -> dict:
     return {int(uid): deserialize_order(od) for uid, od in data.items()}
+
+
+def serialize_aid_spend(s: AidSpend) -> dict[str, Any]:
+    """Bundle 4: encode an AidSpend (target_unit + target_order) as JSON."""
+    return {
+        "target_unit": s.target_unit,
+        "target_order": serialize_order(s.target_order),
+    }
+
+
+def deserialize_aid_spend(data: dict[str, Any]) -> AidSpend:
+    return AidSpend(
+        target_unit=int(data["target_unit"]),
+        target_order=deserialize_order(data["target_order"]),
+    )
 
 
 def deserialize_intent(data: dict[str, Any]) -> "Intent":

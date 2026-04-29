@@ -75,6 +75,7 @@ class PressCommitRequest(BaseModel):
     player: int
     press: dict = Field(default_factory=dict)
     orders: dict[str, dict] = Field(default_factory=dict)
+    aid_spends: list[dict] = Field(default_factory=list)
 
 
 def make_app() -> FastAPI:
@@ -268,7 +269,11 @@ def make_app() -> FastAPI:
             ERR_ALREADY_COMMITTED,
             ERR_CHAT_PHASE_NOT_COMPLETE,
         )
-        from foedus.remote.wire import deserialize_intent, deserialize_orders
+        from foedus.remote.wire import (
+            deserialize_aid_spend,
+            deserialize_intent,
+            deserialize_orders,
+        )
         sess = _session(game_id)
         # Parse stance.
         stance: dict[int, Stance] = {}
@@ -298,9 +303,21 @@ def make_app() -> FastAPI:
             raise HTTPException(
                 status_code=400, detail=f"invalid orders: {e}",
             )
+        # Parse aid spends (Bundle 4).
+        aid_spends = []
+        for sp_raw in req.aid_spends or []:
+            try:
+                aid_spends.append(deserialize_aid_spend(sp_raw))
+            except (KeyError, TypeError, ValueError) as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"bad aid spend {sp_raw!r}: {e}",
+                )
         # Submit.
         try:
-            return sess.submit_press_commit(req.player, press, orders)
+            return sess.submit_press_commit(
+                req.player, press, orders, aid_spends or None,
+            )
         except ValueError as e:
             msg = str(e)
             if ERR_CHAT_PHASE_NOT_COMPLETE in msg:
