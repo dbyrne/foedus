@@ -159,3 +159,39 @@ def test_leverage_combat_bonus_applied_to_attack() -> None:
     s_after = resolve_turn(s, {0: {0: Move(dest=2)}, 1: {1: Hold()}})
     assert 1 not in s_after.units  # u1 dislodged
     assert s_after.units[0].location == 2  # u0 advanced
+
+
+def test_leverage_bonus_emits_log_line() -> None:
+    """When leverage bonus fires, resolve.py logs a "leverage bonus" line.
+
+    Required for the depth-eval framework's `leverage_bonuses_fired`
+    counter (which scans state.log for the substring "leverage bonus").
+    """
+    m = line_map(5)
+    s = make_state(m, [Unit(0, 0, 1), Unit(1, 1, 2)],
+                   num_players=2, max_turns=99)
+    s = replace(s, ownership={0: 0, 1: 0, 2: 1, 3: 1, 4: 1})
+    s = replace(s, aid_given={(0, 1): 4})  # leverage_bonus = 2
+    from foedus.resolve import resolve_turn
+    s_after = resolve_turn(s, {0: {0: Move(dest=2)}, 1: {1: Hold()}})
+    new_lines = [l for l in s_after.log if "leverage bonus" in l]
+    assert len(new_lines) == 1, (
+        f"expected exactly one 'leverage bonus' log line, got: {new_lines}"
+    )
+    line = new_lines[0]
+    assert "+2" in line
+    assert "p0" in line  # attacker
+    assert "p1" in line  # target
+    assert "u0" in line  # attacking unit
+
+
+def test_leverage_bonus_no_log_when_zero() -> None:
+    """No leverage emit when bonus is 0 — counter stays clean on baseline."""
+    m = line_map(5)
+    s = make_state(m, [Unit(0, 0, 1), Unit(1, 1, 2)],
+                   num_players=2, max_turns=99)
+    s = replace(s, ownership={0: 0, 1: 0, 2: 1, 3: 1, 4: 1})
+    # No aid_given → no leverage → no bonus → no emit.
+    from foedus.resolve import resolve_turn
+    s_after = resolve_turn(s, {0: {0: Move(dest=2)}, 1: {1: Hold()}})
+    assert not any("leverage bonus" in l for l in s_after.log)

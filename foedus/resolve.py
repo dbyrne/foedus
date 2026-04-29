@@ -221,8 +221,17 @@ def _compute_aid_per_unit(state: GameState,
 def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
                        state: GameState,
                        aid_per_unit: dict[UnitId, int]
-                       ) -> tuple[dict[UnitId, int], dict[UnitId, int]]:
-    """Return (move_strength, hold_strength) per unit_id.
+                       ) -> tuple[
+                           dict[UnitId, int],
+                           dict[UnitId, int],
+                           list[tuple[UnitId, PlayerId, PlayerId, int]],
+                       ]:
+    """Return (move_strength, hold_strength, leverage_events) per unit_id.
+
+    `leverage_events` is a list of (u_id, attacker_pid, target_pid, bonus)
+    tuples — one per Move whose leverage bonus is non-zero. The caller
+    logs these for instrumentation; the return value of the strengths is
+    unaffected.
 
     Bundle 4 additions:
     - +`aid_per_unit[u]` to a unit's own strength (its move or its hold).
@@ -234,6 +243,7 @@ def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
     """
     move_str: dict[UnitId, int] = {}
     hold_str: dict[UnitId, int] = {}
+    leverage_events: list[tuple[UnitId, PlayerId, PlayerId, int]] = []
     for u_id, order in canon.items():
         unit = state.units[u_id]
         if isinstance(order, Move):
@@ -248,7 +258,12 @@ def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
                 if ow is not None and ow != unit.owner:
                     target_pid = ow
             if target_pid is not None:
-                s += state.leverage_bonus(unit.owner, target_pid)
+                lev = state.leverage_bonus(unit.owner, target_pid)
+                s += lev
+                if lev > 0:
+                    leverage_events.append(
+                        (u_id, unit.owner, target_pid, lev)
+                    )
             for v_id, v_order in canon.items():
                 if v_id == u_id or v_id in cut:
                     continue
@@ -265,7 +280,7 @@ def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
                 if isinstance(v_order, SupportHold) and v_order.target == u_id:
                     s += 1 + aid_per_unit.get(v_id, 0)
             hold_str[u_id] = s
-    return move_str, hold_str
+    return move_str, hold_str, leverage_events
 
 
 # --- Conflict resolution ---------------------------------------------------
@@ -468,7 +483,14 @@ def _resolve_orders(state: GameState,
                 f"by attack from {cutter_s}"
             )
     aid_per_unit = _compute_aid_per_unit(state, canon)
-    move_str, hold_str = _compute_strengths(canon, cut, state, aid_per_unit)
+    move_str, hold_str, leverage_events = _compute_strengths(
+        canon, cut, state, aid_per_unit
+    )
+    for u_id, attacker_pid, target_pid, lev in leverage_events:
+        log.append(
+            f"  leverage bonus +{lev} to p{attacker_pid} (via u{u_id}) "
+            f"vs p{target_pid}"
+        )
 
     # 4. Resolve.
     h2h = _resolve_h2h(canon, move_str, state)
