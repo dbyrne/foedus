@@ -146,6 +146,13 @@ class Map:
     edges: dict[NodeId, frozenset[NodeId]]  # adjacency
     node_types: dict[NodeId, NodeType]
     home_assignments: dict[NodeId, PlayerId]  # node -> player whose home it is
+    # Bundle 5b (C3): per-supply score yield. Only entries with non-default
+    # value (≠ 1) are stored; supply_value(n) returns 1 when absent. Default
+    # generation picks a small fraction of non-HOME SUPPLY nodes and marks
+    # them as value=2 (see config.high_value_supply_fraction). HOME nodes
+    # retain value 1; high-value heterogeneity is for the contested
+    # frontier supplies, not structural homes.
+    supply_values: dict[NodeId, int] = field(default_factory=dict)
 
     @property
     def nodes(self) -> list[NodeId]:
@@ -166,6 +173,15 @@ class Map:
         MOUNTAIN and WATER are impassable; PLAIN, SUPPLY, and HOME are passable.
         """
         return self.node_types[n] not in (NodeType.MOUNTAIN, NodeType.WATER)
+
+    def supply_value(self, n: NodeId) -> int:
+        """Bundle 5b (C3): per-turn score yield for owning this supply.
+        Returns 1 by default; overridden to 2 (or higher in future) for the
+        small fraction of non-home supplies marked as high-value at mapgen.
+        Non-supply nodes also return 1 for safety; callers must gate via
+        is_supply() before incorporating into scoring.
+        """
+        return self.supply_values.get(n, 1)
 
 
 @dataclass
@@ -217,6 +233,18 @@ class GameConfig:
     # ALLY but secretly racing for supplies, closing peaceful collective
     # victory while breaking publicly declared intents).
     betrayal_resets_detente: bool = True
+    # --- Bundle 5b (C3): variable supply values ---
+    # Fraction of non-HOME SUPPLY nodes marked as high-value (worth +2/turn
+    # instead of +1). 0.0 reverts to v1 uniform-value scoring. Default 0.20
+    # — sweep evidence (see spec §7) shows the mechanic is invisible at 5%
+    # but ValueGreedy breaks above GreedyHold (+1.04) at 20%, with modest
+    # variance increase and a small Coop-DC differentiation bonus
+    # (+2.02 → +3.06). Generation is deterministic from config.seed.
+    high_value_supply_fraction: float = 0.20
+    # Score yield assigned to high-value supplies. First-pass keeps it at 2
+    # (one step up from the default 1). Future bundles may add a tier of
+    # value=3 supplies on a smaller fraction.
+    high_value_supply_yield: int = 2
     # Deprecated alias for detente_threshold; kept for one minor version.
     peace_threshold: int | None = None
 

@@ -17,12 +17,13 @@ from foedus.agents.heuristics.random_agent import RandomAgent
 from foedus.agents.heuristics.sycophant import Sycophant
 from foedus.agents.heuristics.tit_for_tat import TitForTat
 from foedus.agents.heuristics.trustful_cooperator import TrustfulCooperator
+from foedus.agents.heuristics.value_greedy import ValueGreedy
 
 __all__ = [
     "Aggressive", "AntiLeader", "Bandwagon", "ConservativeBuilder",
     "Cooperator", "Defensive", "DishonestCooperator", "Greedy",
     "GreedyHold", "OpportunisticBetrayer", "Patron", "RandomAgent",
-    "Sycophant", "TitForTat", "TrustfulCooperator",
+    "Sycophant", "TitForTat", "TrustfulCooperator", "ValueGreedy",
 ]
 
 ROSTER = {
@@ -41,4 +42,5 @@ ROSTER = {
     "TitForTat": TitForTat,
     "TrustfulCooperator": TrustfulCooperator,
     "Patron": Patron,
+    "ValueGreedy": ValueGreedy,
 }

@@ -11,7 +11,9 @@ v1 simplifications vs. full DATC Diplomacy:
 
 from __future__ import annotations
 
+import math
 import os
+import random
 from collections import defaultdict
 from dataclasses import replace
 
@@ -32,8 +34,42 @@ from foedus.core import (
 )
 
 
+def _assign_high_value_supplies(m: Map, config: GameConfig) -> Map:
+    """Bundle 5b (C3): mark a fraction of non-HOME SUPPLY nodes as
+    high-value (yielding `high_value_supply_yield` per turn instead of 1).
+
+    Deterministic from `config.seed` via a derived RNG namespace, so the
+    same config + map produce the same value assignment. Returns the
+    input map unchanged when fraction or yield disable the mechanic.
+    """
+    fraction = config.high_value_supply_fraction
+    yield_ = config.high_value_supply_yield
+    if fraction <= 0 or yield_ <= 1:
+        return m
+    eligible = sorted(
+        n for n in m.nodes if m.node_types[n] == NodeType.SUPPLY
+    )
+    if not eligible:
+        return m
+    count = int(math.floor(len(eligible) * fraction + 0.5))
+    if count <= 0:
+        return m
+    rng = random.Random((config.seed or 0) * 17 + 7)
+    chosen = rng.sample(eligible, min(count, len(eligible)))
+    new_values = dict(m.supply_values)
+    for n in chosen:
+        new_values[n] = yield_
+    return replace(m, supply_values=new_values)
+
+
 def initial_state(config: GameConfig, m: Map) -> GameState:
     """Build the starting GameState: one unit per player on their home node."""
+    # Bundle 5b (C3): apply high-value supply assignment if mapgen didn't
+    # already populate it. Skip when supply_values already non-empty (e.g.,
+    # state was wire-loaded or the caller pre-assigned).
+    if not m.supply_values:
+        m = _assign_high_value_supplies(m, config)
+
     units: dict[UnitId, Unit] = {}
     ownership: dict[NodeId, PlayerId | None] = {n: None for n in m.nodes}
     next_id = 0
@@ -548,15 +584,21 @@ def _resolve_orders(state: GameState,
                 log.append(f"  p{player} builds u{next_id} at n{n}")
                 next_id += 1
 
-    # 8. Tiered scoring: +1 per controlled supply this turn.
+    # 8. Tiered scoring: +map.supply_value(n) per controlled supply this turn.
+    # Bundle 5b (C3): supply_value defaults to 1 (v1 behavior) but is 2 for
+    # the small fraction marked as high-value at mapgen. HOME nodes always
+    # yield 1 — high-value heterogeneity is for contested non-home supplies.
     new_scores = dict(state.scores)
     for player in range(state.config.num_players):
         if player in state.eliminated:
             continue
-        supply = sum(1 for n, t in state.map.node_types.items()
-                     if t in (NodeType.SUPPLY, NodeType.HOME)
-                     and new_owner.get(n) == player)
-        new_scores[player] = new_scores.get(player, 0.0) + supply
+        supply_score = sum(
+            state.map.supply_value(n)
+            for n, t in state.map.node_types.items()
+            if t in (NodeType.SUPPLY, NodeType.HOME)
+            and new_owner.get(n) == player
+        )
+        new_scores[player] = new_scores.get(player, 0.0) + supply_score
 
     # 8b. EXPERIMENTAL: alliance-capture bonus.
     #

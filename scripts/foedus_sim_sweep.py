@@ -204,6 +204,15 @@ def main():
                         help="Bundle 4: 1 (default) resets the détente "
                              "streak on any observed betrayal (closes the "
                              "détente-by-lying bug); 0 preserves v1 behavior.")
+    # --- Bundle 5b (C3): variable supply values ---
+    parser.add_argument("--high-value-fraction", type=float, default=None,
+                        help="Bundle 5b (C3): fraction of non-HOME SUPPLY "
+                             "nodes marked as high-value (yielding +N score "
+                             "per turn instead of +1). Default 0.05; pass 0 "
+                             "to disable.")
+    parser.add_argument("--high-value-yield", type=int, default=None,
+                        help="Bundle 5b (C3): score yield for high-value "
+                             "supplies (default 2).")
     parser.add_argument("--roster", default="",
                         help="comma-separated heuristic names; default: all")
     parser.add_argument("--seats", default="",
@@ -241,6 +250,10 @@ def main():
         bundle4_overrides["alliance_requires_aid"] = bool(args.alliance_requires_aid)
     if args.betrayal_resets_detente is not None:
         bundle4_overrides["betrayal_resets_detente"] = bool(args.betrayal_resets_detente)
+    if args.high_value_fraction is not None:
+        bundle4_overrides["high_value_supply_fraction"] = args.high_value_fraction
+    if args.high_value_yield is not None:
+        bundle4_overrides["high_value_supply_yield"] = args.high_value_yield
     fixed_seats: list[str] | None = None
     if args.seats:
         fixed_seats = args.seats.split(",")

@@ -38,6 +38,8 @@ def serialize_map(m: Map) -> dict[str, Any]:
         "edges": {str(n): sorted(e) for n, e in m.edges.items()},
         "node_types": {str(n): t.value for n, t in m.node_types.items()},
         "home_assignments": {str(n): p for n, p in m.home_assignments.items()},
+        # Bundle 5b (C3): only nodes overriding the default value=1 appear.
+        "supply_values": {str(n): v for n, v in m.supply_values.items()},
     }
 
 
@@ -47,6 +49,10 @@ def deserialize_map(data: dict[str, Any]) -> Map:
         edges={int(n): frozenset(e) for n, e in data["edges"].items()},
         node_types={int(n): NodeType(t) for n, t in data["node_types"].items()},
         home_assignments={int(n): p for n, p in data["home_assignments"].items()},
+        supply_values={
+            int(n): int(v)
+            for n, v in (data.get("supply_values") or {}).items()
+        },
     )
 
 
@@ -58,6 +64,10 @@ def serialize_config(c: GameConfig) -> dict[str, Any]:
         "build_period": c.build_period,
         "detente_threshold": c.detente_threshold,
         "seed": c.seed,
+        # Bundle 5b (C3): expose the value-distribution knobs so clients
+        # can label high-value supplies and engines can re-replay maps.
+        "high_value_supply_fraction": c.high_value_supply_fraction,
+        "high_value_supply_yield": c.high_value_supply_yield,
     }
 
 
