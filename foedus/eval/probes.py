@@ -66,7 +66,7 @@ PROBES: list[Probe] = [
     ),
     Probe(
         name="noise_floor",
-        seats=("RandomAgent", "GreedyHold", "GreedyHold", "GreedyHold"),
+        seats=("Random", "GreedyHold", "GreedyHold", "GreedyHold"),
         subject_index=0,
         description="Sanity floor: GH should beat noise.",
     ),
