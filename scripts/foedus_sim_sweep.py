@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
 import time
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from foedus.agents.heuristics import ROSTER
@@ -121,6 +123,14 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
     }
 
 
+def _run_game_task(args_tuple):
+    """Worker entrypoint: unpack and call run_one_game.
+
+    Top-level (not a closure) so it pickles cleanly across processes.
+    """
+    return run_one_game(*args_tuple)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-games", type=int, default=5000)
@@ -131,6 +141,9 @@ def main():
     parser.add_argument("--roster", default="",
                         help="comma-separated heuristic names; default: all")
     parser.add_argument("--out", default="")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="parallel worker processes (default 1; "
+                             "0 = os.cpu_count())")
     args = parser.parse_args()
 
     archetype = Archetype(args.archetype)
@@ -143,27 +156,56 @@ def main():
 
     out_path = Path(args.out) if args.out else \
         Path(f"/tmp/foedus_sim_sweep_{int(time.time())}.jsonl")
-    rng = random.Random(args.seed_offset)
 
+    # Pairings are decided up-front from a single seeded RNG so the
+    # parallel and serial paths produce identical assignments for the
+    # same --seed-offset. Each game's gameplay seed is independent of
+    # worker scheduling order.
+    rng = random.Random(args.seed_offset)
+    tasks = []
+    for game_id in range(args.num_games):
+        seed = args.seed_offset + game_id
+        agent_names = [rng.choice(roster_names)
+                       for _ in range(args.num_players)]
+        tasks.append((game_id, seed, agent_names, args.max_turns,
+                      archetype, args.num_players))
+
+    workers = args.workers if args.workers > 0 else (os.cpu_count() or 1)
     t0 = time.time()
-    with out_path.open("w") as f:
-        for game_id in range(args.num_games):
-            seed = args.seed_offset + game_id
-            agent_names = [rng.choice(roster_names)
-                           for _ in range(args.num_players)]
-            record = run_one_game(
-                game_id, seed, agent_names, args.max_turns,
-                archetype, args.num_players,
-            )
-            f.write(json.dumps(record) + "\n")
-            if (game_id + 1) % 100 == 0:
-                elapsed = time.time() - t0
-                rate = (game_id + 1) / elapsed
-                print(f"[{game_id+1}/{args.num_games}] {elapsed:.1f}s "
-                      f"({rate:.1f} games/s)", file=sys.stderr)
+    if workers == 1:
+        # Serial fast-path: avoids ProcessPool overhead for small sweeps.
+        with out_path.open("w") as f:
+            for i, task in enumerate(tasks):
+                record = _run_game_task(task)
+                f.write(json.dumps(record) + "\n")
+                if (i + 1) % 100 == 0:
+                    elapsed = time.time() - t0
+                    rate = (i + 1) / elapsed
+                    print(f"[{i+1}/{args.num_games}] {elapsed:.1f}s "
+                          f"({rate:.1f} games/s)", file=sys.stderr)
+    else:
+        # Parallel path: chunk for throughput, write results as they
+        # arrive (order is by completion, not game_id — game_id is in
+        # the record so analyzers can sort if needed).
+        chunksize = max(1, len(tasks) // (workers * 8))
+        completed = 0
+        with out_path.open("w") as f, \
+                ProcessPoolExecutor(max_workers=workers) as pool:
+            for record in pool.map(_run_game_task, tasks,
+                                   chunksize=chunksize):
+                f.write(json.dumps(record) + "\n")
+                completed += 1
+                if completed % 500 == 0:
+                    elapsed = time.time() - t0
+                    rate = completed / elapsed
+                    print(f"[{completed}/{args.num_games}] {elapsed:.1f}s "
+                          f"({rate:.1f} games/s, {workers} workers)",
+                          file=sys.stderr)
+
     elapsed = time.time() - t0
-    print(f"Wrote {args.num_games} games to {out_path} in {elapsed:.1f}s",
-          file=sys.stderr)
+    rate = args.num_games / elapsed if elapsed > 0 else 0.0
+    print(f"Wrote {args.num_games} games to {out_path} in {elapsed:.1f}s "
+          f"({rate:.1f} games/s, {workers} workers)", file=sys.stderr)
     return 0
 
 
