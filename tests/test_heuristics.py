@@ -15,13 +15,16 @@ from __future__ import annotations
 import pytest
 
 from foedus.agents.heuristics import (
+    Aggressive,
+    AntiLeader,
+    Bandwagon,
     ConservativeBuilder,
     Defensive,
     Greedy,
     GreedyHold,
     RandomAgent,
 )
-from foedus.core import GameConfig, Hold, Move, Press, Unit
+from foedus.core import GameConfig, Hold, Move, Press, Stance, Unit
 from foedus.legal import legal_orders_for_unit
 from foedus.mapgen import generate_map
 from foedus.resolve import initial_state
@@ -150,3 +153,42 @@ def test_conservative_builder_press_returns_press(state_4p):
 
 def test_conservative_builder_chat_drafts_is_list(state_4p):
     assert ConservativeBuilder().chat_drafts(state_4p, 0) == []
+
+
+# ------- Aggressive -------
+
+def test_aggressive_orders_all_legal(state_4p):
+    _all_orders_legal(Aggressive, state_4p, 0)
+
+
+def test_aggressive_press_is_hostile(state_4p):
+    p = Aggressive().choose_press(state_4p, 0)
+    assert all(s == Stance.HOSTILE for s in p.stance.values()), \
+        f"Aggressive should declare HOSTILE toward all opponents"
+
+
+# ------- AntiLeader -------
+
+def test_anti_leader_orders_all_legal(state_4p):
+    _all_orders_legal(AntiLeader, state_4p, 0)
+
+
+def test_anti_leader_press_targets_leader(state_4p):
+    """At turn 0 all players have equal supplies; AntiLeader picks the
+    lowest-pid opponent (tie-break)."""
+    p = AntiLeader().choose_press(state_4p, 0)
+    # Should declare HOSTILE toward exactly one opponent.
+    assert sum(1 for s in p.stance.values() if s == Stance.HOSTILE) == 1
+
+
+# ------- Bandwagon -------
+
+def test_bandwagon_orders_all_legal(state_4p):
+    _all_orders_legal(Bandwagon, state_4p, 0)
+
+
+def test_bandwagon_press_allies_everyone(state_4p):
+    p = Bandwagon().choose_press(state_4p, 0)
+    assert all(s == Stance.ALLY for s in p.stance.values())
+    # Should have 3 entries (3 opponents in 4-player game).
+    assert len(p.stance) == 3
