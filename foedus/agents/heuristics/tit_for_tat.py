@@ -13,6 +13,7 @@ GreedyHold fallback.
 
 from __future__ import annotations
 
+from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.core import (
     GameState, Hold, Move, Order, PlayerId, Press, Stance, UnitId,
@@ -40,7 +41,7 @@ class TitForTat:
             if u.owner != player:
                 continue
             attacked = False
-            for nbr in sorted(m.neighbors(u.location)):
+            for nbr in shuffled_neighbors(state, player, u.location):
                 target = state.unit_at(nbr)
                 if (target is not None
                         and target.owner in self.hostile_set):

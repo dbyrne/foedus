@@ -18,6 +18,7 @@ Press: ALLY toward all + Intents.
 
 from __future__ import annotations
 
+from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.agents.heuristics.greedy import Greedy
 from foedus.core import (
     GameState, Intent, Move, Order, PlayerId, Press, Stance, UnitId,
@@ -39,7 +40,7 @@ class OpportunisticBetrayer:
         for u in state.units.values():
             if u.owner != player:
                 continue
-            for nbr in sorted(m.neighbors(u.location)):
+            for nbr in shuffled_neighbors(state, player, u.location):
                 target = state.unit_at(nbr)
                 if (target is None
                         or target.owner == player

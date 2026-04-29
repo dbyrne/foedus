@@ -18,6 +18,7 @@ Press: NEUTRAL toward all.
 
 from __future__ import annotations
 
+from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.core import ChatDraft, GameState, Hold, Move, Order, PlayerId, Press, UnitId
 
 
@@ -53,7 +54,7 @@ class ConservativeBuilder:
         # If at owned supply: look for an adjacent unowned supply that
         # ALSO touches owned territory; move there to start a flip.
         if m.is_supply(loc) and state.ownership.get(loc) == player:
-            for nbr in sorted(m.neighbors(loc)):
+            for nbr in shuffled_neighbors(state, player, loc):
                 if (m.is_supply(nbr)
                         and state.ownership.get(nbr) != player
                         and any(n in owned_nodes - {loc}
@@ -64,7 +65,7 @@ class ConservativeBuilder:
             return Hold()
         # Otherwise retreat toward owned territory.
         if owned_nodes:
-            for nbr in sorted(m.neighbors(loc)):
+            for nbr in shuffled_neighbors(state, player, loc):
                 if nbr in owned_nodes:
                     return Move(dest=nbr)
         return Hold()

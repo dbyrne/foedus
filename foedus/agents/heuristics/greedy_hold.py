@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections import deque
 
+from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.core import (
     ChatDraft,
     GameState,
@@ -64,7 +65,7 @@ class GreedyHold:
             if occupant is None or occupant.owner != player:
                 return Move(dest=target)
             return Hold()
-        next_step = self._step_toward(state, unit.location, target)
+        next_step = self._step_toward(state, player, unit.location, target)
         if next_step is None:
             return Hold()
         occupant = state.unit_at(next_step)
@@ -101,27 +102,27 @@ class GreedyHold:
             if node != start and m.is_supply(node) \
                     and state.ownership.get(node) != player:
                 return node
-            for nbr in sorted(m.neighbors(node)):
+            for nbr in shuffled_neighbors(state, player, node):
                 if nbr not in visited:
                     visited.add(nbr)
                     q.append(nbr)
         return None
 
     @staticmethod
-    def _step_toward(state: GameState, from_node: NodeId,
+    def _step_toward(state: GameState, player: PlayerId, from_node: NodeId,
                      to_node: NodeId) -> NodeId | None:
         m = state.map
         dist: dict[NodeId, int] = {to_node: 0}
         q: deque[NodeId] = deque([to_node])
         while q:
             node = q.popleft()
-            for nbr in sorted(m.neighbors(node)):
+            for nbr in shuffled_neighbors(state, player, node):
                 if nbr not in dist:
                     dist[nbr] = dist[node] + 1
                     q.append(nbr)
         best: NodeId | None = None
         best_d = float("inf")
-        for nbr in sorted(m.neighbors(from_node)):
+        for nbr in shuffled_neighbors(state, player, from_node):
             d = dist.get(nbr, float("inf"))
             if d < best_d:
                 best_d = d
