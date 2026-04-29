@@ -18,6 +18,7 @@ def _make_record(agents, scores, **engagement):
         "alliance_bonuses_fired": 0,
         "combat_rewards_fired": 0,
         "supporter_rewards_fired": 0,
+        "leverage_bonuses_fired": 0,
         "betrayals_observed": 0,
         "detente_streak_resets": 0,
         "order_type_counts": {},
