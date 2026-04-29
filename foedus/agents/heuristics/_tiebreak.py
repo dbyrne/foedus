@@ -19,29 +19,49 @@ without touching engine state.
 
 from __future__ import annotations
 
+import functools
 import random
 from typing import Iterable
 
 from foedus.core import GameState, NodeId, PlayerId
 
 
+@functools.lru_cache(maxsize=200_000)
+def _cached_shuffle(seed_int: int, player: int, node: int,
+                    neighbors: tuple[int, ...]) -> tuple[int, ...]:
+    """Pure function: deterministic shuffle of `neighbors` keyed on
+    `(seed_int, player, node)`. Cached because heuristics call this
+    millions of times per sweep over the same `(player, node)` keys.
+
+    `neighbors` is part of the cache key, not just `(seed, player, node)`,
+    so games with `seed is None` (which we coerce to 0) that have
+    different map topologies don't return stale orderings to each other.
+    """
+    rng = random.Random(_mix(seed_int, player, node))
+    out = list(neighbors)
+    rng.shuffle(out)
+    return tuple(out)
+
+
 def shuffled_neighbors(state: GameState, player: PlayerId,
-                       node: NodeId) -> list[NodeId]:
-    """Return `state.map.neighbors(node)` as a list, ordered per a
+                       node: NodeId) -> tuple[NodeId, ...]:
+    """Return `state.map.neighbors(node)` ordered by a
     deterministic-per-(game, player, node) shuffle.
 
     Replaces the historical `sorted(m.neighbors(node))` pattern. Same
     inputs always produce the same output (replay-safe) but different
     players see different orderings, so BFS tie-breaks no longer
     systematically favour low-id nodes.
+
+    Returns a tuple, not a list — callers iterate it. Returning the
+    cached tuple directly avoids a per-call list copy.
     """
-    neighbors = list(state.map.neighbors(node))
     seed = state.config.seed if state.config.seed is not None else 0
-    # Mix into a single int seed; tuple-seeding goes through hash() which
-    # is deprecated and salted-per-process (would break replay anyway).
-    rng = random.Random(_mix(seed, int(player), int(node)))
-    rng.shuffle(neighbors)
-    return neighbors
+    # frozenset isn't ordered; sort once for a stable cache key. The
+    # sort cost is paid only on cache miss because lru_cache hashes by
+    # the immutable tuple, not by the unsorted frozenset.
+    nbrs = tuple(sorted(state.map.edges.get(node, frozenset())))
+    return _cached_shuffle(int(seed), int(player), int(node), nbrs)
 
 
 def shuffled(state: GameState, player: PlayerId, salt: int,
