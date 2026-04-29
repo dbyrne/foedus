@@ -11,12 +11,24 @@ depth-indicator metrics.
 
 from __future__ import annotations
 
+from foedus.agents.heuristics.conservative_builder import ConservativeBuilder
+from foedus.agents.heuristics.defensive import Defensive
 from foedus.agents.heuristics.greedy import Greedy
+from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.agents.heuristics.random_agent import RandomAgent
 
-__all__ = ["Greedy", "RandomAgent"]
+__all__ = [
+    "ConservativeBuilder",
+    "Defensive",
+    "Greedy",
+    "GreedyHold",
+    "RandomAgent",
+]
 
 ROSTER = {
     "Random": RandomAgent,
     "Greedy": Greedy,
+    "GreedyHold": GreedyHold,
+    "Defensive": Defensive,
+    "ConservativeBuilder": ConservativeBuilder,
 }
