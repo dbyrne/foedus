@@ -18,8 +18,6 @@ Press: NEUTRAL toward all.
 
 from __future__ import annotations
 
-from collections import deque
-
 from foedus.core import ChatDraft, GameState, Hold, Move, Order, PlayerId, Press, UnitId
 
 

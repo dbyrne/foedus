@@ -124,3 +124,29 @@ def test_conservative_builder_holds_on_initial_state(state_4p):
     if isinstance(order, Move):
         assert order.dest in state_4p.map.neighbors(u0.location), \
             f"ConservativeBuilder moved to non-adjacent node {order.dest}"
+
+
+# ------- choose_press / chat_drafts smoke tests for new heuristics -------
+
+def test_greedy_hold_press_returns_press(state_4p):
+    assert isinstance(GreedyHold().choose_press(state_4p, 0), Press)
+
+
+def test_greedy_hold_chat_drafts_is_list(state_4p):
+    assert GreedyHold().chat_drafts(state_4p, 0) == []
+
+
+def test_defensive_press_returns_press(state_4p):
+    assert isinstance(Defensive().choose_press(state_4p, 0), Press)
+
+
+def test_defensive_chat_drafts_is_list(state_4p):
+    assert Defensive().chat_drafts(state_4p, 0) == []
+
+
+def test_conservative_builder_press_returns_press(state_4p):
+    assert isinstance(ConservativeBuilder().choose_press(state_4p, 0), Press)
+
+
+def test_conservative_builder_chat_drafts_is_list(state_4p):
+    assert ConservativeBuilder().chat_drafts(state_4p, 0) == []
