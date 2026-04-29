@@ -11,6 +11,7 @@ v1 simplifications vs. full DATC Diplomacy:
 
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from dataclasses import replace
 
@@ -507,6 +508,77 @@ def _resolve_orders(state: GameState,
                      if t in (NodeType.SUPPLY, NodeType.HOME)
                      and new_owner.get(n) == player)
         new_scores[player] = new_scores.get(player, 0.0) + supply
+
+    # 8b. EXPERIMENTAL: alliance-capture bonus.
+    #
+    # When a Move successfully captures a supply AND a SupportMove from a
+    # DIFFERENT player exists this turn with matching (target_unit,
+    # target_dest), both the capturing player and each cross-player
+    # supporter receive `bonus` extra score. This rewards genuine
+    # cross-player cooperation (the press system carries the signal —
+    # supporters read the captor's declared Intents to know where to
+    # support) and creates a second viable top-tier strategy alongside
+    # solo GreedyHold expansion.
+    #
+    # Default value: 3.0 (the empirical sweet spot from 5000-game sweeps;
+    # see docs/research/2026-04-29-alliance-bonus-experiment.md). At
+    # bonus=3, a Cooperator heuristic outscores GreedyHold by +1.7 in the
+    # full random pool, but doesn't dominate. Lower bonus → no incentive
+    # to cooperate; higher bonus → cooperation becomes the new monopoly.
+    #
+    # Set FOEDUS_ALLIANCE_BONUS=0 to revert to v1 scoring (no bonus).
+    #
+    # KNOWN EXPLOIT: a freerider that publishes Move-on-supply Intents
+    # (so genuine cooperators support its attacks) but never reciprocates
+    # outscores cooperators dramatically in fixed-seat tests (DC +10.7 vs
+    # 3 Coop at bonus=0; +12.0 at bonus=3). The exploit is invisible in
+    # random-pool sweeps because dishonest agents are diluted out of
+    # cooperator-rich neighborhoods. Bundle 4's full design needs paired
+    # Intent-break consequences before this stops being abusable.
+    # Until then, this is a soft-ship: real but not yet hardened.
+    bonus = float(os.environ.get("FOEDUS_ALLIANCE_BONUS", "3") or 0)
+    if bonus:
+        # Build a quick lookup: (target_unit_id, target_dest) -> [supporter pids]
+        support_index: dict[tuple[UnitId, NodeId], list[PlayerId]] = defaultdict(list)
+        for sup_id, s_order in canon.items():
+            if not isinstance(s_order, SupportMove):
+                continue
+            sup_unit = state.units.get(sup_id)
+            if sup_unit is None:
+                continue
+            # Only count if the support wasn't cut.
+            if sup_id in cut:
+                continue
+            support_index[(s_order.target, s_order.target_dest)].append(
+                sup_unit.owner
+            )
+        for u_id, order in canon.items():
+            if not isinstance(order, Move):
+                continue
+            if outcome.get(u_id) != "success":
+                continue
+            if not state.map.is_supply(order.dest):
+                continue
+            mover = state.units.get(u_id)
+            if mover is None:
+                continue
+            supporters = [s for s in support_index.get((u_id, order.dest), [])
+                          if s != mover.owner]  # alliance = different player
+            if not supporters:
+                continue
+            # Both mover and each cross-player supporter get the bonus.
+            new_scores[mover.owner] = (
+                new_scores.get(mover.owner, 0.0) + bonus
+            )
+            for sup_pid in supporters:
+                new_scores[sup_pid] = (
+                    new_scores.get(sup_pid, 0.0) + bonus
+                )
+            log.append(
+                f"  alliance bonus +{bonus:g} to p{mover.owner} (mover) "
+                f"and p{','.join(str(s) for s in supporters)} (supporter) "
+                f"for capture at n{order.dest}"
+            )
 
     # 9. Eliminations: 0 units AND 0 supply centers => out.
     new_elim = set(state.eliminated)

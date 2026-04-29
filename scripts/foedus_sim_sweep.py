@@ -43,12 +43,26 @@ def _order_type_name(order):
 
 def run_one_game(game_id: int, seed: int, agent_names: list[str],
                  max_turns: int, archetype: Archetype,
-                 num_players: int, map_radius: int = 3) -> dict:
-    """Run a single game, return the per-game JSONL record."""
-    cfg = GameConfig(
+                 num_players: int, map_radius: int = 3,
+                 peace_threshold: int = 99) -> dict:
+    """Run a single game, return the per-game JSONL record.
+
+    `peace_threshold` defaults to 99 (effectively disabled) so games
+    play to max_turns by default. Pass 0 to use the engine's default
+    table-size-scaled threshold (`4 + num_players`), or any positive
+    int to set explicitly. Set to 0 when measuring how often détente
+    fires in the heuristic roster.
+    """
+    cfg_kwargs = dict(
         num_players=num_players, max_turns=max_turns, seed=seed,
-        archetype=archetype, map_radius=map_radius, peace_threshold=99,
+        archetype=archetype, map_radius=map_radius,
     )
+    if peace_threshold == 0:
+        # 0 means "use engine default" (table-size-scaled).
+        pass
+    else:
+        cfg_kwargs["peace_threshold"] = peace_threshold
+    cfg = GameConfig(**cfg_kwargs)
     m = generate_map(num_players, seed=seed,
                      archetype=archetype, map_radius=cfg.map_radius)
     state = initial_state(cfg, m)
@@ -141,6 +155,17 @@ def main():
     parser.add_argument("--map-radius", type=int, default=3,
                         help="hex map radius (3 = ~37 nodes; 4 = ~61; "
                              "5 = ~91)")
+    parser.add_argument("--peace-threshold", type=int, default=99,
+                        help="détente collective-victory threshold "
+                             "(consecutive mutual-ALLY turns required). "
+                             "Default 99 disables détente. Pass 0 to use "
+                             "the engine default (4 + num_players).")
+    parser.add_argument("--alliance-bonus", type=str, default=None,
+                        help="Score bonus per alliance-capture event "
+                             "(both attacker and cross-player supporter "
+                             "receive it). Sets FOEDUS_ALLIANCE_BONUS for "
+                             "this run only. Engine default is 3; pass 0 "
+                             "to revert to v1 scoring.")
     parser.add_argument("--roster", default="",
                         help="comma-separated heuristic names; default: all")
     parser.add_argument("--seats", default="",
@@ -157,6 +182,8 @@ def main():
     args = parser.parse_args()
 
     archetype = Archetype(args.archetype)
+    if args.alliance_bonus is not None:
+        os.environ["FOEDUS_ALLIANCE_BONUS"] = args.alliance_bonus
     fixed_seats: list[str] | None = None
     if args.seats:
         fixed_seats = args.seats.split(",")
@@ -194,7 +221,8 @@ def main():
             agent_names = [rng.choice(roster_names)
                            for _ in range(args.num_players)]
         tasks.append((game_id, seed, agent_names, args.max_turns,
-                      archetype, args.num_players, args.map_radius))
+                      archetype, args.num_players, args.map_radius,
+                      args.peace_threshold))
 
     workers = args.workers if args.workers > 0 else (os.cpu_count() or 1)
     t0 = time.time()
