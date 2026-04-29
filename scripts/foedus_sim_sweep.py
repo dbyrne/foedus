@@ -20,7 +20,7 @@ from pathlib import Path
 
 from foedus.agents.heuristics import ROSTER
 from foedus.core import (
-    Archetype, GameConfig, Hold, Move, Press, SupportHold, SupportMove,
+    Archetype, GameConfig, Hold, Move, SupportHold, SupportMove,
 )
 from foedus.mapgen import generate_map
 from foedus.press import (
@@ -82,7 +82,11 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
         # Finalize.
         prev_units = dict(state.units)
         state = finalize_round(state, orders)
-        # Count dislodgements: units in prev_units NOT in new state.units.
+        # Count unit losses: units in prev_units NOT in new state.units.
+        # Note: this conflates true dislodgements with units lost to player
+        # elimination (which removes all of an eliminated player's units in
+        # one step). Analyzers should treat this as "units lost / turn" not
+        # "strict dislodgements".
         for uid in prev_units:
             if uid not in state.units:
                 dislodgement_count += 1

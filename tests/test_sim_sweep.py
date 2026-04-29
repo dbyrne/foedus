@@ -31,8 +31,8 @@ def test_sweep_runs_and_produces_jsonl(tmp_path: Path) -> None:
     for line in lines:
         record = json.loads(line)
         # Schema checks.
-        for key in ("game_id", "seed", "agents", "total_turns",
-                    "is_terminal", "winners", "final_scores",
+        for key in ("game_id", "seed", "agents", "max_turns_reached",
+                    "total_turns", "is_terminal", "winners", "final_scores",
                     "supply_counts_per_turn", "score_per_turn",
                     "order_type_counts", "dislodgement_count",
                     "betrayal_count_per_player", "detente_reached",
