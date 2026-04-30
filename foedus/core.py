@@ -50,9 +50,14 @@ class SupportMove:
 @dataclass(frozen=True)
 class Support:
     """Reactive support order. Adapts to target_unit's actual canon order at
-    finalize. If `require_dest` is set, behaves like the legacy SupportMove
-    (only lands when target moves to that exact node). If None, supports
-    whatever the target does (Hold, Move, or another Support).
+    finalize.
+
+    If `require_dest` is None (default), the support lands on whatever the
+    target unit actually does this turn, subject to geometric reachability
+    (supporter must be adjacent to the target's destination if it moves, or
+    to the target itself if it holds). If `require_dest` is set, behaves
+    like the legacy SupportMove: lands only when the target moves to exactly
+    that destination, otherwise lapses to Hold.
     """
     target: UnitId
     require_dest: NodeId | None = None
@@ -147,19 +152,28 @@ class BetrayalObservation:
 class IntentRevised:
     """Emitted when a player submits or modifies an intent during negotiation.
 
-    Sent to each player in `visible_to` (or all surviving non-senders if
-    visible_to is None, mirroring the source intent's broadcast scope).
+    Sent to each player in `visible_to`, which mirrors the revised intent's
+    own `visible_to` (None = public broadcast to all surviving non-senders;
+    frozenset = named recipients).
     """
     turn: int
     player: PlayerId
     intent: Intent
     previous: Intent | None  # None = first declaration this round for this unit
-    visible_to: frozenset[PlayerId] | None
+    visible_to: frozenset[PlayerId] | None  # mirrors intent.visible_to
 
 
 @dataclass(frozen=True)
 class SupportLapsed:
-    """Emitted at finalize when a Support could not land."""
+    """Emitted at finalize when a Support could not land.
+
+    `reason` taxonomy:
+      - "target_held_unsupportable": target's order is one Support cannot back
+      - "geometry_break": supporter not adjacent to target's actual result
+      - "target_destroyed": target dislodged before its order resolved
+      - "pin_mismatch": require_dest set, target went elsewhere
+      - "self_dislodge_blocked": support would dislodge supporter's own unit
+    """
     turn: int
     supporter: UnitId
     target: UnitId
@@ -174,8 +188,12 @@ class SupportLapsed:
 
 @dataclass(frozen=True)
 class DoneCleared:
-    """Emitted when a player's signal_done flag auto-clears due to an
-    ally's intent revision affecting one of the player's committed plans."""
+    """Emitted when a player's signal_done flag auto-clears.
+
+    Triggered when an ally revises an intent that one of this player's
+    committed plans (Support or AidSpend) referenced. Only direct
+    dependents auto-clear — there is no transitive cascade.
+    """
     turn: int
     player: PlayerId         # whose done flag cleared
     source_player: PlayerId  # whose revision triggered the clear
