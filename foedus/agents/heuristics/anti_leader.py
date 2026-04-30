@@ -5,11 +5,11 @@ Strategy:
   Press: HOSTILE toward leader, ALLY toward each non-leader survivor
     so coalition cross-supports can fire alliance bonus + leverage.
     Publishes Move-on-leader-territory intents so other AntiLeaders
-    can SupportMove our attacks.
+    can Support our attacks.
   Orders:
     Phase 1: For each owned unit, check if any *other non-leader* player
       has declared a Move-on-leader-territory intent we can geographically
-      support. If yes, SupportMove it (cross-support coordinated attack).
+      support. If yes, Support it (cross-support coordinated attack).
     Phase 2: Remaining units walk/Move toward leader's territory (the
       original AntiLeader behavior).
   Aid: spend tokens on each cross-support we plan to make so the
@@ -27,7 +27,7 @@ from collections import deque
 
 from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.core import (
-    AidSpend, Hold, Intent, Move, Order, Press, Stance, SupportMove, UnitId,
+    AidSpend, Hold, Intent, Move, Order, Press, Stance, Support, UnitId,
 )
 
 
@@ -84,10 +84,7 @@ class AntiLeader:
                         continue
                     if u.location == ord_.dest:
                         continue
-                    orders[u.id] = SupportMove(
-                        target=intent.unit_id,
-                        target_dest=ord_.dest,
-                    )
+                    orders[u.id] = Support(target=intent.unit_id)
                     used.add(u.id)
                     break
         # Phase 2: remaining units walk/attack toward leader.
@@ -236,7 +233,7 @@ class AntiLeader:
                 if target_unit is None or target_unit.owner != other_pid:
                     continue
                 # Need one of our units adjacent to the dest (so we'd
-                # actually back this with a SupportMove in choose_orders).
+                # actually back this with a Support in choose_orders).
                 for u in my_units:
                     if u.id in used:
                         continue

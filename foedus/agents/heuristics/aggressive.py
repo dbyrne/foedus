@@ -6,7 +6,7 @@ Strategy:
     If at least one found:
       Pick the highest-value target (supply > plain).
       If another own unit is also adjacent to the target node, that
-        unit issues SupportMove; this unit Moves.
+        unit issues Support; this unit Moves.
       Else solo Move.
     Else: walk toward nearest unowned supply (Greedy fallback).
 
@@ -20,7 +20,7 @@ from collections import deque
 from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.core import (
     GameState, Hold, Move, Order, PlayerId, Press,
-    Stance, SupportMove, UnitId,
+    Stance, Support, UnitId,
 )
 
 
@@ -63,9 +63,7 @@ class Aggressive:
                 )
                 if supporter is not None:
                     orders[u.id] = Move(dest=nbr)
-                    orders[supporter.id] = SupportMove(
-                        target=u.id, target_dest=nbr,
-                    )
+                    orders[supporter.id] = Support(target=u.id)
                     used_supporters.add(supporter.id)
                 else:
                     orders[u.id] = Move(dest=nbr)
