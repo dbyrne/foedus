@@ -19,8 +19,7 @@ from foedus.core import (
     NodeType,
     Order,
     PlayerId,
-    SupportHold,
-    SupportMove,
+    Support,
 )
 from foedus.fog import visible_state_for
 from foedus.legal import legal_orders_for_unit
@@ -31,11 +30,10 @@ def _order_to_str(o: Order) -> str:
         return "Hold"
     if isinstance(o, Move):
         return f"Move(dest={o.dest})"
-    if isinstance(o, SupportHold):
-        return f"SupportHold(target=u{o.target})"
-    if isinstance(o, SupportMove):
-        return (f"SupportMove(target=u{o.target}, "
-                f"target_dest={o.target_dest})")
+    if isinstance(o, Support):
+        if o.require_dest is None:
+            return f"Support(target=u{o.target})"
+        return f"Support(target=u{o.target}, require_dest={o.require_dest})"
     return str(o)
 
 
@@ -234,9 +232,9 @@ def render_commit_prompt(state: GameState, player: PlayerId) -> str:
     out.write('Order objects:\n')
     out.write('  {"type": "Hold"}\n')
     out.write('  {"type": "Move", "dest": <node_id>}\n')
-    out.write('  {"type": "SupportHold", "target": <unit_id>}\n')
-    out.write('  {"type": "SupportMove", "target": <unit_id>, '
-              '"target_dest": <node_id>}\n\n')
+    out.write('  {"type": "Support", "target": <unit_id>}\n')
+    out.write('  {"type": "Support", "target": <unit_id>, '
+              '"require_dest": <node_id>}\n\n')
     out.write("Notes:\n")
     out.write(
         "- press.stance / press.intents are optional; default empty.\n"

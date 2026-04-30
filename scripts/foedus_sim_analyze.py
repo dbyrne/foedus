@@ -133,7 +133,7 @@ def main():
     # Order-type distribution.
     print(f"## Order-type distribution (across all games × all players × all turns)\n")
     od = order_type_distribution(records)
-    for ot in ("Hold", "Move", "SupportHold", "SupportMove"):
+    for ot in ("Hold", "Move", "Support"):
         print(f"- **{ot}:** {od.get(ot, 0.0):.1%}")
     print()
 
