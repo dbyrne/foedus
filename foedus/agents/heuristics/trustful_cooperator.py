@@ -133,7 +133,6 @@ class TrustfulCooperator:
                 priority = float(owed)
                 candidates.append((priority, AidSpend(
                     target_unit=intent.unit_id,
-                    target_order=intent.declared_order,
                 )))
         # Sort by descending priority, take up to balance.
         candidates.sort(key=lambda c: -c[0])

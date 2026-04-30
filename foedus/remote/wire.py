@@ -191,17 +191,15 @@ def deserialize_orders(data: dict[str, dict[str, Any]]) -> dict:
 
 
 def serialize_aid_spend(s: AidSpend) -> dict[str, Any]:
-    """Bundle 4: encode an AidSpend (target_unit + target_order) as JSON."""
+    """Bundle 4: encode an AidSpend (target_unit) as JSON."""
     return {
         "target_unit": s.target_unit,
-        "target_order": serialize_order(s.target_order),
     }
 
 
 def deserialize_aid_spend(data: dict[str, Any]) -> AidSpend:
     return AidSpend(
         target_unit=int(data["target_unit"]),
-        target_order=deserialize_order(data["target_order"]),
     )
 
 

@@ -1,7 +1,7 @@
 """Bundle 4 — aid resource tests.
 
 Covers token generation, spending, mutual-ALLY gate, cap, and the
-"land-on-canon-match" rule for aid landing.
+reactive aid landing rule (aid lands whenever recipient's unit survives).
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ def test_aid_for_self_dropped() -> None:
     """submit_aid_spends drops spends targeting the spender's own unit."""
     s = _setup_two_player()
     s = replace(s, aid_tokens={0: 5, 1: 0})
-    spend = AidSpend(target_unit=0, target_order=Hold())  # u0 is p0's own
+    spend = AidSpend(target_unit=0)  # u0 is p0's own
     s = submit_aid_spends(s, 0, [spend])
     assert s.round_aid_pending.get(0, []) == []
 
@@ -111,7 +111,7 @@ def test_aid_requires_mutual_ally() -> None:
         1: Press(stance={0: Stance.NEUTRAL}, intents=[]),
     }
     s = replace(s, press_history=[one_way])
-    spend = AidSpend(target_unit=1, target_order=Hold())
+    spend = AidSpend(target_unit=1)
     s = submit_aid_spends(s, 0, [spend])
     # Not mutual ALLY → dropped.
     assert s.round_aid_pending.get(0, []) == []
@@ -123,23 +123,21 @@ def test_aid_balance_caps_pending() -> None:
     s = replace(s, aid_tokens={0: 1, 1: 0})
     s = _archive_mutual_ally(s, [0, 1])
     spends = [
-        AidSpend(target_unit=1, target_order=Hold()),
-        AidSpend(target_unit=1, target_order=Hold()),
-        AidSpend(target_unit=1, target_order=Hold()),
+        AidSpend(target_unit=1),
+        AidSpend(target_unit=1),
+        AidSpend(target_unit=1),
     ]
     s = submit_aid_spends(s, 0, spends)
     assert len(s.round_aid_pending[0]) == 1
 
 
-def test_aid_lands_when_canon_matches() -> None:
-    """When the recipient's canon order equals target_order, the aid lands —
-    aid_given increments and the recipient gets +1 strength.
-    """
+def test_aid_lands_when_recipient_holds() -> None:
+    """Reactive aid lands when the recipient Holds — aid_given increments."""
     s = _setup_two_player()
     s = replace(s, aid_tokens={0: 1, 1: 0})
     s = _archive_mutual_ally(s, [0, 1])
-    # P0 aids P1's u1 staying put (Hold).
-    spend = AidSpend(target_unit=1, target_order=Hold())
+    # P0 aids P1's u1 — reactive, so it lands regardless of recipient's order.
+    spend = AidSpend(target_unit=1)
     s = submit_aid_spends(s, 0, [spend])
     s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
     s = submit_press_tokens(s, 1, Press(stance={0: Stance.ALLY}, intents=[]))
@@ -153,24 +151,28 @@ def test_aid_lands_when_canon_matches() -> None:
     assert s.aid_tokens[0] == 0
 
 
-def test_aid_does_not_land_on_canon_mismatch() -> None:
-    """If the recipient's canon order differs from target_order, the aid
-    does NOT land — token is consumed but no aid_given increment.
+def test_reactive_aid_lands_on_any_target_order() -> None:
+    """AidSpend lands regardless of what order the recipient actually submits.
+
+    Under reactive aid, the aid is committed to the unit — not to a specific
+    order. Whether the recipient Holds, Moves, or does anything else, the
+    spend lands (and aid_given increments) as long as the unit survives.
     """
     s = _setup_two_player()
     s = replace(s, aid_tokens={0: 1, 1: 0})
     s = _archive_mutual_ally(s, [0, 1])
-    # P0 aids P1 doing Move(dest=3) — but P1 will Hold instead.
-    spend = AidSpend(target_unit=1, target_order=Move(dest=3))
+    # P0 aids P1's u1. P1 will Move instead of holding — but aid still lands.
+    spend = AidSpend(target_unit=1)
     s = submit_aid_spends(s, 0, [spend])
     s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
     s = submit_press_tokens(s, 1, Press(stance={0: Stance.ALLY}, intents=[]))
     s = signal_done(s, 0)
     s = signal_done(s, 1)
-    s = finalize_round(s, {0: {0: Hold()}, 1: {1: Hold()}})
-    # Aid did NOT land: aid_given untouched.
-    assert s.aid_given.get((0, 1), 0) == 0
-    # But token was consumed.
+    # P1 moves toward node 3 (adjacent on line map); move may bounce but unit survives.
+    s = finalize_round(s, {0: {0: Hold()}, 1: {1: Move(dest=3)}})
+    # Aid landed: aid_given[(0, 1)] = 1.
+    assert s.aid_given.get((0, 1), 0) == 1
+    # Token still consumed.
     assert s.aid_tokens[0] == 0
 
 
@@ -179,7 +181,7 @@ def test_aid_round_pending_cleared_at_finalize() -> None:
     s = _setup_two_player()
     s = replace(s, aid_tokens={0: 1, 1: 0})
     s = _archive_mutual_ally(s, [0, 1])
-    spend = AidSpend(target_unit=1, target_order=Hold())
+    spend = AidSpend(target_unit=1)
     s = submit_aid_spends(s, 0, [spend])
     assert s.round_aid_pending[0] == [spend]
     s = submit_press_tokens(s, 0, Press(stance={1: Stance.ALLY}, intents=[]))
@@ -195,10 +197,10 @@ def test_aid_revision_overwrites() -> None:
     s = _setup_two_player()
     s = replace(s, aid_tokens={0: 5, 1: 0})
     s = _archive_mutual_ally(s, [0, 1])
-    s = submit_aid_spends(s, 0, [AidSpend(target_unit=1, target_order=Hold())])
+    s = submit_aid_spends(s, 0, [AidSpend(target_unit=1)])
     s = submit_aid_spends(s, 0, [
-        AidSpend(target_unit=1, target_order=Hold()),
-        AidSpend(target_unit=1, target_order=Hold()),
+        AidSpend(target_unit=1),
+        AidSpend(target_unit=1),
     ])
     assert len(s.round_aid_pending[0]) == 2
 
@@ -209,5 +211,5 @@ def test_aid_post_done_dropped() -> None:
     s = replace(s, aid_tokens={0: 5, 1: 0})
     s = _archive_mutual_ally(s, [0, 1])
     s = signal_done(s, 0)
-    s = submit_aid_spends(s, 0, [AidSpend(target_unit=1, target_order=Hold())])
+    s = submit_aid_spends(s, 0, [AidSpend(target_unit=1)])
     assert s.round_aid_pending.get(0, []) == []

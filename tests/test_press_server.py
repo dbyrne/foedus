@@ -198,7 +198,7 @@ def test_commit_accepts_aid_spends(client: TestClient) -> None:
         "press": {"stance": {"1": "ally"}, "intents": []},
         "orders": {},
         "aid_spends": [
-            {"target_unit": 1, "target_order": {"type": "Hold"}},
+            {"target_unit": 1},
         ],
     })
     assert r.status_code == 200, r.text
@@ -213,6 +213,6 @@ def test_commit_aid_spend_with_bad_payload_returns_400(client: TestClient) -> No
         "player": 0,
         "press": {},
         "orders": {},
-        "aid_spends": [{"target_unit": 1}],  # missing target_order
+        "aid_spends": [{"wrong_field": 1}],  # missing target_unit
     })
     assert r.status_code == 400

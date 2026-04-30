@@ -60,7 +60,7 @@ def test_leverage_bonus_zero_at_baseline() -> None:
 
 def test_leverage_accumulates_on_landed_aid() -> None:
     s = _setup()
-    spend = AidSpend(target_unit=1, target_order=Hold())
+    spend = AidSpend(target_unit=1)
     s = submit_aid_spends(s, 0, [spend])
     s = _ally_press(s, 0, [1])
     s = _ally_press(s, 1, [0])
@@ -75,7 +75,7 @@ def test_leverage_accumulates_on_landed_aid() -> None:
 def test_leverage_persists_across_turns() -> None:
     """No decay: leverage is permanent until reciprocated."""
     s = _setup()
-    spend = AidSpend(target_unit=1, target_order=Hold())
+    spend = AidSpend(target_unit=1)
     s = submit_aid_spends(s, 0, [spend])
     s = _ally_press(s, 0, [1])
     s = _ally_press(s, 1, [0])
@@ -96,8 +96,8 @@ def test_leverage_persists_across_turns() -> None:
 def test_leverage_reciprocation_zeros_balance() -> None:
     """If B aids A back equally, leverage(A, B) returns to 0."""
     s = _setup()
-    s = submit_aid_spends(s, 0, [AidSpend(target_unit=1, target_order=Hold())])
-    s = submit_aid_spends(s, 1, [AidSpend(target_unit=0, target_order=Hold())])
+    s = submit_aid_spends(s, 0, [AidSpend(target_unit=1)])
+    s = submit_aid_spends(s, 1, [AidSpend(target_unit=0)])
     s = _ally_press(s, 0, [1])
     s = _ally_press(s, 1, [0])
     s = signal_done(s, 0)

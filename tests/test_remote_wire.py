@@ -132,8 +132,8 @@ def test_deserialize_state_without_chat_done_defaults_empty() -> None:
 
 
 def test_aid_spend_roundtrip() -> None:
-    """AidSpend serialize/deserialize preserves target_unit and target_order."""
-    spend = AidSpend(target_unit=7, target_order=Move(dest=12))
+    """AidSpend serialize/deserialize preserves target_unit."""
+    spend = AidSpend(target_unit=7)
     blob = serialize_aid_spend(spend)
     out = deserialize_aid_spend(blob)
     assert out == spend
@@ -149,7 +149,7 @@ def test_state_roundtrip_with_bundle4_fields() -> None:
         aid_tokens={0: 4, 1: 2, 2: 0},
         aid_given={(0, 1): 5, (1, 0): 2, (2, 0): 1},
         round_aid_pending={
-            0: [AidSpend(target_unit=1, target_order=Hold())],
+            0: [AidSpend(target_unit=1)],
         },
     )
     blob = serialize_state(s)

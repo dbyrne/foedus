@@ -297,11 +297,11 @@ def _compute_cuts(canon: dict[UnitId, Order], state: GameState) -> set[UnitId]:
 
 def _compute_aid_per_unit(state: GameState,
                           canon: dict[UnitId, Order]) -> dict[UnitId, int]:
-    """Bundle 4: count AidSpends that landed on each unit's canon order.
+    """Bundle 4 (reactive aid): count AidSpends that landed on each unit.
 
-    A spend "lands" iff the recipient's canon order this turn equals the
-    spend's `target_order` exactly. Multiple spenders aiding the same unit
-    stack additively.
+    A spend lands iff the target unit still exists (i.e., its owner is not
+    eliminated and it appears in canon). Multiple spenders aiding the same
+    unit stack additively. No target_order match required.
     """
     out: dict[UnitId, int] = defaultdict(int)
     for spender, spends in state.round_aid_pending.items():
@@ -312,10 +312,9 @@ def _compute_aid_per_unit(state: GameState,
             if target_unit is None:
                 continue
             if target_unit.owner == spender:
-                continue  # can't aid self
-            recipient_canon = canon.get(spend.target_unit)
-            if recipient_canon != spend.target_order:
-                continue  # didn't land
+                continue  # safeguard
+            if spend.target_unit not in canon:
+                continue
             out[spend.target_unit] += 1
     return dict(out)
 

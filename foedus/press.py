@@ -130,15 +130,13 @@ def submit_aid_spends(state: GameState, player: PlayerId,
     """Set/replace `player`'s pending aid spends for the current round.
 
     Each spend pays one aid token to add +1 strength to the named ally unit's
-    canon order this turn (and accumulate trust ledger if the recipient
-    follows through). Spends are filtered:
+    canon order this turn (reactive — lands on whatever the recipient does).
+    Spends are filtered:
     - target_unit unknown or eliminated-player-owned → dropped
-    - target_unit owned by the spender themselves → dropped (can't aid self)
-    - recipient not mutual ALLY in the previous turn's locked press → dropped
-    Token balance is checked at submit time; if `len(filtered) >
-    state.aid_tokens[player]`, only the prefix that fits the balance is kept.
+    - target_unit owned by spender → dropped (can't aid self)
+    - recipient not mutual ALLY in previous turn's locked press → dropped
 
-    Multiple calls overwrite (revisability until done).
+    Token balance capped at submit time. Multiple calls overwrite.
     Returns state unchanged if phase != NEGOTIATION, player eliminated, or
     player has signaled done.
     """
@@ -461,7 +459,7 @@ def finalize_round(state: GameState,
         p for p in range(state.config.num_players) if p not in s_after.eliminated
     ]
 
-    # Determine which spends "landed" (recipient's canon matched target_order).
+    # Determine which spends "landed" (reactive: recipient's unit survived).
     for spender, spends in state.round_aid_pending.items():
         if spender in s_after.eliminated:
             # Spender eliminated mid-turn: their spends are still consumed
@@ -477,9 +475,10 @@ def finalize_round(state: GameState,
             recipient = target_unit.owner
             if recipient in state.eliminated:
                 continue
-            recipient_canon = canon.get(spend.target_unit)
-            if recipient_canon != spend.target_order:
-                continue  # didn't land
+            # Reactive aid: lands iff recipient's unit had any canon order
+            # this turn. Ownership and survival are sufficient.
+            if spend.target_unit not in canon:
+                continue
             key = (spender, recipient)
             new_aid_given[key] = new_aid_given.get(key, 0) + 1
 

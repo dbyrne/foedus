@@ -160,7 +160,6 @@ class Cooperator:
                         continue
                     spends.append(AidSpend(
                         target_unit=intent.unit_id,
-                        target_order=order,
                     ))
                     used.add(u.id)
                     break

@@ -246,7 +246,6 @@ class AntiLeader:
                         continue
                     spends.append(AidSpend(
                         target_unit=intent.unit_id,
-                        target_order=ord_,
                     ))
                     used.add(u.id)
                     break
