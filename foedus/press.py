@@ -24,10 +24,54 @@ from foedus.core import (
     PlayerId,
     Press,
     Stance,
+    Support,
     SupportHold,
     SupportMove,
     UnitId,
 )
+
+
+def intent_dependencies(
+    state: GameState,
+) -> dict[PlayerId, frozenset[tuple[PlayerId, UnitId]]]:
+    """Return per-player set of (other_player, unit) pairs whose intents/orders
+    that player's pending plans mechanically depend on.
+
+    A player P depends on (Q, U) iff P has at least one of:
+      - A declared Intent for one of P's units whose order is Support(target=U)
+        where state.units[U].owner == Q.
+      - A pending AidSpend with target_unit=U where state.units[U].owner == Q.
+      - A declared Intent whose order is Support(target=U, require_dest=X)
+        (the pin variant — same dependency rule, since the pin's viability
+        hinges on Q's choice for U).
+
+    Self-dependencies (Q == P) are excluded; Q must be a different player.
+    The graph is unit-grained: a single ally with two units yields up to two
+    distinct (Q, U_a), (Q, U_b) entries when both are referenced.
+    """
+    out: dict[PlayerId, set[tuple[PlayerId, UnitId]]] = {}
+    # Walk pending press intents.
+    for player, press in state.round_press_pending.items():
+        for intent in press.intents:
+            order = intent.declared_order
+            if not isinstance(order, Support):
+                continue
+            target_unit = state.units.get(order.target)
+            if target_unit is None or target_unit.owner == player:
+                continue
+            out.setdefault(player, set()).add(
+                (target_unit.owner, target_unit.id)
+            )
+    # Walk pending aid spends.
+    for spender, spends in state.round_aid_pending.items():
+        for spend in spends:
+            target_unit = state.units.get(spend.target_unit)
+            if target_unit is None or target_unit.owner == spender:
+                continue
+            out.setdefault(spender, set()).add(
+                (target_unit.owner, target_unit.id)
+            )
+    return {p: frozenset(deps) for p, deps in out.items()}
 
 
 def submit_press_tokens(state: GameState, player: PlayerId,
