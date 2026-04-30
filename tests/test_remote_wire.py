@@ -6,25 +6,37 @@ from dataclasses import replace
 
 from foedus.core import (
     AidSpend,
+    DoneCleared,
     GameConfig,
     Hold,
+    Intent,
+    IntentRevised,
     Move,
-    SupportHold,
-    SupportMove,
+    Support,
+    SupportLapsed,
     Unit,
 )
 from foedus.mapgen import generate_map
 from foedus.remote.wire import (
+    WIRE_PROTOCOL_VERSION,
     deserialize_aid_spend,
+    deserialize_done_cleared,
+    deserialize_intent,
+    deserialize_intent_revised,
     deserialize_map,
     deserialize_order,
     deserialize_orders,
     deserialize_state,
+    deserialize_support_lapsed,
     serialize_aid_spend,
+    serialize_done_cleared,
+    serialize_intent,
+    serialize_intent_revised,
     serialize_map,
     serialize_order,
     serialize_orders,
     serialize_state,
+    serialize_support_lapsed,
 )
 from foedus.resolve import initial_state
 
@@ -76,13 +88,13 @@ def test_move_roundtrip() -> None:
     assert deserialize_order(serialize_order(o)) == o
 
 
-def test_support_hold_roundtrip() -> None:
-    o = SupportHold(target=3)
+def test_support_roundtrip_no_dest() -> None:
+    o = Support(target=3)
     assert deserialize_order(serialize_order(o)) == o
 
 
-def test_support_move_roundtrip() -> None:
-    o = SupportMove(target=2, target_dest=7)
+def test_support_roundtrip_with_dest() -> None:
+    o = Support(target=2, require_dest=7)
     assert deserialize_order(serialize_order(o)) == o
 
 
@@ -90,8 +102,8 @@ def test_orders_dict_roundtrip() -> None:
     orders = {
         0: Hold(),
         1: Move(dest=5),
-        2: SupportHold(target=0),
-        3: SupportMove(target=1, target_dest=5),
+        2: Support(target=0),
+        3: Support(target=1, require_dest=5),
     }
     assert deserialize_orders(serialize_orders(orders)) == orders
 
@@ -191,3 +203,80 @@ def test_map_deserialize_without_supply_values_defaults_empty() -> None:
     blob.pop("supply_values", None)
     out = deserialize_map(blob)
     assert out.supply_values == {}
+
+
+# --- Task 11: new event types + version ---
+
+
+def test_wire_protocol_version() -> None:
+    assert WIRE_PROTOCOL_VERSION == 3
+
+
+def test_support_lapsed_roundtrip() -> None:
+    ev = SupportLapsed(turn=2, supporter=5, target=3, reason="pin_mismatch")
+    assert deserialize_support_lapsed(serialize_support_lapsed(ev)) == ev
+
+
+def test_intent_roundtrip() -> None:
+    intent = Intent(unit_id=1, declared_order=Support(target=3), visible_to=frozenset({0, 2}))
+    assert deserialize_intent(serialize_intent(intent)) == intent
+
+
+def test_intent_roundtrip_public() -> None:
+    intent = Intent(unit_id=2, declared_order=Move(dest=4), visible_to=None)
+    assert deserialize_intent(serialize_intent(intent)) == intent
+
+
+def test_intent_revised_roundtrip() -> None:
+    intent = Intent(unit_id=1, declared_order=Support(target=3), visible_to=frozenset({0}))
+    ev = IntentRevised(turn=1, player=0, intent=intent, previous=None, visible_to=frozenset({0}))
+    assert deserialize_intent_revised(serialize_intent_revised(ev)) == ev
+
+
+def test_intent_revised_retraction_roundtrip() -> None:
+    prev = Intent(unit_id=1, declared_order=Hold(), visible_to=None)
+    ev = IntentRevised(turn=2, player=1, intent=None, previous=prev, visible_to=None)
+    assert deserialize_intent_revised(serialize_intent_revised(ev)) == ev
+
+
+def test_done_cleared_roundtrip() -> None:
+    ev = DoneCleared(turn=3, player=0, source_player=1, source_unit=7)
+    assert deserialize_done_cleared(serialize_done_cleared(ev)) == ev
+
+
+def test_state_roundtrip_with_new_event_lists() -> None:
+    """support_lapses, intent_revisions, done_clears all round-trip via GameState."""
+    from dataclasses import replace as dc_replace
+    cfg = GameConfig(num_players=3, seed=42, max_turns=20)
+    m = generate_map(3, seed=42)
+    s = initial_state(cfg, m)
+    intent = Intent(unit_id=0, declared_order=Support(target=1), visible_to=None)
+    s = dc_replace(
+        s,
+        support_lapses=[SupportLapsed(turn=1, supporter=0, target=1, reason="geometry_break")],
+        intent_revisions=[
+            IntentRevised(turn=1, player=0, intent=intent, previous=None, visible_to=None)
+        ],
+        done_clears=[DoneCleared(turn=1, player=2, source_player=0, source_unit=0)],
+    )
+    blob = serialize_state(s)
+    s2 = deserialize_state(blob)
+    assert s2.support_lapses == s.support_lapses
+    assert s2.intent_revisions == s.intent_revisions
+    assert s2.done_clears == s.done_clears
+    assert blob.get("wire_version") == 3
+
+
+def test_state_roundtrip_without_new_event_lists_defaults_empty() -> None:
+    """Pre-Task-11 blobs (no event list keys) deserialize cleanly with empty lists."""
+    cfg = GameConfig(num_players=2, seed=1, max_turns=5)
+    m = generate_map(2, seed=1)
+    s = initial_state(cfg, m)
+    blob = serialize_state(s)
+    blob.pop("support_lapses", None)
+    blob.pop("intent_revisions", None)
+    blob.pop("done_clears", None)
+    s2 = deserialize_state(blob)
+    assert s2.support_lapses == []
+    assert s2.intent_revisions == []
+    assert s2.done_clears == []
