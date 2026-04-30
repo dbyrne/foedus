@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 PlayerId: TypeAlias = int
 NodeId: TypeAlias = int
@@ -47,7 +47,18 @@ class SupportMove:
     target_dest: NodeId
 
 
-Order: TypeAlias = Hold | Move | SupportHold | SupportMove
+@dataclass(frozen=True)
+class Support:
+    """Reactive support order. Adapts to target_unit's actual canon order at
+    finalize. If `require_dest` is set, behaves like the legacy SupportMove
+    (only lands when target moves to that exact node). If None, supports
+    whatever the target does (Hold, Move, or another Support).
+    """
+    target: UnitId
+    require_dest: NodeId | None = None
+
+
+Order: TypeAlias = Hold | Move | SupportHold | SupportMove | Support
 
 
 class Stance(Enum):
@@ -107,15 +118,15 @@ class ChatMessage:
 class AidSpend:
     """A token spent on an ally's order this turn.
 
-    `target_unit` is the unit being aided; `target_order` is the order the
-    spender expects the recipient to issue. The aid only "lands" (yields
-    +1 strength on the recipient's order, fires alliance bonus eligibility,
-    and increments the trust ledger) if the recipient's canon order this
-    turn matches `target_order` exactly. Mismatches consume the token but
-    have no other effect — this incentivizes accurate coordination.
+    `target_unit` is the unit being aided. The aid lands on whatever order
+    the recipient submits (reactive, by symmetry with Support). It yields
+    +1 strength on the recipient's canon order, makes the supporter eligible
+    for the alliance bonus when the recipient's order is a Move that captures
+    a supply, and increments the trust ledger entry (spender, recipient).
+    Tokens are consumed at finalize regardless of whether the recipient's
+    unit survives long enough for the aid to matter.
     """
     target_unit: UnitId
-    target_order: "Order"
 
 
 @dataclass(frozen=True)
@@ -130,6 +141,45 @@ class BetrayalObservation:
     betrayer: PlayerId
     intent: Intent
     actual_order: Order
+
+
+@dataclass(frozen=True)
+class IntentRevised:
+    """Emitted when a player submits or modifies an intent during negotiation.
+
+    Sent to each player in `visible_to` (or all surviving non-senders if
+    visible_to is None, mirroring the source intent's broadcast scope).
+    """
+    turn: int
+    player: PlayerId
+    intent: Intent
+    previous: Intent | None  # None = first declaration this round for this unit
+    visible_to: frozenset[PlayerId] | None
+
+
+@dataclass(frozen=True)
+class SupportLapsed:
+    """Emitted at finalize when a Support could not land."""
+    turn: int
+    supporter: UnitId
+    target: UnitId
+    reason: Literal[
+        "target_held_unsupportable",
+        "geometry_break",
+        "target_destroyed",
+        "pin_mismatch",
+        "self_dislodge_blocked",
+    ]
+
+
+@dataclass(frozen=True)
+class DoneCleared:
+    """Emitted when a player's signal_done flag auto-clears due to an
+    ally's intent revision affecting one of the player's committed plans."""
+    turn: int
+    player: PlayerId         # whose done flag cleared
+    source_player: PlayerId  # whose revision triggered the clear
+    source_unit: UnitId      # which unit's intent the dependency referenced
 
 
 @dataclass(frozen=True)
