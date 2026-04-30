@@ -31,7 +31,7 @@ from foedus.core import (
     NodeType,
     Phase,
     Press,
-    SupportMove,
+    Support,
     Unit,
 )
 from foedus.fog import visible_state_for
@@ -288,7 +288,7 @@ def test_log_surfaces_support_cut() -> None:
         Unit(3, 1, 4),  # p1 defender at attacked node
     ], num_players=3)
     orders = {
-        0: {0: SupportMove(target=1, target_dest=4),
+        0: {0: Support(target=1, require_dest=4),
             1: Move(dest=4)},
         2: {2: Move(dest=3)},
         # p1 holds u3 by default

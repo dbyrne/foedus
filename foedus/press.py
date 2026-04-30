@@ -27,8 +27,6 @@ from foedus.core import (
     Press,
     Stance,
     Support,
-    SupportHold,
-    SupportMove,
     UnitId,
 )
 
@@ -436,7 +434,7 @@ def _stagnation_cost_deltas(
     """Return per-player score deltas for the stagnation cost.
 
     A player "did nothing" this turn if all their canon orders are
-    Hold or SupportHold (no Move, no SupportMove). Such players pay
+    Hold or Support-of-holder (no Move, no Support-of-mover). Such players pay
     `config.stagnation_cost`. Eliminated and unit-less players are exempt.
 
     If config.stagnation_cost == 0, returns an empty dict (disabled).
@@ -462,20 +460,20 @@ def _stagnation_cost_deltas(
         if not p_units:
             continue
         p_orders = [canon.get(u.id) for u in p_units]
-        # Treat Move and any cross-player attacking support as "did something":
-        # legacy SupportMove, or reactive Support whose target's canon is a Move.
+        # Treat Move and support-of-mover as "did something":
+        # Support(target=X) is active iff X's canon order is a Move.
         from foedus.core import Support  # local import to avoid cycle
         active = False
         for o in p_orders:
-            if isinstance(o, (Move, SupportMove)):
+            if isinstance(o, Move):
                 active = True
                 break
             if isinstance(o, Support):
-                # We don't have access to the full canon here cheaply; treat
-                # any Support as non-stagnant. (This is more lenient than the
-                # legacy rule but the stagnation cost is 0.0 by default anyway.)
-                active = True
-                break
+                # Active only when the supported unit is itself moving.
+                target_order = canon.get(o.target)
+                if isinstance(target_order, Move):
+                    active = True
+                    break
         if not active:
             out[p] = -cost
     return out

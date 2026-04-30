@@ -30,7 +30,7 @@ def _make_jsonl(tmp_path: Path) -> Path:
                 for t in range(1, 8)
             },
             "order_type_counts": {
-                "Hold": 10, "Move": 18, "SupportMove": 0, "SupportHold": 0,
+                "Hold": 10, "Move": 18, "Support": 0,
             },
             "dislodgement_count": 0,
             "betrayal_count_per_player": [0, 0, 0, 0],

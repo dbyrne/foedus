@@ -37,17 +37,6 @@ class Move:
 
 
 @dataclass(frozen=True)
-class SupportHold:
-    target: UnitId
-
-
-@dataclass(frozen=True)
-class SupportMove:
-    target: UnitId
-    target_dest: NodeId
-
-
-@dataclass(frozen=True)
 class Support:
     """Reactive support order. Adapts to target_unit's actual canon order at
     finalize.
@@ -63,7 +52,7 @@ class Support:
     require_dest: NodeId | None = None
 
 
-Order: TypeAlias = Hold | Move | SupportHold | SupportMove | Support
+Order: TypeAlias = Hold | Move | Support
 
 
 class Stance(Enum):
