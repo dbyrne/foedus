@@ -148,7 +148,8 @@ def submit_press_tokens(state: GameState, player: PlayerId,
             previous=prev,
             visible_to=intent.visible_to,
         ))
-        revised_unit_keys.add((player, intent.unit_id))
+        if prev is not None:  # E3: first declarations don't trigger auto-clear
+            revised_unit_keys.add((player, intent.unit_id))
 
     # Detect retractions: previous intent for a unit no longer present in
     # the new submission.
@@ -249,7 +250,9 @@ def submit_aid_spends(state: GameState, player: PlayerId,
     prev_spends = state.round_aid_pending.get(player, [])
     prev_targets = {s.target_unit for s in prev_spends}
     new_targets = {s.target_unit for s in cleaned}
-    revised_unit_keys = {(player, u) for u in new_targets ^ prev_targets}
+    # E3: only retractions (prev_targets - new_targets) trigger auto-clear.
+    # Freshly added aid spends do not, matching the press-intent rule.
+    revised_unit_keys = {(player, u) for u in (prev_targets - new_targets)}
 
     new_pending[player] = cleaned
     s_pending = replace(state, round_aid_pending=new_pending)

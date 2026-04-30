@@ -47,6 +47,19 @@ def test_pin_mismatch_emits_lapse():
     assert any(l.reason == "pin_mismatch" for l in lapses)
 
 
+def test_target_destroyed_emits_lapse():
+    s = build_state_with_units(
+        layout={0: 0},  # only one unit; supporter targets nonexistent unit
+        ownership={0: 0},
+        edges={0: {1}, 1: {0}},
+        num_players=2,
+    )
+    orders_by_player = {0: {0: Support(target=999)}}
+    s2 = advance_turn(s, orders_by_player)
+    lapses = list(s2.support_lapses)
+    assert any(l.reason == "target_destroyed" for l in lapses)
+
+
 def test_betrayal_observation_independent_of_support_outcome():
     """A declared intent vs. submitted-order mismatch still emits
     BetrayalObservation, even when the support succeeded."""

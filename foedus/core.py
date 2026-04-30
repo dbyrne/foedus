@@ -163,7 +163,6 @@ class SupportLapsed:
     """Emitted at finalize when a Support could not land.
 
     `reason` taxonomy:
-      - "target_held_unsupportable": target's order is one Support cannot back
       - "geometry_break": supporter not adjacent to target's actual result
       - "target_destroyed": target dislodged before its order resolved
       - "pin_mismatch": require_dest set, target went elsewhere
@@ -173,7 +172,6 @@ class SupportLapsed:
     supporter: UnitId
     target: UnitId
     reason: Literal[
-        "target_held_unsupportable",
         "geometry_break",
         "target_destroyed",
         "pin_mismatch",

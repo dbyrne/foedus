@@ -78,3 +78,13 @@ def test_support_self_dislodge_blocked():
     orders = {0: Support(target=1), 1: Move(dest=2), 2: Hold()}
     canon_u0 = _normalize(s, 0, Support(target=1), orders)
     assert canon_u0 == Hold()
+
+
+def test_support_target_destroyed_normalizes_to_hold():
+    """If the target unit doesn't exist (e.g., dislodged before order resolution),
+    Support normalizes to Hold."""
+    s = _adjacent_two_player_state()
+    # Reference a nonexistent unit id (999).
+    orders = {0: Support(target=999)}
+    canon_u0 = _normalize(s, 0, Support(target=999), orders)
+    assert canon_u0 == Hold()

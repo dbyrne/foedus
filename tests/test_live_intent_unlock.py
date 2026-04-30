@@ -136,6 +136,26 @@ def test_no_transitive_cascade():
     assert 0 in s.round_done       # P0 only depends on P1, not transitive
 
 
+def test_first_declaration_does_not_clear_dependent_done():
+    """E3: P depends on (Q, U) via existing Support. Q declares an intent
+    for U for the first time this round. P's done flag stays set."""
+    s = _two_player_adjacent_state()
+    # P0 declares Support of P1's unit 1 (creates dependency).
+    p0_intent = Intent(unit_id=0, declared_order=Support(target=1), visible_to=None)
+    s = submit_press_tokens(s, 0, Press(stance={}, intents=[p0_intent]))
+    s = signal_done(s, 0)
+    assert 0 in s.round_done
+    # P1's first declaration for unit 1 — should NOT clear P0's done.
+    p1_intent = Intent(unit_id=1, declared_order=Move(dest=2), visible_to=None)
+    s = submit_press_tokens(s, 1, Press(stance={}, intents=[p1_intent]))
+    assert 0 in s.round_done, "first declaration should not auto-clear per E3"
+    # IntentRevised event still emitted for visibility.
+    assert any(
+        ev.player == 1 and ev.previous is None and ev.intent == p1_intent
+        for ev in s.intent_revisions
+    )
+
+
 def test_round_closes_when_all_done_after_revision():
     """A revision that triggers no auto-clears (or whose dependents weren't
     done) should still allow the round to close once all-done holds again."""

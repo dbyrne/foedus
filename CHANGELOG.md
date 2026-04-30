@@ -17,7 +17,7 @@
   NEGOTIATION. Visible to the same audience as the source intent.
 - `SupportLapsed` — emitted at finalize when a `Support` couldn't land.
   Reasons: `geometry_break`, `pin_mismatch`, `target_destroyed`,
-  `target_held_unsupportable`, `self_dislodge_blocked`. Closes the
+  `self_dislodge_blocked`. Closes the
   "silent failure" UX gap flagged by Haiku playtest agents.
 - `DoneCleared` — emitted when a player's `signal_done` flag auto-clears
   due to an ally revising an intent that the player's committed plans
