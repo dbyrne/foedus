@@ -39,9 +39,9 @@ The engine fits in roughly 1k LOC; the test suite (~190 tests) runs in
 
 - `Hold` — stay put.
 - `Move(dest)` — move to adjacent node.
-- `SupportHold(target)` — lend +1 strength to an adjacent unit's hold.
-- `SupportMove(target, target_dest)` — lend +1 strength to an adjacent
-  unit's move.
+- `Support(target, require_dest=None)` — lend +1 strength to an adjacent
+  unit's hold or move. Reactive by default; `require_dest` pins to a
+  specific move destination (legacy SupportMove behaviour).
 
 Submitted simultaneously and secretly each turn; revealed at end-of-round.
 
@@ -110,7 +110,7 @@ See `docs/design/2026-04-27-press-v0.md` for full spec. Summary:
   Replaces v1's "no dislodgement" timeout, which had a degenerate
   attractor.
 - **Stagnation cost:** -`stagnation_cost` score per turn for players whose
-  canon contains no Move or SupportMove (default `0.0`, i.e. disabled;
+  canon contains no Move or Support (default `0.0`, i.e. disabled;
   configurable). Was originally 1.0 in v1 to discourage all-Hold détente
   attractor games, but Bundle 2's hold-or-dislodge supply ownership rule
   now incentivizes commitment-to-hold directly — so the penalty became
@@ -333,18 +333,15 @@ be playing for a goal that hurts you).
 **Open questions:** Are objectives public or private? How is the
 trigger evaluated (engine-checked or player-claimed)?
 
-### J. Multi-round negotiation
-
-Currently a single negotiation round per turn. Future: configurable N
-rounds, with stance/intent revisability across rounds. Or: open-ended
-"until all players signal done" rounds.
-
-**Why:** More authentic to Diplomacy table-talk; allows offer →
-counter-offer → accept dynamics within a turn.
-
-**Open questions:** How long do we let multi-round runs go before
-forcing a turn-clock? Does each round emit its own press_history
-entry, or just the final?
+### J. Live-intent negotiation with dependency-aware done — *implemented*.
+   See `docs/superpowers/specs/2026-04-30-alliance-support-intent-redesign.md`.
+   Intents emit `IntentRevised` events to authorized viewers in real time
+   during NEGOTIATION. When a player revises an intent, the engine recomputes
+   the unit-grained intent dependency graph and auto-clears `signal_done`
+   only for players whose committed plans reference the revised `(player, unit)`.
+   No transitive cascade — only direct dependents auto-clear. Round closes
+   the moment all players are simultaneously done; no engine-side timers.
+   Replaces the pre-2026-04-30 single-round commit-and-pray model.
 
 ---
 
