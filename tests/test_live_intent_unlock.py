@@ -146,3 +146,17 @@ def test_round_closes_when_all_done_after_revision():
     s = signal_done(s, 1)
     from foedus.press import is_round_complete
     assert is_round_complete(s)
+
+
+def test_intent_retraction_emits_event_with_none_intent():
+    s = _two_player_adjacent_state()
+    i1 = Intent(unit_id=0, declared_order=Move(dest=2), visible_to=None)
+    s = submit_press_tokens(s, 0, Press(stance={}, intents=[i1]))
+    # Retract by submitting an empty intents list (no entry for unit 0).
+    s = submit_press_tokens(s, 0, Press(stance={}, intents=[]))
+    retraction_events = [
+        ev for ev in s.intent_revisions
+        if ev.player == 0 and ev.intent is None
+    ]
+    assert len(retraction_events) == 1
+    assert retraction_events[0].previous == i1

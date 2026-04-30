@@ -150,16 +150,22 @@ class BetrayalObservation:
 
 @dataclass(frozen=True)
 class IntentRevised:
-    """Emitted when a player submits or modifies an intent during negotiation.
+    """Emitted when a player submits, modifies, or retracts an intent during
+    negotiation.
 
     Sent to each player in `visible_to`, which mirrors the revised intent's
     own `visible_to` (None = public broadcast to all surviving non-senders;
     frozenset = named recipients).
+
+    `intent` is the new value (None if retracted); `previous` is the prior
+    value (None if this is a first declaration for the unit this round).
+    Exactly one of `intent` / `previous` may be None at a time; both being
+    None is invalid.
     """
     turn: int
     player: PlayerId
-    intent: Intent
-    previous: Intent | None  # None = first declaration this round for this unit
+    intent: Intent | None     # None = retraction
+    previous: Intent | None   # None = first declaration this round for this unit
     visible_to: frozenset[PlayerId] | None  # mirrors intent.visible_to
 
 

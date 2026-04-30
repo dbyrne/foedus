@@ -160,7 +160,7 @@ def submit_press_tokens(state: GameState, player: PlayerId,
             new_revisions.append(IntentRevised(
                 turn=state.turn + 1,
                 player=player,
-                intent=prev_intent,  # last seen value, for traceability
+                intent=None,  # retraction
                 previous=prev_intent,
                 visible_to=prev_intent.visible_to,
             ))
