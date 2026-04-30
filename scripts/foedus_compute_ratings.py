@@ -90,8 +90,18 @@ def main(argv: list[str] | None = None) -> int:
                 fs: dict[int, float] = {
                     i: float(s) for i, s in enumerate(final_scores)
                 }
+                survivors_n = sum(
+                    1 for i in range(len(final_scores)) if i not in eliminated
+                )
+                solo_winner = (
+                    next(iter(i for i in range(len(final_scores))
+                              if i not in eliminated))
+                    if survivors_n == 1 else None
+                )
                 match = MatchResult(
                     rank=rank, payout=payout, final_scores=fs,
+                    detente=bool(rec.get("detente_reached", False)),
+                    solo_winner=solo_winner,
                 )
                 rs.update(match, identities=list(agents))
                 for name in agents:
