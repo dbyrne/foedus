@@ -1,21 +1,15 @@
 """Unit tests for press.intent_dependencies()."""
+from dataclasses import replace
+
 from foedus.core import (
     AidSpend,
-    GameConfig,
     Intent,
     Move,
     Press,
     Support,
 )
-from foedus.mapgen import generate_map
 from foedus.press import intent_dependencies, submit_aid_spends, submit_press_tokens
-from foedus.resolve import initial_state
-
-
-def simple_two_player_state():
-    cfg = GameConfig(num_players=2, map_radius=2, seed=1)
-    m = generate_map(cfg.num_players, seed=cfg.seed)
-    return initial_state(cfg, m)
+from tests.helpers import simple_two_player_state
 
 
 def test_empty_state_no_dependencies():
@@ -43,15 +37,16 @@ def test_support_creates_player_unit_dependency():
     assert deps.get(0) == frozenset({(1, p1_unit_id)})
 
 
-def test_aidspend_creates_dependency_when_present():
+def test_aidspend_creates_dependency():
     s = simple_two_player_state()
     p1_units = [u for u in s.units.values() if u.owner == 1]
     p1_unit_id = p1_units[0].id
+    # Pre-populate aid tokens so the spend can fit the balance.
+    s = replace(s, aid_tokens={0: 1, 1: 1})
     s = submit_aid_spends(s, 0, [AidSpend(target_unit=p1_unit_id)])
+    assert s.round_aid_pending.get(0), "aid spend should have landed in pending"
     deps = intent_dependencies(s)
-    # If aid passed the mutual-ALLY gate (turn 0 is allowed), dep should exist.
-    if s.round_aid_pending.get(0):
-        assert (1, p1_unit_id) in deps.get(0, frozenset())
+    assert (1, p1_unit_id) in deps.get(0, frozenset())
 
 
 def test_solo_move_no_dependency():
@@ -70,3 +65,28 @@ def test_solo_move_no_dependency():
     s = submit_press_tokens(s, 0, Press(stance={}, intents=[intent]))
     deps = intent_dependencies(s)
     assert deps.get(0, frozenset()) == frozenset()
+
+
+def test_unit_grained_separates_units():
+    """P0 supports P1's first unit. Even if P1 has multiple units, only
+    the supported unit appears in the dependency set, not all of P1's units."""
+    s = simple_two_player_state()
+    p0_units = [u for u in s.units.values() if u.owner == 0]
+    p1_units = [u for u in s.units.values() if u.owner == 1]
+    if len(p1_units) < 2:
+        # Some seed/map combos may yield only one unit per player at turn 0;
+        # in that case this test is unverifiable. Skip cleanly.
+        import pytest
+        pytest.skip("seed produced fewer than 2 P1 units")
+    p0_unit_id = p0_units[0].id
+    p1_first_id = p1_units[0].id
+    p1_second_id = p1_units[1].id
+    intent = Intent(
+        unit_id=p0_unit_id,
+        declared_order=Support(target=p1_first_id),
+        visible_to=None,
+    )
+    s = submit_press_tokens(s, 0, Press(stance={}, intents=[intent]))
+    deps = intent_dependencies(s)
+    assert deps.get(0) == frozenset({(1, p1_first_id)})
+    assert (1, p1_second_id) not in deps.get(0, frozenset())

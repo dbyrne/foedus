@@ -11,6 +11,8 @@ from foedus.core import (
     PlayerId,
     Unit,
 )
+from foedus.mapgen import generate_map
+from foedus.resolve import initial_state
 
 
 def line_map(n_nodes: int) -> Map:
@@ -94,3 +96,11 @@ def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
                           build_period=build_period, fog_radius=fog_radius,
                           detente_threshold=detente_threshold),
     )
+
+
+def simple_two_player_state():
+    """Minimal 2-player initial state on a small procedural map. Used by
+    intent-dependency and live-press tests."""
+    cfg = GameConfig(num_players=2, map_radius=2, seed=1)
+    m = generate_map(cfg.num_players, seed=cfg.seed)
+    return initial_state(cfg, m)
