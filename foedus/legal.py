@@ -3,8 +3,7 @@
 "Geometrically valid" = the order will not be normalized to Hold purely on
 the basis of map structure, unit existence, or self-dislodge prevention.
 Whether the order achieves its *intended effect* depends on what other units
-do (e.g., a SupportMove only counts if the target unit actually makes the
-supported move).
+do (e.g., a Support only counts if resolution can apply it meaningfully).
 
 This is what an agent uses to enumerate its action space:
 - RandomAgent picks uniformly from this list
@@ -19,8 +18,7 @@ from foedus.core import (
     Hold,
     Move,
     Order,
-    SupportHold,
-    SupportMove,
+    Support,
     UnitId,
 )
 
@@ -28,10 +26,16 @@ from foedus.core import (
 def legal_orders_for_unit(state: GameState, unit_id: UnitId) -> list[Order]:
     """All geometrically-valid orders for `unit_id`.
 
-    Always includes Hold(). Output is sorted in a deterministic order
-    (Hold first, then Moves by destination, then SupportHold by target,
-    then SupportMove by (target, target_dest)) so callers can rely on it
-    for reproducible random sampling.
+    Always includes Hold(). Output is sorted deterministically:
+    Hold first, then Moves by destination, then Support entries by target id.
+
+    Reactive Support enumeration: one Support(target=other) per other unit
+    that is geometrically reachable as a support target — i.e., the supporter
+    is currently adjacent to `other.location` (so support of a Hold is
+    trivially possible) OR adjacent to at least one neighbor of `other.location`
+    (so support of a Move from `other` is possible). Pin variants
+    (require_dest=...) are NOT enumerated; pinning is an opt-in expressive
+    behavior, not part of the default candidate set.
     """
     unit = state.units[unit_id]
     m = state.map
@@ -41,21 +45,18 @@ def legal_orders_for_unit(state: GameState, unit_id: UnitId) -> list[Order]:
         out.append(Move(dest=nbr))
 
     others = sorted(state.units.values(), key=lambda u: u.id)
+    my_neighbors = m.neighbors(unit.location)
     for other in others:
         if other.id == unit_id:
             continue
-        if m.is_adjacent(unit.location, other.location):
-            out.append(SupportHold(target=other.id))
-
-    for other in others:
-        if other.id == unit_id:
+        # Reactive Support is geometrically valid if the supporter is
+        # adjacent to the target (supports a Hold/Support) OR adjacent
+        # to any of the target's neighbors (could support a Move from
+        # the target into that neighbor).
+        if other.location in my_neighbors:
+            out.append(Support(target=other.id))
             continue
-        for target_dest in sorted(m.neighbors(unit.location)):
-            if not m.is_adjacent(other.location, target_dest):
-                continue
-            defender = state.unit_at(target_dest)
-            if defender is not None and defender.owner == unit.owner:
-                continue
-            out.append(SupportMove(target=other.id, target_dest=target_dest))
+        if any(n in my_neighbors for n in m.neighbors(other.location)):
+            out.append(Support(target=other.id))
 
     return out

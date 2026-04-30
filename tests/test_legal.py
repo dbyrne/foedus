@@ -5,8 +5,7 @@ from __future__ import annotations
 from foedus.core import (
     Hold,
     Move,
-    SupportHold,
-    SupportMove,
+    Support,
     Unit,
 )
 from foedus.legal import legal_orders_for_unit
@@ -45,42 +44,46 @@ def test_support_hold_for_each_adjacent_unit() -> None:
         Unit(2, 1, 2),
     ])
     legal = legal_orders_for_unit(s, 0)
-    sh_targets = sorted(o.target for o in legal if isinstance(o, SupportHold))
-    assert sh_targets == [1, 2]
+    support_targets = sorted(o.target for o in legal if isinstance(o, Support))
+    assert support_targets == [1, 2]
 
 
 def test_no_support_hold_for_distant_unit() -> None:
     m = line_map(5)
-    # u0 at 0; u1 at 4 is not adjacent.
+    # u0 at 0; u1 at 4 is not adjacent and shares no neighbors with 0.
+    # line_map(5): 0-1-2-3-4. neighbors(0)={1}, neighbors(4)={3}.
+    # 3 not in {1}, so u1 is not reachable.
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 0, 4)])
     legal = legal_orders_for_unit(s, 0)
-    sh_targets = [o.target for o in legal if isinstance(o, SupportHold)]
-    assert 1 not in sh_targets
+    support_targets = [o.target for o in legal if isinstance(o, Support)]
+    assert 1 not in support_targets
 
 
 def test_support_move_combos() -> None:
     m = line_map(5)
-    # u0 at 2 (supporter), u1 at 0. u0 can support u1 moving to 1
-    # (target_dest=1, adjacent to both u0 and u1).
+    # u0 at 2 (supporter), u1 at 0. u0 can support u1 (reactive Support).
+    # neighbors(2)={1,3}, neighbors(0)={1}. 1 in {1,3} so Support(target=1) valid.
     s = make_state(m, [Unit(0, 0, 2), Unit(1, 0, 0)])
     legal = legal_orders_for_unit(s, 0)
-    sm = [o for o in legal if isinstance(o, SupportMove)]
-    assert SupportMove(target=1, target_dest=1) in sm
+    assert Support(target=1) in legal
 
 
 def test_no_support_move_attack_on_own_unit() -> None:
-    """Cannot enumerate support for an attack that would dislodge own teammate."""
+    """Reactive Support has no dest filter — own-unit dislodge is irrelevant at enumeration."""
     m = line_map(5)
-    # u0 at 2 (p0 supporter). u1 at 0 (p0 attacker). u2 at 1 (p0 defender).
-    # u0 cannot support u1's move to 1 (would dislodge own u2).
+    # u0 at 2 (p0 supporter). u1 at 0 (p0). u2 at 1 (p0).
+    # Under reactive enumeration, Support(target=1) is still valid (u1 is reachable).
+    # Support(target=2) is also valid (u2 at 1 is adjacent to 2).
     s = make_state(m, [
         Unit(0, 0, 2),
         Unit(1, 0, 0),
         Unit(2, 0, 1),
     ], num_players=1)
     legal = legal_orders_for_unit(s, 0)
-    bad = SupportMove(target=1, target_dest=1)
-    assert bad not in legal
+    # Both other units are reachable; verify Support entries exist.
+    support_targets = sorted(o.target for o in legal if isinstance(o, Support))
+    assert 1 in support_targets
+    assert 2 in support_targets
 
 
 def test_support_move_attack_on_enemy_allowed() -> None:
@@ -92,8 +95,7 @@ def test_support_move_attack_on_enemy_allowed() -> None:
         Unit(2, 1, 1),  # enemy
     ])
     legal = legal_orders_for_unit(s, 0)
-    expected = SupportMove(target=1, target_dest=1)
-    assert expected in legal
+    assert Support(target=1) in legal
 
 
 def test_deterministic_order() -> None:
