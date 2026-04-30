@@ -205,6 +205,33 @@ def _run_game_task(args_tuple):
     return run_one_game(*args_tuple)
 
 
+def _register_external_agents(specs: list[str]) -> None:
+    """Register `--external-agent NAME=module.path:Class` entries into ROSTER.
+
+    Called in main() and as the ProcessPoolExecutor initializer so each
+    worker process has the same patched roster.
+    """
+    if not specs:
+        return
+    import importlib
+    for spec in specs:
+        if "=" not in spec or ":" not in spec.split("=", 1)[1]:
+            raise ValueError(
+                f"--external-agent must be NAME=module.path:Class, got {spec!r}"
+            )
+        name, target = spec.split("=", 1)
+        mod_path, cls_name = target.split(":", 1)
+        mod = importlib.import_module(mod_path)
+        cls = getattr(mod, cls_name)
+        ROSTER[name] = cls
+
+
+def _init_worker(external_agent_specs: list[str]) -> None:
+    """ProcessPoolExecutor initializer: register external agents in each
+    worker's ROSTER before any games run."""
+    _register_external_agents(external_agent_specs)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-games", type=int, default=5000)
@@ -272,11 +299,39 @@ def main():
                              "game and --roster is ignored. Use to stress "
                              "specific matchups (e.g. 'TitForTat,Sycophant,"
                              "Sycophant,Sycophant').")
+    parser.add_argument(
+        "--external-agent", action="append", default=[],
+        metavar="NAME=module.path:ClassName",
+        help="Register an external (non-heuristic) Agent class under "
+             "NAME so it can appear in --roster / --seats. The class is "
+             "imported at startup and instantiated per-seat with no "
+             "args (same calling convention as heuristics). May be passed "
+             "multiple times. Example: "
+             "--external-agent Auspex0.1=auspex.agents.advisor:DefaultAdvisorAgent",
+    )
     parser.add_argument("--out", "--output", default="", dest="out")
     parser.add_argument("--workers", type=int, default=1,
                         help="parallel worker processes (default 1; "
                              "0 = os.cpu_count())")
     args = parser.parse_args()
+
+    # Register --external-agent entries into ROSTER (main process). Workers
+    # re-register via the ProcessPoolExecutor initializer below.
+    if args.external_agent:
+        for spec in args.external_agent:
+            name = spec.split("=", 1)[0] if "=" in spec else None
+            if name and name in ROSTER:
+                print(f"ERR: --external-agent name {name!r} collides with "
+                      "an existing roster entry; pick a different name.",
+                      file=sys.stderr)
+                return 1
+        try:
+            _register_external_agents(args.external_agent)
+        except (ValueError, ImportError, AttributeError) as e:
+            print(f"ERR: {e}", file=sys.stderr)
+            return 1
+        for spec in args.external_agent:
+            print(f"registered external agent: {spec}", file=sys.stderr)
 
     archetype = Archetype(args.archetype)
     if args.alliance_bonus is not None:
@@ -364,7 +419,11 @@ def main():
         chunksize = max(1, len(tasks) // (workers * 8))
         completed = 0
         with out_path.open("w") as f, \
-                ProcessPoolExecutor(max_workers=workers) as pool:
+                ProcessPoolExecutor(
+                    max_workers=workers,
+                    initializer=_init_worker,
+                    initargs=(list(args.external_agent),),
+                ) as pool:
             for record in pool.map(_run_game_task, tasks,
                                    chunksize=chunksize):
                 f.write(json.dumps(record) + "\n")
