@@ -370,7 +370,21 @@ def _stagnation_cost_deltas(
         if not p_units:
             continue
         p_orders = [canon.get(u.id) for u in p_units]
-        if not any(isinstance(o, (Move, SupportMove)) for o in p_orders):
+        # Treat Move and any cross-player attacking support as "did something":
+        # legacy SupportMove, or reactive Support whose target's canon is a Move.
+        from foedus.core import Support  # local import to avoid cycle
+        active = False
+        for o in p_orders:
+            if isinstance(o, (Move, SupportMove)):
+                active = True
+                break
+            if isinstance(o, Support):
+                # We don't have access to the full canon here cheaply; treat
+                # any Support as non-stagnant. (This is more lenient than the
+                # legacy rule but the stagnation cost is 0.0 by default anyway.)
+                active = True
+                break
+        if not active:
             out[p] = -cost
     return out
 

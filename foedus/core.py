@@ -360,6 +360,12 @@ class GameState:
     round_done: set[PlayerId] = field(default_factory=set)
     chat_done: set[PlayerId] = field(default_factory=set)
 
+    # Reactive-support lapses for the *current* round, populated by
+    # _resolve_orders. Cleared by finalize_round each round. UI/agent
+    # consumers read this between turns to surface "your support didn't
+    # land because X".
+    support_lapses: list["SupportLapsed"] = field(default_factory=list)
+
     # --- Bundle 4: aid resource + permanent leverage ledger ---
     # Per-player current aid-token balances. Generated each turn from
     # controlled supplies; spent on AidSpends; never decay.
