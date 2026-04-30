@@ -15,9 +15,11 @@ from foedus.core import (
     BetrayalObservation,
     ChatDraft,
     ChatMessage,
+    DoneCleared,
     GameState,
     Hold,
     Intent,
+    IntentRevised,
     Move,
     Order,
     Phase,
@@ -122,7 +124,71 @@ def submit_press_tokens(state: GameState, player: PlayerId,
     new_pending = dict(state.round_press_pending)
     new_pending[player] = cleaned
 
-    return replace(state, round_press_pending=new_pending)
+    # ----- Live intent visibility + dependency-aware done auto-clear -----
+
+    # Build per-unit lookup of previously-submitted intents by THIS player
+    # (last write wins).
+    prev_press = state.round_press_pending.get(player)
+    prev_by_unit: dict[UnitId, Intent] = {}
+    if prev_press is not None:
+        for it in prev_press.intents:
+            prev_by_unit[it.unit_id] = it
+
+    new_revisions = list(state.intent_revisions)
+    new_done = set(state.round_done)
+    new_clears = list(state.done_clears)
+    revised_unit_keys: set[tuple[PlayerId, UnitId]] = set()
+
+    for intent in cleaned_intents:
+        prev = prev_by_unit.get(intent.unit_id)
+        if prev == intent:
+            continue  # no change
+        new_revisions.append(IntentRevised(
+            turn=state.turn + 1,
+            player=player,
+            intent=intent,
+            previous=prev,
+            visible_to=intent.visible_to,
+        ))
+        revised_unit_keys.add((player, intent.unit_id))
+
+    # Detect retractions: previous intent for a unit no longer present in
+    # the new submission.
+    new_unit_ids = {it.unit_id for it in cleaned_intents}
+    for prev_unit_id, prev_intent in prev_by_unit.items():
+        if prev_unit_id not in new_unit_ids:
+            new_revisions.append(IntentRevised(
+                turn=state.turn + 1,
+                player=player,
+                intent=prev_intent,  # last seen value, for traceability
+                previous=prev_intent,
+                visible_to=prev_intent.visible_to,
+            ))
+            revised_unit_keys.add((player, prev_unit_id))
+
+    s_pending = replace(state, round_press_pending=new_pending)
+    deps = intent_dependencies(s_pending)
+
+    for dependent_player, dep_set in deps.items():
+        if dependent_player == player:
+            continue  # self-revision doesn't clear own done
+        for revised_key in revised_unit_keys:
+            if revised_key in dep_set and dependent_player in new_done:
+                new_done.discard(dependent_player)
+                new_clears.append(DoneCleared(
+                    turn=state.turn + 1,
+                    player=dependent_player,
+                    source_player=player,
+                    source_unit=revised_key[1],
+                ))
+                break  # one clear per dependent per submit
+
+    return replace(
+        s_pending,
+        intent_revisions=new_revisions,
+        done_clears=new_clears,
+        round_done=new_done,
+    )
 
 
 def submit_aid_spends(state: GameState, player: PlayerId,
@@ -182,8 +248,36 @@ def submit_aid_spends(state: GameState, player: PlayerId,
         cleaned = cleaned[:balance]
 
     new_pending = dict(state.round_aid_pending)
+    prev_spends = state.round_aid_pending.get(player, [])
+    prev_targets = {s.target_unit for s in prev_spends}
+    new_targets = {s.target_unit for s in cleaned}
+    revised_unit_keys = {(player, u) for u in new_targets ^ prev_targets}
+
     new_pending[player] = cleaned
-    return replace(state, round_aid_pending=new_pending)
+    s_pending = replace(state, round_aid_pending=new_pending)
+    deps = intent_dependencies(s_pending)
+
+    new_done = set(state.round_done)
+    new_clears = list(state.done_clears)
+    for dependent_player, dep_set in deps.items():
+        if dependent_player == player:
+            continue
+        for revised_key in revised_unit_keys:
+            if revised_key in dep_set and dependent_player in new_done:
+                new_done.discard(dependent_player)
+                new_clears.append(DoneCleared(
+                    turn=state.turn + 1,
+                    player=dependent_player,
+                    source_player=player,
+                    source_unit=revised_key[1],
+                ))
+                break
+
+    return replace(
+        s_pending,
+        round_done=new_done,
+        done_clears=new_clears,
+    )
 
 
 def signal_done(state: GameState, player: PlayerId) -> GameState:
@@ -512,6 +606,8 @@ def finalize_round(state: GameState,
         round_done=set(),
         chat_done=set(),
         round_aid_pending={},
+        intent_revisions=[],
+        done_clears=[],
     )
 
 

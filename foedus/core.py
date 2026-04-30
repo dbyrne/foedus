@@ -366,6 +366,11 @@ class GameState:
     # land because X".
     support_lapses: list["SupportLapsed"] = field(default_factory=list)
 
+    # Round-scoped event channels for live-press observers. Cleared by
+    # finalize_round each round.
+    intent_revisions: list["IntentRevised"] = field(default_factory=list)
+    done_clears: list["DoneCleared"] = field(default_factory=list)
+
     # --- Bundle 4: aid resource + permanent leverage ledger ---
     # Per-player current aid-token balances. Generated each turn from
     # controlled supplies; spent on AidSpends; never decay.
