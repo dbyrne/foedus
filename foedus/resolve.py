@@ -27,6 +27,7 @@ from foedus.core import (
     NodeType,
     Order,
     PlayerId,
+    Support,
     SupportHold,
     SupportMove,
     Unit,
@@ -131,6 +132,38 @@ def _normalize(state: GameState, u_id: UnitId, order: Order,
         # Refuse to support an attack on one's own unit (self-dislodge prevention).
         defender = state.unit_at(order.target_dest)
         if defender is not None and defender.owner == unit.owner:
+            return Hold()
+        return order
+
+    if isinstance(order, Support):
+        target = state.units.get(order.target)
+        if target is None or target.id == u_id:
+            return Hold()
+        target_order = all_orders.get(order.target, Hold())
+
+        # Pin variant: behaves like legacy SupportMove, exact-match required.
+        if order.require_dest is not None:
+            if not m.is_adjacent(unit.location, order.require_dest):
+                return Hold()
+            if not isinstance(target_order, Move) or target_order.dest != order.require_dest:
+                return Hold()
+            defender = state.unit_at(order.require_dest)
+            if defender is not None and defender.owner == unit.owner:
+                return Hold()
+            return order
+
+        # Reactive default: support whatever target's canon order does.
+        if isinstance(target_order, Move):
+            if not m.is_adjacent(unit.location, target_order.dest):
+                return Hold()
+            defender = state.unit_at(target_order.dest)
+            if defender is not None and defender.owner == unit.owner:
+                return Hold()
+            return order
+        # target holds, supports, or supports-a-supporter: support lands at
+        # target's location (E6 — supporting a supporter is supporting them
+        # in place).
+        if not m.is_adjacent(unit.location, target.location):
             return Hold()
         return order
 
