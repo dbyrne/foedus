@@ -152,3 +152,34 @@ def test_eliminated_player_in_visible_to_excluded_from_betrayal() -> None:
     # Only player 1 sees (player 2 eliminated).
     assert 1 in obs
     assert 2 not in obs
+
+
+def test_betrayal_observation_for_support_revision():
+    """Player declares Support(target=X), submits Hold — betrayal observed."""
+    from foedus.core import Hold, Intent, Press, Support
+    from foedus.press import (
+        finalize_round,
+        signal_done,
+        submit_press_tokens,
+    )
+    from tests.helpers import build_state_with_units
+
+    s = build_state_with_units(
+        layout={0: 0, 1: 1},
+        ownership={0: 0, 1: 1},
+        edges={0: {1, 2}, 1: {0, 2}, 2: {0, 1}},
+        num_players=2,
+    )
+    intent = Intent(
+        unit_id=0,
+        declared_order=Support(target=1),
+        visible_to=frozenset({1}),
+    )
+    s = submit_press_tokens(s, 0, Press(stance={}, intents=[intent]))
+    s = signal_done(s, 0)
+    s = signal_done(s, 1)
+    # P0 declared Support(1), submits Hold().
+    orders = {0: {0: Hold()}, 1: {1: Hold()}}
+    s2 = finalize_round(s, orders)
+    obs_for_p1 = s2.betrayals.get(1, [])
+    assert any(o.betrayer == 0 for o in obs_for_p1)
