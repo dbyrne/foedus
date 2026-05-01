@@ -575,7 +575,10 @@ def finalize_round(state: GameState,
             if spend.target_unit not in canon:
                 continue
             key = (spender, recipient)
-            new_aid_given[key] = new_aid_given.get(key, 0) + 1
+            new_aid_given[key] = min(
+                state.config.aid_given_cap,
+                new_aid_given.get(key, 0) + 1,
+            )
 
     # Token regeneration: floor(supply_count / divisor), capped.
     divisor = max(1, state.config.aid_generation_divisor)

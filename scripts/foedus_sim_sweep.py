@@ -260,6 +260,11 @@ def main():
     parser.add_argument("--aid-divisor", type=int, default=None,
                         help="Bundle 4: aid_generation_divisor (default 3). "
                              "Tokens generated/turn = floor(supply/divisor).")
+    parser.add_argument("--aid-given-cap", type=int, default=None,
+                        help="Bundle 4: per-pair cap on aid_given ledger "
+                             "entries (default 3). Bounds the long-term "
+                             "leverage stockpile without affecting per-turn "
+                             "aid effects. Pass 999 to effectively disable.")
     parser.add_argument("--leverage-bonus-max", type=int, default=None,
                         help="Bundle 4: max combat-strength bonus from "
                              "directional leverage (default 2).")
@@ -343,6 +348,8 @@ def main():
         bundle4_overrides["aid_token_cap"] = args.aid_cap
     if args.aid_divisor is not None:
         bundle4_overrides["aid_generation_divisor"] = args.aid_divisor
+    if args.aid_given_cap is not None:
+        bundle4_overrides["aid_given_cap"] = args.aid_given_cap
     if args.leverage_bonus_max is not None:
         bundle4_overrides["leverage_bonus_max"] = args.leverage_bonus_max
     if args.leverage_ratio is not None:

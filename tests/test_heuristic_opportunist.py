@@ -234,3 +234,30 @@ def test_opportunist_v2_falls_back_to_reactive_without_intent():
     assert order.require_dest is None, (
         f"expected reactive support (require_dest=None), got {order.require_dest}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 8 (v3): skip ally with high inverse leverage (Patron-defense gate)
+# ---------------------------------------------------------------------------
+
+def test_opportunist_skips_ally_with_high_inverse_leverage():
+    """Unit 0 (player 0) at node 0; Unit 1 (player 1) at node 1; edge 0-1.
+    Player 1 has given 3 tokens to player 0 (leverage(1,0) = 3 > 2).
+    The Patron-defense gate should fire, causing fallback to Hold/Move.
+    """
+    state = build_state_with_units(
+        layout={0: 0, 1: 1},
+        ownership={0: 0, 1: 1},
+        edges={0: {1}, 1: {0}},
+        num_players=2,
+    )
+    # Player 1 has given us 3 tokens — Patron-buildup signature.
+    state = dataclasses.replace(state, aid_given={(1, 0): 3})
+    assert state.leverage(1, 0) == 3  # sanity
+
+    agent = Opportunist()
+    orders = agent.choose_orders(state, player=0)
+    assert 0 in orders
+    assert not isinstance(orders[0], Support), (
+        f"Patron-defense gate should block Support; got {orders[0]}"
+    )

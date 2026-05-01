@@ -53,6 +53,16 @@ class Opportunist:
                        player: PlayerId, other: PlayerId) -> bool:
         return state.leverage(player, other) > 1
 
+    def _is_patron_suspect(self, state: GameState,
+                            player: PlayerId, other: PlayerId) -> bool:
+        """Patron-defense gate: other has accumulated high leverage against us.
+
+        leverage(other, player) > 1 means other has given us asymmetrically more
+        aid than we've reciprocated — the Patron-buildup signature that precedes
+        a weaponized late-game attack using leverage_bonus.
+        """
+        return state.leverage(other, player) > 1
+
     # ------------------------------------------------------------------
     # choose_orders — two-tier support logic
     # ------------------------------------------------------------------
@@ -86,6 +96,9 @@ class Opportunist:
                     continue
                 # Leverage gate.
                 if self._is_freerider(state, player, ally_pid):
+                    continue
+                # Patron-defense gate.
+                if self._is_patron_suspect(state, player, ally_pid):
                     continue
                 for intent in press.intents:
                     if not isinstance(intent.declared_order, Move):
@@ -125,6 +138,8 @@ class Opportunist:
             tier2_candidates: list = []
             for v in ally_units:
                 if self._is_freerider(state, player, v.owner):
+                    continue
+                if self._is_patron_suspect(state, player, v.owner):
                     continue
                 stance = self._ally_stance_toward_me(state, player, v.owner)
                 if stance == Stance.HOSTILE:
@@ -214,6 +229,8 @@ class Opportunist:
             if other_pid == player or other_pid in state.eliminated:
                 continue
             if self._is_freerider(state, player, other_pid):
+                continue
+            if self._is_patron_suspect(state, player, other_pid):
                 continue
             lev_against_us = state.leverage(other_pid, player)
             partner_priority.append((lev_against_us, other_pid))
