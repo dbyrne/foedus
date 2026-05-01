@@ -1,13 +1,17 @@
 """CoalitionBuilder — aid-chain maximalist with a permanent tight bloc.
 
-Picks the (up to 2) lowest-id surviving non-self players as a permanent
-bloc. Declares ALLY toward them only, supports their units reactively
+v2: picks the (up to 2) geographically nearest surviving non-self players
+as a permanent bloc, measured by minimum BFS distance between any pair of
+units. Falls back to lowest-id ordering when the agent has no units.
+Lowest-id is used as a tiebreak for equal distances.
+
+Declares ALLY toward bloc members only, supports their units reactively
 (Support without require_dest), and dumps every aid token on bloc partners
 — distributed evenly to keep the leverage ledger balanced. Outsiders get
 NEUTRAL stance and no aid.
 
-The bet: tight committed alliances outscore TrustfulCooperator's soft
-mutualism (current top at mean=165 in 1k-game baseline).
+The bet: geographically-coherent blocs translate the strategy's tight-
+coordination intent into actual map-level pile-ons.
 """
 
 from __future__ import annotations
@@ -35,12 +39,60 @@ class CoalitionBuilder:
     # Bloc helpers
     # ------------------------------------------------------------------
 
+    def _bfs_distance(self, state: GameState, src: int, dst: int) -> int:
+        """Graph distance from src to dst; returns large int if unreachable."""
+        if src == dst:
+            return 0
+        from collections import deque
+        seen = {src}
+        queue: deque[tuple[int, int]] = deque([(src, 0)])
+        while queue:
+            node, d = queue.popleft()
+            for nbr in state.map.neighbors(node):
+                if nbr in seen:
+                    continue
+                if not state.map.is_passable(nbr):
+                    continue
+                if nbr == dst:
+                    return d + 1
+                seen.add(nbr)
+                queue.append((nbr, d + 1))
+        return 10 ** 9
+
     def _bloc_partners(self, state: GameState, player: PlayerId) -> frozenset[PlayerId]:
-        survivors = sorted(
+        """Pick up to 2 nearest surviving partners by min unit-pair BFS distance.
+
+        Falls back to lowest-id ordering for tiebreak and when the agent has
+        no units (no geographic information available).
+        """
+        survivors = [
             p for p in range(state.config.num_players)
             if p != player and p not in state.eliminated
-        )
-        return frozenset(survivors[:2])  # up to 2 lowest-id survivors
+        ]
+        if not survivors:
+            return frozenset()
+
+        my_units = [u for u in state.units.values() if u.owner == player]
+        if not my_units:
+            # No units — fall back to lowest-id.
+            return frozenset(sorted(survivors)[:2])
+
+        distances: list[tuple[int, int]] = []  # (distance, partner_id)
+        for partner in survivors:
+            partner_units = [u for u in state.units.values() if u.owner == partner]
+            if not partner_units:
+                distances.append((10 ** 9, partner))
+                continue
+            min_d = min(
+                self._bfs_distance(state, mu.location, pu.location)
+                for mu in my_units
+                for pu in partner_units
+            )
+            distances.append((min_d, partner))
+
+        distances.sort(key=lambda x: (x[0], x[1]))
+        chosen = [pid for _, pid in distances[:2]]
+        return frozenset(chosen)
 
     # ------------------------------------------------------------------
     # Agent protocol
