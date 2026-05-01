@@ -57,7 +57,7 @@ def engagement_from_records(records: Iterable[Record]) -> dict[str, float]:
             total_orders += c
     out = {k: v / n for k, v in totals.items()}
     if total_orders:
-        for ot in ("Hold", "Move", "SupportMove", "SupportHold"):
+        for ot in ("Hold", "Move", "Support"):
             out[f"{ot.lower()}_pct"] = order_totals.get(ot, 0) / total_orders
     return out
 

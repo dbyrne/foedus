@@ -19,8 +19,7 @@ from foedus.core import (
     Move,
     NodeType,
     Order,
-    SupportHold,
-    SupportMove,
+    Support,
     UnitId,
 )
 from foedus.fog import visible_state_for
@@ -100,9 +99,9 @@ def parse_order(unit_id: UnitId, raw: str) -> Order:
     if cmd == "m" and len(parts) >= 2:
         return Move(dest=int(parts[1]))
     if cmd == "sh" and len(parts) >= 2:
-        return SupportHold(target=int(parts[1]))
+        return Support(target=int(parts[1]))
     if cmd == "sm" and len(parts) >= 3:
-        return SupportMove(target=int(parts[1]), target_dest=int(parts[2]))
+        return Support(target=int(parts[1]), require_dest=int(parts[2]))
     print(f"  (could not parse '{raw}', defaulting to Hold)")
     return Hold()
 

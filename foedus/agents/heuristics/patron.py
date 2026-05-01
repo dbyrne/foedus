@@ -134,7 +134,6 @@ class Patron:
             intent = target_intents[i % len(target_intents)]
             spends.append(AidSpend(
                 target_unit=intent.unit_id,
-                target_order=intent.declared_order,
             ))
         return spends
 

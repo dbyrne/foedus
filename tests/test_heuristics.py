@@ -206,9 +206,9 @@ def test_anti_leader_targets_lowest_pid_on_tie(state_4p):
 
 def test_aggressive_uses_supportmove_when_paired():
     """When two own units are both adjacent to an enemy unit on a supply,
-    Aggressive must produce a (Move, SupportMove) pair, not two solo Moves."""
+    Aggressive must produce a (Move, Support) pair, not two solo Moves."""
     from foedus.core import (
-        GameConfig, GameState, Map, NodeType, SupportMove, Unit,
+        GameConfig, GameState, Map, NodeType, Support, Unit,
     )
     # 4-node line: A - B - C - D. C is a supply with an enemy unit; B and D
     # belong to player 0. A is unowned plain.
@@ -241,13 +241,13 @@ def test_aggressive_uses_supportmove_when_paired():
     )
     orders = Aggressive().choose_orders(state, 0)
     kinds = {type(orders[uid]).__name__ for uid in (0, 1)}
-    assert kinds == {"Move", "SupportMove"}, \
-        f"expected one Move + one SupportMove, got {orders}"
-    # The SupportMove must target the other unit moving to node 2.
-    sm = next(o for o in orders.values() if isinstance(o, SupportMove))
+    assert kinds == {"Move", "Support"}, \
+        f"expected one Move + one Support, got {orders}"
+    # The Support must target the other unit moving to node 2.
+    sm = next(o for o in orders.values() if isinstance(o, Support))
     mv_uid = next(uid for uid, o in orders.items()
-                  if not isinstance(o, SupportMove))
-    assert sm.target == mv_uid and sm.target_dest == 2
+                  if not isinstance(o, Support))
+    assert sm.target == mv_uid
 
 
 # ------- Sycophant -------

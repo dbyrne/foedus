@@ -11,6 +11,8 @@ from foedus.core import (
     PlayerId,
     Unit,
 )
+from foedus.mapgen import generate_map
+from foedus.resolve import initial_state
 
 
 def line_map(n_nodes: int) -> Map:
@@ -94,3 +96,48 @@ def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
                           build_period=build_period, fog_radius=fog_radius,
                           detente_threshold=detente_threshold),
     )
+
+
+def build_state_with_units(layout: dict[int, int],
+                           ownership: dict[int, int],
+                           edges: dict[int, set[int]],
+                           home_assignments: dict[int, int] | None = None,
+                           num_players: int = 2):
+    """Construct a minimal GameState from a positional layout.
+
+    layout: unit_id -> node_id
+    ownership: unit_id -> player_id
+    edges: node_id -> {neighbor_node_id}
+    """
+    nodes = sorted({n for n in layout.values()} | set(edges.keys())
+                   | {n for nbrs in edges.values() for n in nbrs})
+    coords = {n: (n, 0) for n in nodes}
+    edge_map = {n: frozenset(edges.get(n, set())) for n in nodes}
+    node_types = {n: NodeType.PLAIN for n in nodes}
+    if home_assignments:
+        for n in home_assignments:
+            node_types[n] = NodeType.HOME
+    m = Map(coords=coords, edges=edge_map, node_types=node_types,
+            home_assignments=home_assignments or {})
+    units = {
+        u_id: Unit(id=u_id, owner=ownership[u_id], location=node)
+        for u_id, node in layout.items()
+    }
+    cfg = GameConfig(num_players=num_players, max_turns=10, seed=0)
+    state = GameState(
+        turn=0, map=m, units=units,
+        ownership={n: None for n in nodes},
+        scores={p: 0.0 for p in range(num_players)},
+        eliminated=set(),
+        next_unit_id=max(units) + 1 if units else 0,
+        config=cfg,
+    )
+    return state
+
+
+def simple_two_player_state():
+    """Minimal 2-player initial state on a small procedural map. Used by
+    intent-dependency and live-press tests."""
+    cfg = GameConfig(num_players=2, map_radius=2, seed=1)
+    m = generate_map(cfg.num_players, seed=cfg.seed)
+    return initial_state(cfg, m)

@@ -11,7 +11,7 @@ Strategy:
   Orders: for each owned unit u, if any other player's declared Intent
     (read from state.round_press_pending) is a Move-on-supply that u
     is adjacent to, AND that player's stance toward us is ALLY (or
-    NEUTRAL), emit SupportMove(target=their_unit, target_dest=that_supply).
+    NEUTRAL), emit Support(target=their_unit).
     Remaining own units fall back to GreedyHold.
 """
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.core import (
-    GameState, Move, Order, PlayerId, Press, Stance, SupportMove, UnitId,
+    GameState, Move, Order, PlayerId, Press, Stance, Support, UnitId,
 )
 
 
@@ -61,10 +61,7 @@ class Cooperator:
                     target_unit = state.units.get(intent.unit_id)
                     if target_unit is None or target_unit.owner != other_pid:
                         continue
-                    orders[u.id] = SupportMove(
-                        target=intent.unit_id,
-                        target_dest=order.dest,
-                    )
+                    orders[u.id] = Support(target=intent.unit_id)
                     used.add(u.id)
                     break
         # Remaining own units: fall back to GreedyHold.
@@ -160,7 +157,6 @@ class Cooperator:
                         continue
                     spends.append(AidSpend(
                         target_unit=intent.unit_id,
-                        target_order=order,
                     ))
                     used.add(u.id)
                     break

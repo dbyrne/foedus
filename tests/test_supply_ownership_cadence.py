@@ -19,7 +19,7 @@ from foedus.core import (
     Map,
     Move,
     NodeType,
-    SupportMove,
+    Support,
     Unit,
 )
 from foedus.resolve import resolve_turn
@@ -49,7 +49,7 @@ def test_dislodge_flips_immediately() -> None:
     orders = {
         0: {0: Hold()},
         1: {1: Move(dest=2),
-            2: SupportMove(target=1, target_dest=2)},
+            2: Support(target=1, require_dest=2)},
     }
     s2 = resolve_turn(s, orders)
     assert s2.ownership[2] == 1, (
@@ -72,7 +72,7 @@ def test_dislodge_then_vacate_keeps_dislodger_ownership() -> None:
     orders_t1 = {
         0: {0: Hold()},
         1: {1: Move(dest=2),
-            2: SupportMove(target=1, target_dest=2)},
+            2: Support(target=1, require_dest=2)},
     }
     s2 = resolve_turn(s, orders_t1)
     assert s2.ownership[2] == 1
@@ -176,7 +176,7 @@ def test_three_way_contest_winner_must_hold_to_flip() -> None:
     # n2 unowned (None).
     orders = {
         1: {1: Move(dest=2),
-            2: SupportMove(target=1, target_dest=2)},
+            2: Support(target=1, require_dest=2)},
     }
     s2 = resolve_turn(s, orders)
     # u1 wins the move (no contest), arrives at n2.  But it's a walk-in

@@ -16,17 +16,22 @@ from typing import Any
 
 from foedus.core import (
     AidSpend,
+    DoneCleared,
     GameConfig,
     GameState,
     Hold,
+    Intent,
+    IntentRevised,
     Map,
     Move,
     NodeType,
     Order,
-    SupportHold,
-    SupportMove,
+    Support,
+    SupportLapsed,
     Unit,
 )
+
+WIRE_PROTOCOL_VERSION = 3
 
 
 # --- Map / Config ---
@@ -110,6 +115,11 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         # round_press_pending) are also omitted from this minimal wire format
         # — they're not needed for `choose_orders`. Add when a client
         # (e.g. foedus-godot) needs them.
+        # Task 11: new event lists from the alliance/support/intent redesign.
+        "support_lapses": [serialize_support_lapsed(e) for e in state.support_lapses],
+        "intent_revisions": [serialize_intent_revised(e) for e in state.intent_revisions],
+        "done_clears": [serialize_done_cleared(e) for e in state.done_clears],
+        "wire_version": WIRE_PROTOCOL_VERSION,
     }
 
 
@@ -146,6 +156,18 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
         aid_given=aid_given,
         round_aid_pending=round_aid_pending,
         log=[],
+        support_lapses=[
+            deserialize_support_lapsed(e)
+            for e in (data.get("support_lapses") or [])
+        ],
+        intent_revisions=[
+            deserialize_intent_revised(e)
+            for e in (data.get("intent_revisions") or [])
+        ],
+        done_clears=[
+            deserialize_done_cleared(e)
+            for e in (data.get("done_clears") or [])
+        ],
     )
 
 
@@ -157,14 +179,11 @@ def serialize_order(o: Order) -> dict[str, Any]:
         return {"type": "Hold"}
     if isinstance(o, Move):
         return {"type": "Move", "dest": o.dest}
-    if isinstance(o, SupportHold):
-        return {"type": "SupportHold", "target": o.target}
-    if isinstance(o, SupportMove):
-        return {
-            "type": "SupportMove",
-            "target": o.target,
-            "target_dest": o.target_dest,
-        }
+    if isinstance(o, Support):
+        d: dict[str, Any] = {"type": "Support", "target": o.target}
+        if o.require_dest is not None:
+            d["require_dest"] = o.require_dest
+        return d
     raise ValueError(f"unknown Order subclass: {type(o).__name__}")
 
 
@@ -174,10 +193,11 @@ def deserialize_order(data: dict[str, Any]) -> Order:
         return Hold()
     if t == "Move":
         return Move(dest=data["dest"])
-    if t == "SupportHold":
-        return SupportHold(target=data["target"])
-    if t == "SupportMove":
-        return SupportMove(target=data["target"], target_dest=data["target_dest"])
+    if t == "Support":
+        return Support(
+            target=data["target"],
+            require_dest=data.get("require_dest"),
+        )
     raise ValueError(f"unknown Order type: {t!r}")
 
 
@@ -191,21 +211,28 @@ def deserialize_orders(data: dict[str, dict[str, Any]]) -> dict:
 
 
 def serialize_aid_spend(s: AidSpend) -> dict[str, Any]:
-    """Bundle 4: encode an AidSpend (target_unit + target_order) as JSON."""
+    """Bundle 4: encode an AidSpend (target_unit) as JSON."""
     return {
         "target_unit": s.target_unit,
-        "target_order": serialize_order(s.target_order),
     }
 
 
 def deserialize_aid_spend(data: dict[str, Any]) -> AidSpend:
     return AidSpend(
         target_unit=int(data["target_unit"]),
-        target_order=deserialize_order(data["target_order"]),
     )
 
 
-def deserialize_intent(data: dict[str, Any]) -> "Intent":
+def serialize_intent(intent: Intent) -> dict[str, Any]:
+    """Encode an Intent as JSON."""
+    return {
+        "unit_id": intent.unit_id,
+        "declared_order": serialize_order(intent.declared_order),
+        "visible_to": sorted(intent.visible_to) if intent.visible_to is not None else None,
+    }
+
+
+def deserialize_intent(data: dict[str, Any]) -> Intent:
     """Parse a JSON intent payload into a domain `Intent` object.
 
     Schema:
@@ -215,7 +242,6 @@ def deserialize_intent(data: dict[str, Any]) -> "Intent":
     scripts that read intents from JSON. Reuses `deserialize_order`
     for the inner declared_order.
     """
-    from foedus.core import Intent
     unit_id = int(data["unit_id"])
     declared_order = deserialize_order(data["declared_order"])
     vt_raw = data.get("visible_to")
@@ -227,4 +253,64 @@ def deserialize_intent(data: dict[str, Any]) -> "Intent":
         unit_id=unit_id,
         declared_order=declared_order,
         visible_to=visible_to,
+    )
+
+
+# --- New event types (Task 11) ---
+
+
+def serialize_intent_revised(ev: IntentRevised) -> dict[str, Any]:
+    return {
+        "turn": ev.turn,
+        "player": ev.player,
+        "intent": serialize_intent(ev.intent) if ev.intent is not None else None,
+        "previous": serialize_intent(ev.previous) if ev.previous is not None else None,
+        "visible_to": sorted(ev.visible_to) if ev.visible_to is not None else None,
+    }
+
+
+def deserialize_intent_revised(data: dict[str, Any]) -> IntentRevised:
+    vt_raw = data.get("visible_to")
+    return IntentRevised(
+        turn=int(data["turn"]),
+        player=int(data["player"]),
+        intent=deserialize_intent(data["intent"]) if data.get("intent") is not None else None,
+        previous=deserialize_intent(data["previous"]) if data.get("previous") is not None else None,
+        visible_to=frozenset(int(x) for x in vt_raw) if vt_raw is not None else None,
+    )
+
+
+def serialize_support_lapsed(ev: SupportLapsed) -> dict[str, Any]:
+    return {
+        "turn": ev.turn,
+        "supporter": ev.supporter,
+        "target": ev.target,
+        "reason": ev.reason,
+    }
+
+
+def deserialize_support_lapsed(data: dict[str, Any]) -> SupportLapsed:
+    return SupportLapsed(
+        turn=int(data["turn"]),
+        supporter=int(data["supporter"]),
+        target=int(data["target"]),
+        reason=data["reason"],
+    )
+
+
+def serialize_done_cleared(ev: DoneCleared) -> dict[str, Any]:
+    return {
+        "turn": ev.turn,
+        "player": ev.player,
+        "source_player": ev.source_player,
+        "source_unit": ev.source_unit,
+    }
+
+
+def deserialize_done_cleared(data: dict[str, Any]) -> DoneCleared:
+    return DoneCleared(
+        turn=int(data["turn"]),
+        player=int(data["player"]),
+        source_player=int(data["source_player"]),
+        source_unit=int(data["source_unit"]),
     )

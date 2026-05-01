@@ -278,6 +278,39 @@ class GameSession:
             "new_turn": self.state.turn,
         }
 
+    def apply_press_update(self, player: PlayerId,
+                           press_raw: dict,
+                           aid_spends_raw: list) -> None:
+        """Submit press tokens + aid spends WITHOUT signaling done.
+
+        Allows revisable submissions during the chat phase. The engine emits
+        IntentRevised events on every change and auto-clears signal_done for
+        any dependent player whose committed plans referenced the revised
+        (player, unit). Callers must guard against duplicate commits
+        (409) before calling.
+        """
+        from foedus.core import Press, Stance
+        from foedus.press import submit_aid_spends
+        from foedus.remote.wire import deserialize_aid_spend, deserialize_intent
+
+        # Parse stance.
+        stance: dict[int, Stance] = {}
+        for k, v in (press_raw.get("stance") or {}).items():
+            stance[int(k)] = Stance(v)
+
+        # Parse intents.
+        intents = []
+        for it_raw in (press_raw.get("intents") or []):
+            intents.append(deserialize_intent(it_raw))
+
+        press = Press(stance=stance, intents=intents)
+        self.state = submit_press_tokens(self.state, player, press)
+
+        # Parse + apply aid spends.
+        if aid_spends_raw:
+            spends = [deserialize_aid_spend(sp) for sp in aid_spends_raw]
+            self.state = submit_aid_spends(self.state, player, spends)
+
     def submit_human_orders(self, player: PlayerId,
                             orders: dict[UnitId, Order]) -> None:
         if not self.is_human(player):

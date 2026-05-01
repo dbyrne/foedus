@@ -14,7 +14,7 @@ Strategy:
     partners with higher `aid_given[partner→self]` (i.e. partners who have
     given us aid; reciprocate to keep leverage balanced) over partners
     we've already aided heavily.
-  Orders: SupportMove for declared cross-player Move-on-supply intents we
+  Orders: Support for declared cross-player Move-on-supply intents we
     can reach geographically (same as Cooperator). Else fall back to
     GreedyHold.
 """
@@ -31,7 +31,7 @@ from foedus.core import (
     PlayerId,
     Press,
     Stance,
-    SupportMove,
+    Support,
     UnitId,
 )
 
@@ -69,10 +69,7 @@ class TrustfulCooperator:
                     target_unit = state.units.get(intent.unit_id)
                     if target_unit is None or target_unit.owner != other_pid:
                         continue
-                    orders[u.id] = SupportMove(
-                        target=intent.unit_id,
-                        target_dest=order.dest,
-                    )
+                    orders[u.id] = Support(target=intent.unit_id)
                     used.add(u.id)
                     break
         fallback = self._inner.choose_orders(state, player)
@@ -133,7 +130,6 @@ class TrustfulCooperator:
                 priority = float(owed)
                 candidates.append((priority, AidSpend(
                     target_unit=intent.unit_id,
-                    target_order=intent.declared_order,
                 )))
         # Sort by descending priority, take up to balance.
         candidates.sort(key=lambda c: -c[0])

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from foedus.core import GameState, Hold, Move, SupportHold, SupportMove, Unit
+from foedus.core import GameState, Hold, Move, Support, Unit
 from foedus.press import _stagnation_cost_deltas
 
 from tests.helpers import line_map, make_state
@@ -42,7 +42,7 @@ def test_supporthold_only_still_passive() -> None:
         Unit(2, 1, 4),
     ], num_players=2)
     s.config.stagnation_cost = 1.0
-    canon = {0: SupportHold(target=1), 1: Hold(), 2: Hold()}
+    canon = {0: Support(target=1), 1: Hold(), 2: Hold()}
     deltas = _stagnation_cost_deltas(canon, s)
     assert deltas[0] == -1.0
     assert deltas[1] == -1.0
@@ -58,7 +58,7 @@ def test_supportmove_counts_as_active() -> None:
     s.config.stagnation_cost = 1.0
     canon = {
         0: Move(dest=1),
-        1: SupportMove(target=0, target_dest=1),
+        1: Support(target=0, require_dest=1),
         2: Hold(),
     }
     deltas = _stagnation_cost_deltas(canon, s)

@@ -34,8 +34,7 @@ from foedus.core import (
     Order,
     Press,
     Stance,
-    SupportHold,
-    SupportMove,
+    Support,
     UnitId,
 )
 from foedus.fog import visible_state_for
@@ -138,10 +137,10 @@ def order_to_str(o: Order) -> str:
         return "Hold"
     if isinstance(o, Move):
         return f"Move(dest={o.dest})"
-    if isinstance(o, SupportHold):
-        return f"SupportHold(target=u{o.target})"
-    if isinstance(o, SupportMove):
-        return f"SupportMove(target=u{o.target}, target_dest={o.target_dest})"
+    if isinstance(o, Support):
+        if o.require_dest is None:
+            return f"Support(target=u{o.target})"
+        return f"Support(target=u{o.target}, require_dest={o.require_dest})"
     return str(o)
 
 
@@ -151,11 +150,10 @@ def parse_order(d: dict) -> Order:
         return Hold()
     if t == "Move":
         return Move(dest=int(d["dest"]))
-    if t == "SupportHold":
-        return SupportHold(target=int(d["target"]))
-    if t == "SupportMove":
-        return SupportMove(target=int(d["target"]),
-                           target_dest=int(d["target_dest"]))
+    if t == "Support":
+        require_dest = d.get("require_dest")
+        return Support(target=int(d["target"]),
+                       require_dest=int(require_dest) if require_dest is not None else None)
     raise ValueError(f"unknown order type: {t}")
 
 
@@ -383,8 +381,8 @@ def cmd_prompt_commit(player: int) -> None:
     print("Order objects:")
     print('  {"type": "Hold"}')
     print('  {"type": "Move", "dest": <node_id>}')
-    print('  {"type": "SupportHold", "target": <unit_id>}')
-    print('  {"type": "SupportMove", "target": <unit_id>, "target_dest": <node_id>}')
+    print('  {"type": "Support", "target": <unit_id>}')
+    print('  {"type": "Support", "target": <unit_id>, "require_dest": <node_id>}')
     print()
     print("Notes:")
     print("- press.stance / press.intents are optional; default empty.")

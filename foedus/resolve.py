@@ -27,8 +27,8 @@ from foedus.core import (
     NodeType,
     Order,
     PlayerId,
-    SupportHold,
-    SupportMove,
+    Support,
+    SupportLapsed,
     Unit,
     UnitId,
 )
@@ -108,33 +108,89 @@ def _normalize(state: GameState, u_id: UnitId, order: Order,
             return Hold()
         return order
 
-    if isinstance(order, SupportHold):
+    if isinstance(order, Support):
         target = state.units.get(order.target)
         if target is None or target.id == u_id:
             return Hold()
-        if not m.is_adjacent(unit.location, target.location):
-            return Hold()
         target_order = all_orders.get(order.target, Hold())
-        if not isinstance(target_order, Hold):
-            return Hold()
-        return order
 
-    if isinstance(order, SupportMove):
-        target = state.units.get(order.target)
-        if target is None or target.id == u_id:
-            return Hold()
-        if not m.is_adjacent(unit.location, order.target_dest):
-            return Hold()
-        target_order = all_orders.get(order.target, Hold())
-        if not isinstance(target_order, Move) or target_order.dest != order.target_dest:
-            return Hold()
-        # Refuse to support an attack on one's own unit (self-dislodge prevention).
-        defender = state.unit_at(order.target_dest)
-        if defender is not None and defender.owner == unit.owner:
+        # Pin variant: behaves like legacy SupportMove, exact-match required.
+        if order.require_dest is not None:
+            if not m.is_adjacent(unit.location, order.require_dest):
+                return Hold()
+            if not isinstance(target_order, Move) or target_order.dest != order.require_dest:
+                return Hold()
+            defender = state.unit_at(order.require_dest)
+            if defender is not None and defender.owner == unit.owner:
+                return Hold()
+            return order
+
+        # Reactive default: support whatever target's canon order does.
+        if isinstance(target_order, Move):
+            if not m.is_adjacent(unit.location, target_order.dest):
+                return Hold()
+            defender = state.unit_at(target_order.dest)
+            if defender is not None and defender.owner == unit.owner:
+                return Hold()
+            return order
+        # target holds, supports, or supports-a-supporter: support lands at
+        # target's location (E6 — supporting a supporter is supporting them
+        # in place).
+        if not m.is_adjacent(unit.location, target.location):
             return Hold()
         return order
 
     return Hold()
+
+
+def _normalize_with_reason(
+    state: GameState, u_id: UnitId, order: Order,
+    all_orders: dict[UnitId, Order],
+) -> tuple[Order, str | None]:
+    """Same as _normalize but returns (canon, lapse_reason).
+
+    lapse_reason is one of the SupportLapsed.reason literals when a Support
+    gets normalized to Hold; None for successful normalizations or
+    non-support orders.
+    """
+    unit = state.units[u_id]
+    m = state.map
+
+    if isinstance(order, (Hold, Move)):
+        return _normalize(state, u_id, order, all_orders), None
+
+    if isinstance(order, Support):
+        target = state.units.get(order.target)
+        if target is None:
+            return Hold(), "target_destroyed"
+        if target.id == u_id:
+            return Hold(), "geometry_break"  # self-support
+        target_order = all_orders.get(order.target, Hold())
+
+        if order.require_dest is not None:
+            if not m.is_adjacent(unit.location, order.require_dest):
+                return Hold(), "geometry_break"
+            if not isinstance(target_order, Move) or target_order.dest != order.require_dest:
+                return Hold(), "pin_mismatch"
+            defender = state.unit_at(order.require_dest)
+            if defender is not None and defender.owner == unit.owner:
+                return Hold(), "self_dislodge_blocked"
+            return order, None
+
+        if isinstance(target_order, Move):
+            if not m.is_adjacent(unit.location, target_order.dest):
+                return Hold(), "geometry_break"
+            defender = state.unit_at(target_order.dest)
+            if defender is not None and defender.owner == unit.owner:
+                return Hold(), "self_dislodge_blocked"
+            return order, None
+        # Hold / Support — support lands at target's location.
+        if not m.is_adjacent(unit.location, target.location):
+            return Hold(), "geometry_break"
+        return order, None
+
+    # Non-support orders (Hold/Move) — no lapse reason.
+    return _normalize(state, u_id, order, all_orders), None
 
 
 # --- Support-cut detection -------------------------------------------------
@@ -181,11 +237,20 @@ def _compute_cuts(canon: dict[UnitId, Order], state: GameState) -> set[UnitId]:
     cut: set[UnitId] = set()
     for u_id, order in canon.items():
         unit = state.units[u_id]
-        if isinstance(order, SupportHold):
-            if _is_cut(unit, None, canon, state):
-                cut.add(u_id)
-        elif isinstance(order, SupportMove):
-            if _is_cut(unit, order.target_dest, canon, state):
+        if isinstance(order, Support):
+            target = state.units.get(order.target)
+            target_order = canon.get(order.target, Hold()) if target else Hold()
+            # Determine the "exclude_from" — for a reactive support of a Move,
+            # the supporter is helping at target's destination, so attacks
+            # FROM that destination shouldn't count as cuts (matches the
+            # SupportMove convention).
+            if order.require_dest is not None:
+                exclude = order.require_dest
+            elif isinstance(target_order, Move):
+                exclude = target_order.dest
+            else:
+                exclude = None
+            if _is_cut(unit, exclude, canon, state):
                 cut.add(u_id)
     return cut
 
@@ -195,11 +260,11 @@ def _compute_cuts(canon: dict[UnitId, Order], state: GameState) -> set[UnitId]:
 
 def _compute_aid_per_unit(state: GameState,
                           canon: dict[UnitId, Order]) -> dict[UnitId, int]:
-    """Bundle 4: count AidSpends that landed on each unit's canon order.
+    """Bundle 4 (reactive aid): count AidSpends that landed on each unit.
 
-    A spend "lands" iff the recipient's canon order this turn equals the
-    spend's `target_order` exactly. Multiple spenders aiding the same unit
-    stack additively.
+    A spend lands iff the target unit still exists (i.e., its owner is not
+    eliminated and it appears in canon). Multiple spenders aiding the same
+    unit stack additively. No target_order match required.
     """
     out: dict[UnitId, int] = defaultdict(int)
     for spender, spends in state.round_aid_pending.items():
@@ -210,10 +275,9 @@ def _compute_aid_per_unit(state: GameState,
             if target_unit is None:
                 continue
             if target_unit.owner == spender:
-                continue  # can't aid self
-            recipient_canon = canon.get(spend.target_unit)
-            if recipient_canon != spend.target_order:
-                continue  # didn't land
+                continue  # safeguard
+            if spend.target_unit not in canon:
+                continue
             out[spend.target_unit] += 1
     return dict(out)
 
@@ -267,9 +331,14 @@ def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
             for v_id, v_order in canon.items():
                 if v_id == u_id or v_id in cut:
                     continue
-                if (isinstance(v_order, SupportMove)
-                        and v_order.target == u_id
-                        and v_order.target_dest == order.dest):
+                if isinstance(v_order, Support) and v_order.target == u_id:
+                    # Reactive support backing this move: lands iff target's
+                    # canon move-dest matches the supporter's geometry.
+                    if v_order.require_dest is not None:
+                        if v_order.require_dest != order.dest:
+                            continue
+                    # Geometry already validated in _normalize; if v_order
+                    # made it into canon as a non-Hold, it lands.
                     s += 1 + aid_per_unit.get(v_id, 0)
             move_str[u_id] = s
         else:
@@ -277,7 +346,8 @@ def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
             for v_id, v_order in canon.items():
                 if v_id == u_id or v_id in cut:
                     continue
-                if isinstance(v_order, SupportHold) and v_order.target == u_id:
+                if isinstance(v_order, Support) and v_order.target == u_id:
+                    # Reactive support backing this hold (target is holding).
                     s += 1 + aid_per_unit.get(v_id, 0)
             hold_str[u_id] = s
     return move_str, hold_str, leverage_events
@@ -461,9 +531,21 @@ def _resolve_orders(state: GameState,
         flat.setdefault(u_id, Hold())
 
     # 2. Normalize.
-    canon: dict[UnitId, Order] = {
-        u_id: _normalize(state, u_id, o, flat) for u_id, o in flat.items()
-    }
+    canon: dict[UnitId, Order] = {}
+    lapses: list[SupportLapsed] = []
+    for u_id, o in flat.items():
+        c, reason = _normalize_with_reason(state, u_id, o, flat)
+        canon[u_id] = c
+        if reason is not None and isinstance(o, Support):
+            target_id = (
+                o.target if hasattr(o, "target") else u_id
+            )
+            lapses.append(SupportLapsed(
+                turn=state.turn + 1,
+                supporter=u_id,
+                target=target_id,
+                reason=reason,  # type: ignore[arg-type]
+            ))
 
     # 3. Cuts + strengths.
     cut = _compute_cuts(canon, state)
@@ -473,8 +555,15 @@ def _resolve_orders(state: GameState,
     for supporter_id in sorted(cut):
         supporter = state.units[supporter_id]
         s_order = canon[supporter_id]
-        exclude = (s_order.target_dest
-                   if isinstance(s_order, SupportMove) else None)
+        # For Support: use require_dest or target's canon move-dest as exclude.
+        if isinstance(s_order, Support):
+            if s_order.require_dest is not None:
+                exclude: NodeId | None = s_order.require_dest
+            else:
+                tgt_order = canon.get(s_order.target)
+                exclude = tgt_order.dest if isinstance(tgt_order, Move) else None
+        else:
+            exclude = None
         cutters = _find_cutters(supporter, exclude, canon, state)
         if cutters:
             cutter_s = ", ".join(f"u{c}" for c in sorted(cutters))
@@ -665,31 +754,33 @@ def _resolve_orders(state: GameState,
                 return True
             spends = state.round_aid_pending.get(supporter_pid, [])
             for sp in spends:
-                if (sp.target_unit == mover_unit
-                        and isinstance(sp.target_order, Move)
-                        and sp.target_order.dest == mover_dest):
+                if sp.target_unit == mover_unit:
                     return True
             return False
 
         # Build a quick lookup: (target_unit_id, target_dest) -> [supporter pids]
         support_index: dict[tuple[UnitId, NodeId], list[PlayerId]] = defaultdict(list)
         for sup_id, s_order in canon.items():
-            if not isinstance(s_order, SupportMove):
+            if not isinstance(s_order, Support):
                 continue
             sup_unit = state.units.get(sup_id)
-            if sup_unit is None:
+            if sup_unit is None or sup_id in cut:
                 continue
-            # Only count if the support wasn't cut.
-            if sup_id in cut:
-                continue
-            # Cross-player only.
             mover = state.units.get(s_order.target)
             if mover is None or mover.owner == sup_unit.owner:
                 continue
-            # Bundle 4: gate on aid-spend.
-            if not _is_aided(sup_unit.owner, s_order.target, s_order.target_dest):
+            # Determine the supported destination.
+            # Reactive Support: use target's canon move-dest if any.
+            tgt_order = canon.get(s_order.target)
+            if not isinstance(tgt_order, Move):
                 continue
-            support_index[(s_order.target, s_order.target_dest)].append(
+            supported_dest = tgt_order.dest
+            if s_order.require_dest is not None and s_order.require_dest != supported_dest:
+                continue
+            # Bundle 4: gate on aid-spend.
+            if not _is_aided(sup_unit.owner, s_order.target, supported_dest):
+                continue
+            support_index[(s_order.target, supported_dest)].append(
                 sup_unit.owner
             )
         for u_id, order in canon.items():
@@ -754,18 +845,22 @@ def _resolve_orders(state: GameState,
                 )
             if sr != 0.0:
                 for sup_id, s_order in canon.items():
-                    if not isinstance(s_order, SupportMove):
+                    if not isinstance(s_order, Support):
                         continue
                     if sup_id in cut:
                         continue
-                    if (s_order.target != attacker_id
-                            or s_order.target_dest != defender.location):
+                    if s_order.target != attacker_id:
+                        continue
+                    tgt_order = canon.get(s_order.target)
+                    if (not isinstance(tgt_order, Move)
+                            or tgt_order.dest != defender.location):
+                        continue
+                    if (s_order.require_dest is not None
+                            and s_order.require_dest != defender.location):
                         continue
                     sup_unit = state.units.get(sup_id)
-                    if sup_unit is None:
+                    if sup_unit is None or sup_unit.owner == attacker.owner:
                         continue
-                    if sup_unit.owner == attacker.owner:
-                        continue  # cross-player only
                     new_scores[sup_unit.owner] = (
                         new_scores.get(sup_unit.owner, 0.0) + sr
                     )
@@ -798,6 +893,7 @@ def _resolve_orders(state: GameState,
         next_unit_id=next_id,
         config=state.config,
         log=state.log + log,
+        support_lapses=lapses,
     )
 
 

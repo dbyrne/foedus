@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 PlayerId: TypeAlias = int
 NodeId: TypeAlias = int
@@ -37,17 +37,22 @@ class Move:
 
 
 @dataclass(frozen=True)
-class SupportHold:
+class Support:
+    """Reactive support order. Adapts to target_unit's actual canon order at
+    finalize.
+
+    If `require_dest` is None (default), the support lands on whatever the
+    target unit actually does this turn, subject to geometric reachability
+    (supporter must be adjacent to the target's destination if it moves, or
+    to the target itself if it holds). If `require_dest` is set, behaves
+    like the legacy SupportMove: lands only when the target moves to exactly
+    that destination, otherwise lapses to Hold.
+    """
     target: UnitId
+    require_dest: NodeId | None = None
 
 
-@dataclass(frozen=True)
-class SupportMove:
-    target: UnitId
-    target_dest: NodeId
-
-
-Order: TypeAlias = Hold | Move | SupportHold | SupportMove
+Order: TypeAlias = Hold | Move | Support
 
 
 class Stance(Enum):
@@ -107,15 +112,15 @@ class ChatMessage:
 class AidSpend:
     """A token spent on an ally's order this turn.
 
-    `target_unit` is the unit being aided; `target_order` is the order the
-    spender expects the recipient to issue. The aid only "lands" (yields
-    +1 strength on the recipient's order, fires alliance bonus eligibility,
-    and increments the trust ledger) if the recipient's canon order this
-    turn matches `target_order` exactly. Mismatches consume the token but
-    have no other effect — this incentivizes accurate coordination.
+    `target_unit` is the unit being aided. The aid lands on whatever order
+    the recipient submits (reactive, by symmetry with Support). It yields
+    +1 strength on the recipient's canon order, makes the supporter eligible
+    for the alliance bonus when the recipient's order is a Move that captures
+    a supply, and increments the trust ledger entry (spender, recipient).
+    Tokens are consumed at finalize regardless of whether the recipient's
+    unit survives long enough for the aid to matter.
     """
     target_unit: UnitId
-    target_order: "Order"
 
 
 @dataclass(frozen=True)
@@ -130,6 +135,62 @@ class BetrayalObservation:
     betrayer: PlayerId
     intent: Intent
     actual_order: Order
+
+
+@dataclass(frozen=True)
+class IntentRevised:
+    """Emitted when a player submits, modifies, or retracts an intent during
+    negotiation.
+
+    Sent to each player in `visible_to`, which mirrors the revised intent's
+    own `visible_to` (None = public broadcast to all surviving non-senders;
+    frozenset = named recipients).
+
+    `intent` is the new value (None if retracted); `previous` is the prior
+    value (None if this is a first declaration for the unit this round).
+    Exactly one of `intent` / `previous` may be None at a time; both being
+    None is invalid.
+    """
+    turn: int
+    player: PlayerId
+    intent: Intent | None     # None = retraction
+    previous: Intent | None   # None = first declaration this round for this unit
+    visible_to: frozenset[PlayerId] | None  # mirrors intent.visible_to
+
+
+@dataclass(frozen=True)
+class SupportLapsed:
+    """Emitted at finalize when a Support could not land.
+
+    `reason` taxonomy:
+      - "geometry_break": supporter not adjacent to target's actual result
+      - "target_destroyed": target dislodged before its order resolved
+      - "pin_mismatch": require_dest set, target went elsewhere
+      - "self_dislodge_blocked": support would dislodge supporter's own unit
+    """
+    turn: int
+    supporter: UnitId
+    target: UnitId
+    reason: Literal[
+        "geometry_break",
+        "target_destroyed",
+        "pin_mismatch",
+        "self_dislodge_blocked",
+    ]
+
+
+@dataclass(frozen=True)
+class DoneCleared:
+    """Emitted when a player's signal_done flag auto-clears.
+
+    Triggered when an ally revises an intent that one of this player's
+    committed plans (Support or AidSpend) referenced. Only direct
+    dependents auto-clear — there is no transitive cascade.
+    """
+    turn: int
+    player: PlayerId         # whose done flag cleared
+    source_player: PlayerId  # whose revision triggered the clear
+    source_unit: UnitId      # which unit's intent the dependency referenced
 
 
 @dataclass(frozen=True)
@@ -291,6 +352,17 @@ class GameState:
     round_press_pending: dict[PlayerId, "Press"] = field(default_factory=dict)
     round_done: set[PlayerId] = field(default_factory=set)
     chat_done: set[PlayerId] = field(default_factory=set)
+
+    # Reactive-support lapses for the *current* round, populated by
+    # _resolve_orders. Cleared by finalize_round each round. UI/agent
+    # consumers read this between turns to surface "your support didn't
+    # land because X".
+    support_lapses: list["SupportLapsed"] = field(default_factory=list)
+
+    # Round-scoped event channels for live-press observers. Cleared by
+    # finalize_round each round.
+    intent_revisions: list["IntentRevised"] = field(default_factory=list)
+    done_clears: list["DoneCleared"] = field(default_factory=list)
 
     # --- Bundle 4: aid resource + permanent leverage ledger ---
     # Per-player current aid-token balances. Generated each turn from

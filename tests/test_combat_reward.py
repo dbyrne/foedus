@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from dataclasses import replace
 
-from foedus.core import GameConfig, Hold, Map, Move, NodeType, SupportMove, Unit
+from foedus.core import GameConfig, Hold, Map, Move, NodeType, Support, Unit
 from foedus.resolve import resolve_turn
 
 from tests.helpers import line_map, make_state
@@ -104,7 +104,7 @@ def test_supporter_reward_for_cross_player_support() -> None:
         s_after = resolve_turn(s, {
             0: {0: Move(dest=2)},
             1: {1: Hold()},
-            2: {2: SupportMove(target=0, target_dest=2)},
+            2: {2: Support(target=0, require_dest=2)},
         })
         # u1 dislodged.
         assert 1 not in s_after.units
@@ -113,7 +113,7 @@ def test_supporter_reward_for_cross_player_support() -> None:
         #   Wait: home_assignments[3] = 1, but unit at 3 is u2(p2). make_state's
         #   precedence: home seeds first, then unit-location overrides.
         # - So initial ownership[3] = 2 (unit override).
-        # - End of turn: u2 stays at 3 (SupportMove is non-Move). Rule b:
+        # - End of turn: u2 stays at 3 (Support is non-Move). Rule b:
         #   start owner of HOME 3 = 2 (from unit override). End occupant
         #   u2(p2). Same player → ownership[3] = 2.
         # - p2 supply_count = 1 (home node 3 owned by p2).
@@ -143,17 +143,17 @@ def test_failed_attack_no_combat_reward() -> None:
 
 
 def test_same_owner_support_no_supporter_reward() -> None:
-    """Same-owner SupportMove does NOT trigger supporter_combat_reward
+    """Same-owner Support does NOT trigger supporter_combat_reward
     (no double-dip — the attacker's player already got combat_reward).
     """
     # 2-player diamond. p0 has u0 at 0 + u1 at 1; p1 has u2 at 2 (target).
-    # u0 SupportMoves u1's attack on 2 (u0 is at 0, adjacent to 2).
+    # u0 supports u1's attack on 2 (u0 is at 0, adjacent to 2).
     m = _diamond()
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 0, 1), Unit(2, 1, 2)],
                    num_players=2, max_turns=99)
     pre_p0 = s.scores[0]
     s_after = resolve_turn(s, {
-        0: {0: SupportMove(target=1, target_dest=2), 1: Move(dest=2)},
+        0: {0: Support(target=1, require_dest=2), 1: Move(dest=2)},
         1: {2: Hold()},
     })
     # Verify: u2 dislodged.
@@ -163,7 +163,7 @@ def test_same_owner_support_no_supporter_reward() -> None:
     # - Supplies owned at end: home (0) + node 1 (rule b: u0 stayed) + node 2 (rule a: dislodged)
     #   = 3 supply scoring.
     # - combat_reward: +1 (u1's attack succeeded as a Move)
-    # - supporter_combat_reward: 0 (u0's SupportMove was same-owner — skipped)
+    # - supporter_combat_reward: 0 (u0's Support was same-owner — skipped)
     # - Total: +4.
     # Plus u1 was at node 1 originally (SUPPLY). u1 moved to 2. Node 1 end-of-turn
     # has no unit. Rule b: start owner of node 1 was 0 (u1 there), end occupant
@@ -183,7 +183,7 @@ def test_supporter_reward_disabled_with_zero() -> None:
         s_after = resolve_turn(s, {
             0: {0: Move(dest=2)},
             1: {1: Hold()},
-            2: {2: SupportMove(target=0, target_dest=2)},
+            2: {2: Support(target=0, require_dest=2)},
         })
         assert 1 not in s_after.units
         # P2 owns home node 3 only → 1 supply scoring + 0 supporter reward = 1.

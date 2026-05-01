@@ -22,7 +22,7 @@ from pathlib import Path
 
 from foedus.agents.heuristics import ROSTER
 from foedus.core import (
-    Archetype, GameConfig, Hold, Move, SupportHold, SupportMove,
+    Archetype, GameConfig, Hold, Move, Support,
 )
 from foedus.mapgen import generate_map
 from foedus.press import (
@@ -34,7 +34,7 @@ from foedus.resolve import initial_state
 
 ORDER_TYPE_NAMES = {
     Hold: "Hold", Move: "Move",
-    SupportHold: "SupportHold", SupportMove: "SupportMove",
+    Support: "Support",
 }
 
 

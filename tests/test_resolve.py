@@ -5,8 +5,7 @@ from __future__ import annotations
 from foedus.core import (
     Hold,
     Move,
-    SupportHold,
-    SupportMove,
+    Support,
     Unit,
 )
 from foedus.resolve import resolve_turn
@@ -37,7 +36,7 @@ def test_supported_attack_dislodges() -> None:
         Unit(2, 1, 1),
     ])
     out = resolve_turn(s, {
-        0: {0: Move(dest=1), 1: SupportMove(target=0, target_dest=1)},
+        0: {0: Move(dest=1), 1: Support(target=0, require_dest=1)},
         1: {2: Hold()},
     })
     assert out.units[0].location == 1
@@ -54,7 +53,7 @@ def test_support_cut_by_attack() -> None:
         Unit(3, 1, 3),
     ])
     out = resolve_turn(s, {
-        0: {0: Move(dest=1), 1: SupportMove(target=0, target_dest=1)},
+        0: {0: Move(dest=1), 1: Support(target=0, require_dest=1)},
         1: {2: Hold(), 3: Move(dest=2)},
     })
     # u3's attack on u1 cuts u1's support. u0 attacks u2 with strength 1 vs 1, bounces.
@@ -108,7 +107,7 @@ def test_head_to_head_with_support_wins() -> None:
         Unit(2, 0, 3),
     ])
     out = resolve_turn(s, {
-        0: {0: Move(dest=2), 2: SupportMove(target=0, target_dest=2)},
+        0: {0: Move(dest=2), 2: Support(target=0, require_dest=2)},
         1: {1: Move(dest=1)},
     })
     # u0 strength 2, u1 strength 1. u0 dislodges u1 in head-to-head.
@@ -148,14 +147,14 @@ def test_same_owner_attack_cannot_dislodge() -> None:
     ])
     out = resolve_turn(s, {
         0: {0: Move(dest=1), 1: Hold()},
-        1: {2: SupportMove(target=0, target_dest=1)},
+        1: {2: Support(target=0, require_dest=1)},
     })
     assert out.units[0].location == 0
     assert out.units[1].location == 1
 
 
 def test_attack_from_supported_dest_does_not_cut() -> None:
-    """SupportMove(target_dest=X): attack on supporter from X does NOT cut the support."""
+    """Support(require_dest=X): attack on supporter from X does NOT cut the support."""
     m = line_map(4)
     # u0 (p0) at 0 attacks 1. u1 (p0) at 2 supports the move to 1.
     # u2 (p1) at 1 attacks 2 (the supporter's location), but u2 is at 1 = target_dest.
@@ -166,7 +165,7 @@ def test_attack_from_supported_dest_does_not_cut() -> None:
         Unit(2, 1, 1),
     ])
     out = resolve_turn(s, {
-        0: {0: Move(dest=1), 1: SupportMove(target=0, target_dest=1)},
+        0: {0: Move(dest=1), 1: Support(target=0, require_dest=1)},
         1: {2: Move(dest=2)},
     })
     # u1's support holds (not cut). u0 strength 2 vs u2 strength 1 (in head-to-head-ish:
@@ -192,7 +191,7 @@ def test_same_owner_attack_does_not_cut_support() -> None:
         Unit(3, 1, 1),
     ])
     out = resolve_turn(s, {
-        0: {0: Move(dest=1), 1: SupportMove(target=0, target_dest=1), 2: Move(dest=2)},
+        0: {0: Move(dest=1), 1: Support(target=0, require_dest=1), 2: Move(dest=2)},
         1: {3: Hold()},
     })
     # u2's same-owner move into u1's location should NOT cut u1's support.
@@ -211,7 +210,7 @@ def test_attacker_loses_to_supported_defender() -> None:
     ])
     out = resolve_turn(s, {
         1: {0: Move(dest=1)},
-        0: {1: Hold(), 2: SupportHold(target=1)},
+        0: {1: Hold(), 2: Support(target=1)},
     })
     # u0 attacks with str 1, u1 holds with str 2. u0 bounces.
     assert out.units[0].location == 0

@@ -16,8 +16,6 @@ from foedus.core import (
     NodeType,
     Order,
     PlayerId,
-    SupportHold,
-    SupportMove,
     Unit,
     UnitId,
 )
@@ -44,8 +42,6 @@ __all__ = [
     "Order",
     "PlayerId",
     "RandomAgent",
-    "SupportHold",
-    "SupportMove",
     "Unit",
     "UnitId",
     "compute_match_result",

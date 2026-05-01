@@ -15,19 +15,63 @@ from foedus.core import (
     BetrayalObservation,
     ChatDraft,
     ChatMessage,
+    DoneCleared,
     GameState,
     Hold,
     Intent,
+    IntentRevised,
     Move,
     Order,
     Phase,
     PlayerId,
     Press,
     Stance,
-    SupportHold,
-    SupportMove,
+    Support,
     UnitId,
 )
+
+
+def intent_dependencies(
+    state: GameState,
+) -> dict[PlayerId, frozenset[tuple[PlayerId, UnitId]]]:
+    """Return per-player set of (other_player, unit) pairs whose intents/orders
+    that player's pending plans mechanically depend on.
+
+    A player P depends on (Q, U) iff P has at least one of:
+      - A declared Intent for one of P's units whose order is Support(target=U)
+        where state.units[U].owner == Q.
+      - A pending AidSpend with target_unit=U where state.units[U].owner == Q.
+      - A declared Intent whose order is Support(target=U, require_dest=X)
+        (the pin variant — same dependency rule, since the pin's viability
+        hinges on Q's choice for U).
+
+    Self-dependencies (Q == P) are excluded; Q must be a different player.
+    The graph is unit-grained: a single ally with two units yields up to two
+    distinct (Q, U_a), (Q, U_b) entries when both are referenced.
+    """
+    out: dict[PlayerId, set[tuple[PlayerId, UnitId]]] = {}
+    # Walk pending press intents.
+    for player, press in state.round_press_pending.items():
+        for intent in press.intents:
+            order = intent.declared_order
+            if not isinstance(order, Support):
+                continue
+            target_unit = state.units.get(order.target)
+            if target_unit is None or target_unit.owner == player:
+                continue
+            out.setdefault(player, set()).add(
+                (target_unit.owner, target_unit.id)
+            )
+    # Walk pending aid spends.
+    for spender, spends in state.round_aid_pending.items():
+        for spend in spends:
+            target_unit = state.units.get(spend.target_unit)
+            if target_unit is None or target_unit.owner == spender:
+                continue
+            out.setdefault(spender, set()).add(
+                (target_unit.owner, target_unit.id)
+            )
+    return {p: frozenset(deps) for p, deps in out.items()}
 
 
 def submit_press_tokens(state: GameState, player: PlayerId,
@@ -78,7 +122,72 @@ def submit_press_tokens(state: GameState, player: PlayerId,
     new_pending = dict(state.round_press_pending)
     new_pending[player] = cleaned
 
-    return replace(state, round_press_pending=new_pending)
+    # ----- Live intent visibility + dependency-aware done auto-clear -----
+
+    # Build per-unit lookup of previously-submitted intents by THIS player
+    # (last write wins).
+    prev_press = state.round_press_pending.get(player)
+    prev_by_unit: dict[UnitId, Intent] = {}
+    if prev_press is not None:
+        for it in prev_press.intents:
+            prev_by_unit[it.unit_id] = it
+
+    new_revisions = list(state.intent_revisions)
+    new_done = set(state.round_done)
+    new_clears = list(state.done_clears)
+    revised_unit_keys: set[tuple[PlayerId, UnitId]] = set()
+
+    for intent in cleaned_intents:
+        prev = prev_by_unit.get(intent.unit_id)
+        if prev == intent:
+            continue  # no change
+        new_revisions.append(IntentRevised(
+            turn=state.turn + 1,
+            player=player,
+            intent=intent,
+            previous=prev,
+            visible_to=intent.visible_to,
+        ))
+        if prev is not None:  # E3: first declarations don't trigger auto-clear
+            revised_unit_keys.add((player, intent.unit_id))
+
+    # Detect retractions: previous intent for a unit no longer present in
+    # the new submission.
+    new_unit_ids = {it.unit_id for it in cleaned_intents}
+    for prev_unit_id, prev_intent in prev_by_unit.items():
+        if prev_unit_id not in new_unit_ids:
+            new_revisions.append(IntentRevised(
+                turn=state.turn + 1,
+                player=player,
+                intent=None,  # retraction
+                previous=prev_intent,
+                visible_to=prev_intent.visible_to,
+            ))
+            revised_unit_keys.add((player, prev_unit_id))
+
+    s_pending = replace(state, round_press_pending=new_pending)
+    deps = intent_dependencies(s_pending)
+
+    for dependent_player, dep_set in deps.items():
+        if dependent_player == player:
+            continue  # self-revision doesn't clear own done
+        for revised_key in revised_unit_keys:
+            if revised_key in dep_set and dependent_player in new_done:
+                new_done.discard(dependent_player)
+                new_clears.append(DoneCleared(
+                    turn=state.turn + 1,
+                    player=dependent_player,
+                    source_player=player,
+                    source_unit=revised_key[1],
+                ))
+                break  # one clear per dependent per submit
+
+    return replace(
+        s_pending,
+        intent_revisions=new_revisions,
+        done_clears=new_clears,
+        round_done=new_done,
+    )
 
 
 def submit_aid_spends(state: GameState, player: PlayerId,
@@ -86,15 +195,13 @@ def submit_aid_spends(state: GameState, player: PlayerId,
     """Set/replace `player`'s pending aid spends for the current round.
 
     Each spend pays one aid token to add +1 strength to the named ally unit's
-    canon order this turn (and accumulate trust ledger if the recipient
-    follows through). Spends are filtered:
+    canon order this turn (reactive — lands on whatever the recipient does).
+    Spends are filtered:
     - target_unit unknown or eliminated-player-owned → dropped
-    - target_unit owned by the spender themselves → dropped (can't aid self)
-    - recipient not mutual ALLY in the previous turn's locked press → dropped
-    Token balance is checked at submit time; if `len(filtered) >
-    state.aid_tokens[player]`, only the prefix that fits the balance is kept.
+    - target_unit owned by spender → dropped (can't aid self)
+    - recipient not mutual ALLY in previous turn's locked press → dropped
 
-    Multiple calls overwrite (revisability until done).
+    Token balance capped at submit time. Multiple calls overwrite.
     Returns state unchanged if phase != NEGOTIATION, player eliminated, or
     player has signaled done.
     """
@@ -140,8 +247,38 @@ def submit_aid_spends(state: GameState, player: PlayerId,
         cleaned = cleaned[:balance]
 
     new_pending = dict(state.round_aid_pending)
+    prev_spends = state.round_aid_pending.get(player, [])
+    prev_targets = {s.target_unit for s in prev_spends}
+    new_targets = {s.target_unit for s in cleaned}
+    # E3: only retractions (prev_targets - new_targets) trigger auto-clear.
+    # Freshly added aid spends do not, matching the press-intent rule.
+    revised_unit_keys = {(player, u) for u in (prev_targets - new_targets)}
+
     new_pending[player] = cleaned
-    return replace(state, round_aid_pending=new_pending)
+    s_pending = replace(state, round_aid_pending=new_pending)
+    deps = intent_dependencies(s_pending)
+
+    new_done = set(state.round_done)
+    new_clears = list(state.done_clears)
+    for dependent_player, dep_set in deps.items():
+        if dependent_player == player:
+            continue
+        for revised_key in revised_unit_keys:
+            if revised_key in dep_set and dependent_player in new_done:
+                new_done.discard(dependent_player)
+                new_clears.append(DoneCleared(
+                    turn=state.turn + 1,
+                    player=dependent_player,
+                    source_player=player,
+                    source_unit=revised_key[1],
+                ))
+                break
+
+    return replace(
+        s_pending,
+        round_done=new_done,
+        done_clears=new_clears,
+    )
 
 
 def signal_done(state: GameState, player: PlayerId) -> GameState:
@@ -300,7 +437,7 @@ def _stagnation_cost_deltas(
     """Return per-player score deltas for the stagnation cost.
 
     A player "did nothing" this turn if all their canon orders are
-    Hold or SupportHold (no Move, no SupportMove). Such players pay
+    Hold or Support-of-holder (no Move, no Support-of-mover). Such players pay
     `config.stagnation_cost`. Eliminated and unit-less players are exempt.
 
     If config.stagnation_cost == 0, returns an empty dict (disabled).
@@ -326,7 +463,21 @@ def _stagnation_cost_deltas(
         if not p_units:
             continue
         p_orders = [canon.get(u.id) for u in p_units]
-        if not any(isinstance(o, (Move, SupportMove)) for o in p_orders):
+        # Treat Move and support-of-mover as "did something":
+        # Support(target=X) is active iff X's canon order is a Move.
+        from foedus.core import Support  # local import to avoid cycle
+        active = False
+        for o in p_orders:
+            if isinstance(o, Move):
+                active = True
+                break
+            if isinstance(o, Support):
+                # Active only when the supported unit is itself moving.
+                target_order = canon.get(o.target)
+                if isinstance(target_order, Move):
+                    active = True
+                    break
+        if not active:
             out[p] = -cost
     return out
 
@@ -403,7 +554,7 @@ def finalize_round(state: GameState,
         p for p in range(state.config.num_players) if p not in s_after.eliminated
     ]
 
-    # Determine which spends "landed" (recipient's canon matched target_order).
+    # Determine which spends "landed" (reactive: recipient's unit survived).
     for spender, spends in state.round_aid_pending.items():
         if spender in s_after.eliminated:
             # Spender eliminated mid-turn: their spends are still consumed
@@ -419,9 +570,10 @@ def finalize_round(state: GameState,
             recipient = target_unit.owner
             if recipient in state.eliminated:
                 continue
-            recipient_canon = canon.get(spend.target_unit)
-            if recipient_canon != spend.target_order:
-                continue  # didn't land
+            # Reactive aid: lands iff recipient's unit had any canon order
+            # this turn. Ownership and survival are sufficient.
+            if spend.target_unit not in canon:
+                continue
             key = (spender, recipient)
             new_aid_given[key] = new_aid_given.get(key, 0) + 1
 
@@ -455,6 +607,8 @@ def finalize_round(state: GameState,
         round_done=set(),
         chat_done=set(),
         round_aid_pending={},
+        intent_revisions=[],
+        done_clears=[],
     )
 
 

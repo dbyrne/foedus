@@ -9,8 +9,7 @@ from __future__ import annotations
 from foedus.core import (
     Hold,
     Move,
-    SupportHold,
-    SupportMove,
+    Support,
     Unit,
 )
 from foedus.resolve import resolve_turn
@@ -63,7 +62,7 @@ def test_support_hold_valid() -> None:
         Unit(2, 1, 2),
     ])
     out = resolve_turn(s, {
-        0: {0: SupportHold(target=1), 1: Hold()},
+        0: {0: Support(target=1), 1: Hold()},
         1: {2: Move(dest=1)},
     })
     # u2 attacks u1; u1 has +1 support; u2 has 1. 1 vs 2, attacker bounces.
@@ -86,7 +85,7 @@ def test_support_hold_target_not_holding_becomes_hold() -> None:
         Unit(2, 1, 2),
     ])
     out = resolve_turn(s, {
-        0: {0: SupportHold(target=1), 1: Move(dest=2)},
+        0: {0: Support(target=1), 1: Move(dest=2)},
         1: {2: Move(dest=1)},
     })
     # u1 head-to-head with u2: both strength 1, both bounce.
@@ -106,8 +105,8 @@ def test_support_hold_target_not_adjacent_becomes_hold() -> None:
         Unit(3, 1, 2),  # attacker, will move to 3
     ])
     out = resolve_turn(s, {
-        0: {0: SupportHold(target=1), 1: Hold()},  # u0's support is invalid
-        1: {3: Move(dest=3), 2: SupportMove(target=3, target_dest=3)},
+        0: {0: Support(target=1), 1: Hold()},  # u0's support is invalid
+        1: {3: Move(dest=3), 2: Support(target=3, require_dest=3)},
     })
     # u3 attacks 3 with strength 2 (u2 supports). u1 holds with strength 1
     # (u0's support is invalid → fell back to Hold, so doesn't count).
@@ -119,7 +118,7 @@ def test_support_hold_target_not_adjacent_becomes_hold() -> None:
 def test_support_hold_nonexistent_target_becomes_hold() -> None:
     m = line_map(3)
     s = make_state(m, [Unit(0, 0, 0)])
-    out = resolve_turn(s, {0: {0: SupportHold(target=999)}})
+    out = resolve_turn(s, {0: {0: Support(target=999)}})
     assert out.units[0].location == 0  # Just held, no error
 
 
@@ -132,7 +131,7 @@ def test_support_move_valid() -> None:
         Unit(2, 0, 2),
     ])
     out = resolve_turn(s, {
-        0: {0: Move(dest=1), 2: SupportMove(target=0, target_dest=1)},
+        0: {0: Move(dest=1), 2: Support(target=0, require_dest=1)},
         1: {1: Hold()},
     })
     assert out.units[0].location == 1
@@ -140,7 +139,7 @@ def test_support_move_valid() -> None:
 
 
 def test_support_move_target_not_moving_becomes_hold() -> None:
-    """SupportMove of a unit that isn't actually making that move → Hold."""
+    """Support(require_dest=X) of a unit that isn't actually making that move → Hold."""
     m = line_map(5)
     # u0 at 0 holds. u2 at 2 'supports' u0 moving to 1 — but u0 isn't moving.
     # Without that support counting, attacker u3 at 1 with no support (it's solo
@@ -151,7 +150,7 @@ def test_support_move_target_not_moving_becomes_hold() -> None:
         Unit(2, 0, 2),
     ])
     out = resolve_turn(s, {
-        0: {0: Hold(), 2: SupportMove(target=0, target_dest=1)},
+        0: {0: Hold(), 2: Support(target=0, require_dest=1)},
     })
     assert out.units[0].location == 0
     assert out.units[2].location == 2
@@ -173,7 +172,7 @@ def test_support_move_target_moving_elsewhere_becomes_hold() -> None:
         Unit(1, 0, 1),
     ])
     out = resolve_turn(s, {
-        0: {0: SupportMove(target=1, target_dest=0), 1: Move(dest=2)},
+        0: {0: Support(target=1, require_dest=0), 1: Move(dest=2)},
     })
     # u0 stays (its support is invalid → falls back to Hold).
     # u1 moves to 2 — but u0 is there! u0 doesn't move (it would have moved if it had a Move order).
@@ -194,7 +193,7 @@ def test_support_move_dest_not_adjacent_becomes_hold() -> None:
         Unit(2, 1, 4),
     ])
     out = resolve_turn(s, {
-        0: {0: SupportMove(target=1, target_dest=4), 1: Move(dest=4)},
+        0: {0: Support(target=1, require_dest=4), 1: Move(dest=4)},
         1: {2: Hold()},
     })
     # u1 attacks 4 with strength 1 (no valid support). u2 holds with 1. Bounce.
@@ -214,7 +213,7 @@ def test_support_move_self_dislodge_becomes_hold() -> None:
         Unit(2, 0, 2),
     ], num_players=1)
     out = resolve_turn(s, {
-        0: {0: Move(dest=1), 1: Hold(), 2: SupportMove(target=0, target_dest=1)},
+        0: {0: Move(dest=1), 1: Hold(), 2: Support(target=0, require_dest=1)},
     })
     # Support invalid → u0 has strength 1. u0 attacks own u1. Same-owner: Rule X bounces.
     assert out.units[0].location == 0
