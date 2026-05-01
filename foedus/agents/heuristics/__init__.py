@@ -12,6 +12,7 @@ from foedus.agents.heuristics.defensive import Defensive
 from foedus.agents.heuristics.dishonest_cooperator import DishonestCooperator
 from foedus.agents.heuristics.greedy import Greedy
 from foedus.agents.heuristics.greedy_hold import GreedyHold
+from foedus.agents.heuristics.late_closer import LateCloser
 from foedus.agents.heuristics.opportunistic_betrayer import OpportunisticBetrayer
 from foedus.agents.heuristics.patron import Patron
 from foedus.agents.heuristics.random_agent import RandomAgent
@@ -23,7 +24,7 @@ from foedus.agents.heuristics.value_greedy import ValueGreedy
 __all__ = [
     "Aggressive", "AntiLeader", "Bandwagon", "ConservativeBuilder",
     "Cooperator", "Defensive", "DishonestCooperator", "Greedy",
-    "GreedyHold", "Opportunist", "OpportunisticBetrayer", "Patron", "RandomAgent",
+    "GreedyHold", "LateCloser", "Opportunist", "OpportunisticBetrayer", "Patron", "RandomAgent",
     "Sycophant", "TitForTat", "TrustfulCooperator", "ValueGreedy",
 ]
 
@@ -38,6 +39,7 @@ ROSTER = {
     "ConservativeBuilder": ConservativeBuilder,
     "Cooperator": Cooperator,
     "DishonestCooperator": DishonestCooperator,
+    "LateCloser": LateCloser,
     "Sycophant": Sycophant,
     "Opportunist": Opportunist,
     "OpportunisticBetrayer": OpportunisticBetrayer,
