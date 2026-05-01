@@ -276,6 +276,16 @@ class GameConfig:
     # to back ally units' orders.
     aid_generation_divisor: int = 3
     aid_token_cap: int = 10
+    # Per-pair cap on aid_given[(A, B)] entries. Bounds the long-term
+    # leverage stockpile without capping per-turn aid effects: the +1
+    # strength bonus on the recipient's order, alliance-bonus eligibility,
+    # and token consumption all fire regardless of cap. With default cap=3,
+    # leverage(A,B) is bounded in [-3, +3], producing at most +1 combat
+    # bonus (vs the +2 max when uncapped).
+    #
+    # Set to a large value (e.g., 999) to recover the pre-cap behavior. Set
+    # to 1 to effectively disable the leverage_bonus mechanic.
+    aid_given_cap: int = 3
     # Permanent directional trust ledger drives a combat bonus on attacks
     # against the indebted player: +min(leverage_bonus_max, leverage // leverage_ratio)
     # strength on Moves whose target hex is owned by the indebted player.
