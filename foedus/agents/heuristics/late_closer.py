@@ -1,4 +1,4 @@
-"""LateCloser — information-asymmetry exploit.
+"""LateCloser v2 — pinned-support exploit with truthful intents.
 
 Reads other players' submitted press intents (from state.round_press_pending)
 at order-submission time and picks orders that exploit the picture.
@@ -9,21 +9,23 @@ LateCloser ALWAYS reads this carefully and adapts. Even when no info is
 available (it's player 0), it falls back to Greedy expansion — but its real
 edge shows when it's seat 1, 2, or 3 with information.
 
-Strategy:
-  Press: ALLY toward all opponents + deliberately deceptive intents (worst-
-    neighbor Move for each unit) to confuse other agents' support targeting.
-  Orders: pinned Support on visible ally captures > snag undefended supplies >
-    Greedy fallback. Deliberately ignores declared deceptive intents (accepts
-    BetrayalObservation cost).
+v1 declared deceptive intents to confuse support targeting. The 1k-game sweep
+showed this backfired: BetrayalObservation events triggered TitForTat
+retaliation and ledger penalties costing more than the information edge gained.
+
+Strategy (v2):
+  Press: ALLY toward all opponents + truthful GreedyHold-planned Move intents
+    (same shape as Cooperator) so partners can support us back without betrayal.
+  Orders: PINNED Support(require_dest=X) on visible ally supply captures
+    (qualifies for +3 alliance bonus) > snag undefended supplies > Greedy
+    fallback. require_dest distinguishes LateCloser from Cooperator's unpinned
+    Support.
   Aid: spend on visible ally Moves to supply where mutual-ALLY status holds.
 """
 
 from __future__ import annotations
 
-from collections import deque
-
 from foedus.agents.heuristics.greedy import Greedy
-from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.core import (
     AidSpend,
     GameState,
@@ -40,11 +42,12 @@ from foedus.core import (
 
 
 class LateCloser:
-    """Information-asymmetry exploit heuristic.
+    """Pinned-support exploit heuristic (v2).
 
-    Declares deceptive intents; exploits visible intents from earlier-seated
-    players to pin-support their captures and snag aid-boosted supplies.
-    Accepts BetrayalObservation cost as the price of the information edge.
+    Declares truthful intents (same as Cooperator) to avoid BetrayalObservation
+    penalties; exploits visible intents from earlier-seated players to emit
+    PINNED Support(require_dest=X) orders that qualify for the +3 alliance bonus
+    on captures — unlike Cooperator's unpinned Support which may not trigger it.
     """
 
     def __init__(self) -> None:
@@ -55,37 +58,18 @@ class LateCloser:
     # ------------------------------------------------------------------
 
     def choose_press(self, state: GameState, player: PlayerId) -> Press:
-        """ALLY toward all; declare deliberately deceptive intents."""
+        """ALLY toward all; declare truthful GreedyHold-planned Move intents."""
         opponents = {
             p: Stance.ALLY
             for p in range(state.config.num_players)
             if p != player and p not in state.eliminated
         }
-        intents = []
-        m = state.map
-        for unit in state.units.values():
-            if unit.owner != player:
-                continue
-            neighbors = list(m.edges.get(unit.location, frozenset()))
-            if not neighbors:
-                continue
-            # Pick the "worst" neighbor: fewest unowned supplies reachable 1 hop
-            # from that neighbor, tie-broken by lowest node id.
-            worst = min(
-                neighbors,
-                key=lambda n: (
-                    sum(
-                        1 for nn in m.edges.get(n, frozenset())
-                        if m.is_supply(nn) and state.ownership.get(nn) != player
-                    ),
-                    n,
-                ),
-            )
-            intents.append(Intent(
-                unit_id=unit.id,
-                declared_order=Move(dest=worst),
-                visible_to=None,
-            ))
+        planned = self._greedy.choose_orders(state, player)
+        intents = [
+            Intent(unit_id=uid, declared_order=order, visible_to=None)
+            for uid, order in planned.items()
+            if isinstance(order, Move)
+        ]
         return Press(stance=opponents, intents=intents)
 
     # ------------------------------------------------------------------

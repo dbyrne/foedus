@@ -112,72 +112,33 @@ def test_late_closer_falls_back_to_greedy_without_visible_intents():
 
 
 # ---------------------------------------------------------------------------
-# Test 3: declared intents are deliberately deceptive
+# Test 3: declared intents are truthful (v2)
 # ---------------------------------------------------------------------------
 
-def test_late_closer_declares_deceptive_intents():
-    """choose_press should return intents whose declared Move destination differs
-    from what choose_orders would choose for the same unit.
+def test_late_closer_v2_declares_truthful_intents():
+    """choose_press should declare Move intents matching choose_orders Moves.
 
-    Layout: star graph. Central node 10 (P0's unit) connects to:
-      - node 11: SUPPLY (many onward supply neighbors → Greedy picks this)
-      - node 12: PLAIN  (no further supplies → "worst" neighbor)
-      - node 13: SUPPLY (one onward supply neighbor)
-    Node 11 also connects to nodes 14 and 15 (both SUPPLY, unowned).
-    This gives node 11 a higher "onward supply" count than node 12/13,
-    so Greedy moves to 11 but worst_neighbor picks 12.
+    For units whose final order is a Move (not Support), the declared intent
+    destination must equal the actual order destination — no deception.
     """
-    from foedus.core import Map, GameConfig
-
-    coords = {n: (n, 0) for n in range(16)}
-    edges = {
-        10: frozenset({11, 12, 13}),
-        11: frozenset({10, 14, 15}),
-        12: frozenset({10}),
-        13: frozenset({10}),
-        14: frozenset({11}),
-        15: frozenset({11}),
-        # Enemy home far away
-        99: frozenset(),
-    }
-    # Fill missing nodes
-    for n in range(16):
-        edges.setdefault(n, frozenset())
-    node_types = {n: NodeType.PLAIN for n in range(16)}
-    node_types[10] = NodeType.HOME   # P0 home
-    node_types[11] = NodeType.SUPPLY
-    node_types[13] = NodeType.SUPPLY
-    node_types[14] = NodeType.SUPPLY
-    node_types[15] = NodeType.SUPPLY
-    # P1 home somewhere disconnected
-    node_types.setdefault(0, NodeType.HOME)
-
-    home_assignments = {10: 0, 0: 1}
-    all_nodes = set(range(16)) | {0}
-    coords = {n: (n, 0) for n in all_nodes}
-    edge_map = {n: frozenset(edges.get(n, set())) for n in all_nodes}
-    nt = {n: node_types.get(n, NodeType.PLAIN) for n in all_nodes}
-
-    from foedus.core import Map
-    m = Map(coords=coords, edges=edge_map, node_types=nt,
-            home_assignments=home_assignments)
-    s = make_state(m, [Unit(0, 0, 10), Unit(1, 1, 0)], num_players=2, max_turns=20)
+    s = _supply_map_state()
+    # P0's unit at node 0, supply at node 1.  Greedy will Move to node 1.
 
     agent = LateCloser()
     press = agent.choose_press(s, player=0)
     orders = agent.choose_orders(s, player=0)
 
-    unit0_intents = [i for i in press.intents if i.unit_id == 0]
-    assert unit0_intents, "Expected at least one declared intent for unit 0"
-
-    actual_order = orders.get(0)
-    declared_dest = unit0_intents[0].declared_order.dest
-    # Greedy should move to 11 (richest neighbor); worst_neighbor is 12 (PLAIN, no supplies).
-    assert isinstance(actual_order, Move), f"Expected Move, got {actual_order}"
-    assert declared_dest != actual_order.dest, (
-        f"Deceptive intent dest {declared_dest} should differ from actual "
-        f"order dest {actual_order.dest}"
-    )
+    for intent in press.intents:
+        uid = intent.unit_id
+        actual = orders.get(uid)
+        if isinstance(actual, Move):
+            assert isinstance(intent.declared_order, Move), (
+                f"Unit {uid}: intent should be a Move, got {intent.declared_order}"
+            )
+            assert intent.declared_order.dest == actual.dest, (
+                f"Unit {uid}: declared dest {intent.declared_order.dest} != "
+                f"actual dest {actual.dest} — truthful intents required in v2"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -216,54 +177,21 @@ def test_late_closer_aid_spends_on_visible_ally_move_to_supply():
 
 
 # ---------------------------------------------------------------------------
-# Test 5: BetrayalObservation fires for LateCloser's deceptive intents
+# Test 5: v2 does NOT trigger BetrayalObservation
 # ---------------------------------------------------------------------------
 
-def test_late_closer_betrayal_observation_fires():
-    """Full round-trip: LateCloser submits deceptive press then plays actual
-    (different) orders. finalize_round should record BetrayalObservation.
-
-    Uses the same star layout as test 3 to guarantee the deceptive intent
-    destination (worst neighbor = node 12, PLAIN) differs from the actual
-    greedy move (node 11, SUPPLY-rich).
+def test_late_closer_v2_does_not_trigger_betrayal():
+    """Full round-trip: LateCloser submits truthful press then plays matching
+    orders. finalize_round should NOT record any BetrayalObservation for P0.
     """
-    from foedus.core import Map
-
-    all_nodes = set(range(16)) | {0}
-    coords = {n: (n, 0) for n in all_nodes}
-    edges_raw = {
-        10: frozenset({11, 12, 13}),
-        11: frozenset({10, 14, 15}),
-        12: frozenset({10}),
-        13: frozenset({10}),
-        14: frozenset({11}),
-        15: frozenset({11}),
-    }
-    edge_map = {n: frozenset(edges_raw.get(n, set())) for n in all_nodes}
-    nt = {n: NodeType.PLAIN for n in all_nodes}
-    nt[10] = NodeType.HOME
-    nt[11] = NodeType.SUPPLY
-    nt[13] = NodeType.SUPPLY
-    nt[14] = NodeType.SUPPLY
-    nt[15] = NodeType.SUPPLY
-    nt[0] = NodeType.HOME
-
-    m = Map(coords=coords, edges=edge_map, node_types=nt,
-            home_assignments={10: 0, 0: 1})
-    s = make_state(m, [Unit(0, 0, 10), Unit(1, 1, 0)], num_players=2, max_turns=20)
+    s = _supply_map_state()
+    # P0's unit 0 at node 0, supply at node 1.  Greedy moves to 1; press
+    # declares the same Move(dest=1).  No betrayal should occur.
 
     agent = LateCloser()
     press = agent.choose_press(s, player=0)
     actual_orders = agent.choose_orders(s, player=0)
 
-    unit0_intents = [i for i in press.intents if i.unit_id == 0]
-    assert unit0_intents, "Star layout should produce a deceptive intent for unit 0"
-    actual_0 = actual_orders.get(0)
-    declared_dest = unit0_intents[0].declared_order.dest
-    assert isinstance(actual_0, Move)
-    assert declared_dest != actual_0.dest, "Star layout should produce diverging intent/order"
-
-    # Submit press for P0 (deceptive intents), neutral press for P1, signal done.
     s = submit_press_tokens(s, 0, press)
     s = submit_press_tokens(s, 1, Press(stance={}, intents=[]))
     s = signal_done(s, 0)
@@ -272,14 +200,12 @@ def test_late_closer_betrayal_observation_fires():
     p1_orders = {1: Hold()}
     final_state = finalize_round(s, {0: actual_orders, 1: p1_orders})
 
-    # The public intent was declared visible_to=None, so P1 observes the betrayal.
-    all_betrayals = [
+    betrayals_by_p0 = [
         obs
         for obs_list in final_state.betrayals.values()
         for obs in obs_list
-        if obs.betrayer == 0 and obs.intent.unit_id == 0
+        if obs.betrayer == 0
     ]
-    assert all_betrayals, (
-        f"Expected BetrayalObservation for LateCloser's unit 0. "
-        f"betrayals dict: {final_state.betrayals}"
+    assert not betrayals_by_p0, (
+        f"v2 LateCloser should not trigger BetrayalObservation; got: {betrayals_by_p0}"
     )
