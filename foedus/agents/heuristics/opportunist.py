@@ -1,14 +1,29 @@
-"""Opportunist — pure reactive-support specialist.
+"""Opportunist v2 — two-tier pinned/reactive support specialist.
 
-Unlike Cooperator, Opportunist does not wait for an ally to declare a
-Move-on-supply Intent. Instead, every owned unit emits a reactive
-Support(target=ally_unit) whenever any ally unit is geometrically reachable
-as a support target — using the same adjacency criteria as legal.py.
+v1 emitted blanket reactive Support(target=ally) for any geometrically
+reachable ally without reading declared intents, leading to wasted unit-turns
+supporting allies who Hold or move into bounces.
 
-The bet: reactive Support adapts to whatever the ally actually does this turn,
-so blanket-support captures gains that destination-guessing agents miss.
+v2 two-tier targeting in choose_orders:
 
-Same leverage-ledger gate as Cooperator: don't subsidize freeriders.
+  Tier 1 — PINNED support when intel is visible.
+    Scan round_press_pending for a visible Move intent from any non-self,
+    non-eliminated player. If the moving unit is geographically reachable from
+    our unit AND the move destination is adjacent to our unit (geometric
+    requirement for the pin), emit Support(target=ally_unit, require_dest=dest).
+    Qualifies for the alliance-bonus +3. Prefer highest-value supply dest;
+    tiebreak lowest target unit ID.
+
+  Tier 2 — REACTIVE support when no Tier 1 match exists.
+    Fall back to v1 behaviour: emit Support(target=ally_unit) (reactive) for
+    any geometrically reachable ally. Prefer ALLY-toward-us over NEUTRAL;
+    tiebreak lowest unit ID.
+
+  Tier 3 — GreedyHold fallback.
+    No reachable ally → GreedyHold.
+
+Leverage gate applies in both Tier 1 and Tier 2 (don't subsidise freeriders).
+HOSTILE-toward-us allies are skipped in both tiers.
 """
 
 from __future__ import annotations
@@ -23,13 +38,31 @@ class Opportunist:
     def __init__(self) -> None:
         self._inner = GreedyHold()
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _ally_stance_toward_me(self, state: GameState,
+                                player: PlayerId, ally_pid: PlayerId) -> Stance:
+        press = state.round_press_pending.get(ally_pid)
+        if press is None:
+            return Stance.NEUTRAL
+        return press.stance.get(player, Stance.NEUTRAL)
+
+    def _is_freerider(self, state: GameState,
+                       player: PlayerId, other: PlayerId) -> bool:
+        return state.leverage(player, other) > 1
+
+    # ------------------------------------------------------------------
+    # choose_orders — two-tier support logic
+    # ------------------------------------------------------------------
+
     def choose_orders(self, state: GameState,
                       player: PlayerId) -> dict[UnitId, Order]:
         m = state.map
         my_units = [u for u in state.units.values() if u.owner == player]
         my_unit_ids = {u.id for u in my_units}
         orders: dict[UnitId, Order] = {}
-        used: set[UnitId] = set()
 
         # Collect ally units (non-eliminated, non-self).
         ally_units = [
@@ -37,56 +70,94 @@ class Opportunist:
             if u.owner != player and u.owner not in state.eliminated
         ]
 
-        # Build stance lookup from the latest submitted press.
-        # round_press_pending is keyed by player id.
-        def ally_stance_toward_me(ally_pid: PlayerId) -> Stance:
-            press = state.round_press_pending.get(ally_pid)
-            if press is None:
-                return Stance.NEUTRAL
-            return press.stance.get(player, Stance.NEUTRAL)
-
         for u in my_units:
-            if u.id in used:
-                continue
             my_nbrs = m.neighbors(u.location)
 
-            # Find geometrically reachable ally units (same criteria as legal.py).
-            candidates: list = []
-            for v in ally_units:
-                # Freerider gate.
-                if state.leverage(player, v.owner) > 1:
+            # -----------------------------------------------------------
+            # Tier 1: pinned support — scan press for visible Move intents
+            # -----------------------------------------------------------
+            tier1_candidates: list = []
+            for ally_pid, press in state.round_press_pending.items():
+                if ally_pid == player or ally_pid in state.eliminated:
                     continue
-                # Geometric reachability: adjacent to v, OR shares a neighbor
-                # with v (could support a Move from v).
+                # Stance filter: skip HOSTILE allies.
+                stance = self._ally_stance_toward_me(state, player, ally_pid)
+                if stance == Stance.HOSTILE:
+                    continue
+                # Leverage gate.
+                if self._is_freerider(state, player, ally_pid):
+                    continue
+                for intent in press.intents:
+                    if not isinstance(intent.declared_order, Move):
+                        continue
+                    # The ally unit must belong to ally_pid.
+                    ally_unit = state.units.get(intent.unit_id)
+                    if ally_unit is None or ally_unit.owner != ally_pid:
+                        continue
+                    dest = intent.declared_order.dest
+                    # Geometric requirement for pinned support:
+                    #   our unit must be reachable from the ally unit
+                    #   (adjacent to ally, or shares a neighbor with it),
+                    #   AND dest must be in our neighbor set.
+                    ally_loc = ally_unit.location
+                    reachable = (
+                        ally_loc in my_nbrs
+                        or any(n in my_nbrs for n in m.neighbors(ally_loc))
+                    )
+                    if not reachable:
+                        continue
+                    if dest not in my_nbrs:
+                        continue
+                    # Supply value of destination (0 if not a supply node).
+                    sv = m.supply_value(dest) if m.is_supply(dest) else 0
+                    # Negate sv for sort (want highest first).
+                    tier1_candidates.append((-sv, ally_unit.id, ally_unit, dest))
+
+            if tier1_candidates:
+                tier1_candidates.sort(key=lambda t: (t[0], t[1]))
+                _, _, best, dest = tier1_candidates[0]
+                orders[u.id] = Support(target=best.id, require_dest=dest)
+                continue
+
+            # -----------------------------------------------------------
+            # Tier 2: reactive support — any geometrically reachable ally
+            # -----------------------------------------------------------
+            tier2_candidates: list = []
+            for v in ally_units:
+                if self._is_freerider(state, player, v.owner):
+                    continue
+                stance = self._ally_stance_toward_me(state, player, v.owner)
+                if stance == Stance.HOSTILE:
+                    continue
+                # Geometric reachability.
                 if v.location in my_nbrs:
                     reachable = True
                 elif any(n in my_nbrs for n in m.neighbors(v.location)):
                     reachable = True
                 else:
-                    reachable = False
-                if not reachable:
-                    continue
-                # Prefer ALLY stancers over NEUTRAL; skip HOSTILE.
-                stance = ally_stance_toward_me(v.owner)
-                if stance == Stance.HOSTILE:
                     continue
                 stance_rank = 0 if stance == Stance.ALLY else 1
-                candidates.append((stance_rank, v.id, v))
+                tier2_candidates.append((stance_rank, v.id, v))
 
-            if candidates:
-                # Pick best candidate: lowest stance_rank, then lowest unit id.
-                candidates.sort(key=lambda t: (t[0], t[1]))
-                _, _, best = candidates[0]
+            if tier2_candidates:
+                tier2_candidates.sort(key=lambda t: (t[0], t[1]))
+                _, _, best = tier2_candidates[0]
                 orders[u.id] = Support(target=best.id)
-                used.add(u.id)
+                continue
 
-        # Fall back to GreedyHold for remaining own units.
+            # Tier 3: GreedyHold (filled in below)
+
+        # Fill remaining units with GreedyHold.
         fallback = self._inner.choose_orders(state, player)
         for uid in my_unit_ids:
             if uid not in orders:
                 orders[uid] = fallback.get(uid)
 
         return orders
+
+    # ------------------------------------------------------------------
+    # choose_press — UNCHANGED from v1
+    # ------------------------------------------------------------------
 
     def choose_press(self, state: GameState, player: PlayerId) -> Press:
         from foedus.core import Intent
@@ -103,35 +174,46 @@ class Opportunist:
         ]
         return Press(stance=opponents, intents=intents)
 
-    def choose_aid(self, state: GameState,
-                   player: PlayerId):
-        """Spend tokens on any ALLY partner whose unit we are supporting.
+    # ------------------------------------------------------------------
+    # choose_aid — tightened to concentrate on Tier 1 (pinned) targets
+    # ------------------------------------------------------------------
 
-        Prioritizes partners with negative leverage (they owe us).
-        Stops spending on partners where leverage(self, partner) > 1.
+    def choose_aid(self, state: GameState, player: PlayerId):
+        """Spend tokens on ally units we are pinned-supporting this turn.
+
+        Tier 1 pinned targets take priority; falls back to all supported units
+        if no Tier 1 targets present. Leverage gate applied (no freeriders).
         """
         from foedus.core import AidSpend
         balance = state.aid_tokens.get(player, 0)
         if balance <= 0:
             return []
 
-        # Determine which units we plan to support this turn.
         my_orders = self.choose_orders(state, player)
-        supported_unit_ids: set[UnitId] = {
+
+        # Separate pinned (require_dest set) vs reactive supports.
+        pinned_unit_ids: set[UnitId] = {
             order.target
             for order in my_orders.values()
-            if isinstance(order, Support)
+            if isinstance(order, Support) and order.require_dest is not None
         }
-        if not supported_unit_ids:
+        reactive_unit_ids: set[UnitId] = {
+            order.target
+            for order in my_orders.values()
+            if isinstance(order, Support) and order.require_dest is None
+        }
+
+        # Prefer pinned targets; fall back to reactive.
+        priority_unit_ids = pinned_unit_ids if pinned_unit_ids else reactive_unit_ids
+        if not priority_unit_ids:
             return []
 
-        # Build partner priority list: partners with highest leverage-against-us
-        # first (they owe us the most, spending on them is best for reciprocity).
+        # Build partner priority: highest leverage-against-us first.
         partner_priority: list[tuple[int, PlayerId]] = []
         for other_pid in range(state.config.num_players):
             if other_pid == player or other_pid in state.eliminated:
                 continue
-            if state.leverage(player, other_pid) > 1:
+            if self._is_freerider(state, player, other_pid):
                 continue
             lev_against_us = state.leverage(other_pid, player)
             partner_priority.append((lev_against_us, other_pid))
@@ -143,7 +225,7 @@ class Opportunist:
                 break
             their_units = [
                 u for u in state.units.values()
-                if u.owner == other_pid and u.id in supported_unit_ids
+                if u.owner == other_pid and u.id in priority_unit_ids
             ]
             for u in their_units:
                 if len(spends) >= balance:

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
+import dataclasses
 
 from foedus.agents.heuristics.opportunist import Opportunist
 from foedus.core import (
-    Hold, Move, Press, Stance, Support, Unit,
+    Hold, Intent, Move, Press, Stance, Support, Unit,
 )
 from foedus.legal import legal_orders_for_unit
 from tests.helpers import build_state_with_units
@@ -74,7 +74,6 @@ def test_opportunist_skips_freeriders_via_leverage_gate():
         num_players=2,
     )
     # Inject a leverage imbalance: player 0 has given 3 tokens to player 1.
-    import dataclasses
     state = dataclasses.replace(
         state,
         aid_given={(0, 1): 3},
@@ -160,4 +159,78 @@ def test_opportunist_press_includes_ally_stance_and_public_intents():
     # All planned moves should appear as intents.
     assert planned_moves <= intent_unit_ids, (
         f"GreedyHold moves {planned_moves} not all in intents {intent_unit_ids}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 6 (NEW v2): prefer pinned Support when a visible Move intent exists
+# ---------------------------------------------------------------------------
+
+def test_opportunist_v2_prefers_pinned_when_intent_visible():
+    """Layout: P0's u0 at node A (0); P1's u1 at node B (1).
+    Both A and B are adjacent to supply node X (2).
+    Edges: 0-2, 1-2 (and 0-1 for reachability between units).
+
+    P1 publishes a Move intent for u1 to node 2 (supply X).
+    Expect P0's order for u0 to be Support(target=1, require_dest=2) — PINNED.
+    """
+    state = build_state_with_units(
+        layout={0: 0, 1: 1},
+        ownership={0: 0, 1: 1},
+        edges={0: {1, 2}, 1: {0, 2}, 2: {0, 1}},
+        num_players=2,
+    )
+    # Mark node 2 as SUPPLY so supply_value applies.
+    from foedus.core import NodeType
+    new_node_types = dict(state.map.node_types)
+    new_node_types[2] = NodeType.SUPPLY
+    new_map = dataclasses.replace(state.map, node_types=new_node_types)
+    state = dataclasses.replace(state, map=new_map)
+
+    # P1 declares a Move intent: unit 1 moves to node 2.
+    p1_intent = Intent(
+        unit_id=1,
+        declared_order=Move(dest=2),
+        visible_to=None,  # public
+    )
+    p1_press = Press(stance={0: Stance.ALLY}, intents=[p1_intent])
+    state = dataclasses.replace(state, round_press_pending={1: p1_press})
+
+    agent = Opportunist()
+    orders = agent.choose_orders(state, player=0)
+
+    assert 0 in orders, "P0's unit 0 should have an order"
+    order = orders[0]
+    assert isinstance(order, Support), f"expected Support, got {order}"
+    assert order.target == 1, f"expected target=1, got {order.target}"
+    assert order.require_dest == 2, (
+        f"expected require_dest=2 (pinned), got {order.require_dest}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 7 (NEW v2): fall back to reactive Support when no intent is visible
+# ---------------------------------------------------------------------------
+
+def test_opportunist_v2_falls_back_to_reactive_without_intent():
+    """Same layout as Test 6, but no press from P1.
+    Expect P0's order for u0 to be Support(target=1) (reactive, no require_dest).
+    """
+    state = build_state_with_units(
+        layout={0: 0, 1: 1},
+        ownership={0: 0, 1: 1},
+        edges={0: {1, 2}, 1: {0, 2}, 2: {0, 1}},
+        num_players=2,
+    )
+
+    # No press submitted — round_press_pending is empty (default).
+    agent = Opportunist()
+    orders = agent.choose_orders(state, player=0)
+
+    assert 0 in orders, "P0's unit 0 should have an order"
+    order = orders[0]
+    assert isinstance(order, Support), f"expected Support, got {order}"
+    assert order.target == 1, f"expected target=1, got {order.target}"
+    assert order.require_dest is None, (
+        f"expected reactive support (require_dest=None), got {order.require_dest}"
     )
