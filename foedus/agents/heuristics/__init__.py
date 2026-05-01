@@ -6,6 +6,7 @@ from foedus.agents.heuristics.aggressive import Aggressive
 from foedus.agents.heuristics.anti_leader import AntiLeader
 from foedus.agents.heuristics.bandwagon import Bandwagon
 from foedus.agents.heuristics.conservative_builder import ConservativeBuilder
+from foedus.agents.heuristics.coalition_builder import CoalitionBuilder
 from foedus.agents.heuristics.cooperator import Cooperator
 from foedus.agents.heuristics.opportunist import Opportunist
 from foedus.agents.heuristics.defensive import Defensive
@@ -22,9 +23,10 @@ from foedus.agents.heuristics.trustful_cooperator import TrustfulCooperator
 from foedus.agents.heuristics.value_greedy import ValueGreedy
 
 __all__ = [
-    "Aggressive", "AntiLeader", "Bandwagon", "ConservativeBuilder",
-    "Cooperator", "Defensive", "DishonestCooperator", "Greedy",
-    "GreedyHold", "LateCloser", "Opportunist", "OpportunisticBetrayer", "Patron", "RandomAgent",
+    "Aggressive", "AntiLeader", "Bandwagon", "CoalitionBuilder",
+    "ConservativeBuilder", "Cooperator", "Defensive", "DishonestCooperator",
+    "Greedy", "GreedyHold", "LateCloser", "Opportunist",
+    "OpportunisticBetrayer", "Patron", "RandomAgent",
     "Sycophant", "TitForTat", "TrustfulCooperator", "ValueGreedy",
 ]
 
@@ -37,6 +39,7 @@ ROSTER = {
     "AntiLeader": AntiLeader,
     "Bandwagon": Bandwagon,
     "ConservativeBuilder": ConservativeBuilder,
+    "CoalitionBuilder": CoalitionBuilder,
     "Cooperator": Cooperator,
     "DishonestCooperator": DishonestCooperator,
     "LateCloser": LateCloser,
