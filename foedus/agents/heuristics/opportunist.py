@@ -57,11 +57,11 @@ class Opportunist:
                             player: PlayerId, other: PlayerId) -> bool:
         """Patron-defense gate: other has accumulated high leverage against us.
 
-        leverage(other, player) > 2 means other has given us significantly more
+        leverage(other, player) > 1 means other has given us asymmetrically more
         aid than we've reciprocated — the Patron-buildup signature that precedes
         a weaponized late-game attack using leverage_bonus.
         """
-        return state.leverage(other, player) > 2
+        return state.leverage(other, player) > 1
 
     # ------------------------------------------------------------------
     # choose_orders — two-tier support logic

@@ -143,7 +143,7 @@ class CoalitionBuilder:
                 if not reachable:
                     continue
                 # Patron-defense gate: skip bloc partners with high inverse leverage.
-                if state.leverage(v.owner, player) > 2:
+                if state.leverage(v.owner, player) > 1:
                     continue
                 # Prefer partner with lowest leverage from our side (we owe them most)
                 lev = state.leverage(player, v.owner)
@@ -219,7 +219,7 @@ class CoalitionBuilder:
         partner_units: list[tuple[int, int, int]] = []  # (partner_pid, unit_id, node)
         for pid in sorted(allowed_bloc):
             # Patron-defense gate: skip bloc partners with high inverse leverage.
-            if state.leverage(pid, player) > 2:
+            if state.leverage(pid, player) > 1:
                 continue
             for u in state.units.values():
                 if u.owner == pid:
