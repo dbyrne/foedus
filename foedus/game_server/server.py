@@ -78,6 +78,12 @@ class PressCommitRequest(BaseModel):
     aid_spends: list[dict] = Field(default_factory=list)
 
 
+class PressUpdateRequest(BaseModel):
+    player: int
+    press: dict = Field(default_factory=dict)
+    aid_spends: list[dict] = Field(default_factory=list)
+
+
 def make_app() -> FastAPI:
     app = FastAPI(title="foedus game server", version="0.1.0")
     sessions: dict[str, GameSession] = {}
@@ -325,6 +331,33 @@ def make_app() -> FastAPI:
             if ERR_ALREADY_COMMITTED in msg:
                 raise HTTPException(status_code=409, detail=msg)
             raise HTTPException(status_code=400, detail=msg)
+
+    @app.post("/games/{game_id}/press-update")
+    def press_update(game_id: str, req: PressUpdateRequest) -> dict[str, Any]:
+        """Submit press intents + aid spends WITHOUT signaling done.
+
+        Allows revisable submissions during the chat phase. The engine
+        emits IntentRevised events on every change and auto-clears
+        signal_done for any dependent player whose committed plans
+        referenced the revised (player, unit). The post-update view
+        surfaces these via state.intent_revisions / state.done_clears.
+        """
+        sess = _session(game_id)
+        if req.player not in sess.seats:
+            raise HTTPException(status_code=404,
+                                detail=f"unknown player {req.player}")
+        if not sess.is_human(req.player):
+            raise HTTPException(status_code=400,
+                                detail=f"player {req.player} is not a human seat")
+        if req.player in sess.state.round_done:
+            raise HTTPException(status_code=409,
+                                detail=f"player {req.player} already committed; "
+                                       f"cannot update press after commit")
+        try:
+            sess.apply_press_update(req.player, req.press, req.aid_spends)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return sess.view_for(req.player)
 
     @app.get("/games/{game_id}/chat-prompt/{player}",
              response_class=PlainTextResponse)
