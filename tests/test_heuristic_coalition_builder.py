@@ -230,3 +230,41 @@ def test_coalition_builder_press_stance_allies_bloc_neutrals_others():
     assert press.stance.get(3) == Stance.NEUTRAL  # NOT in bloc
     # player 0 not in own stance
     assert 0 not in press.stance
+
+
+# ---------------------------------------------------------------------------
+# Test: skip bloc partner with high inverse leverage (Patron-defense gate)
+# ---------------------------------------------------------------------------
+
+def test_coalition_builder_skips_bloc_partner_with_high_inverse_leverage():
+    """P0 at 0, P1 at 1 (adjacent, in bloc). P1 has given P0 three tokens
+    (leverage(1,0) = 3 > 2 — Patron-buildup). The gate should fire:
+    choose_orders should NOT emit Support targeting P1's unit,
+    and choose_aid should emit no AidSpend for P1.
+    """
+    state = _three_player_close_far_state()
+
+    # P1 has built up 3 tokens of leverage against us.
+    state = dataclasses.replace(state, aid_given={(1, 0): 3})
+    assert state.leverage(1, 0) == 3  # sanity
+
+    # Give P0 aid tokens for the aid test.
+    state = dataclasses.replace(state, aid_tokens={0: 2})
+    # Archive mutual-ALLY so the mutual-ALLY gate doesn't block unrelated to our gate.
+    state = _archive_mutual_ally(state, [0, 1, 2])
+
+    agent = CoalitionBuilder()
+    orders = agent.choose_orders(state, player=0)
+    spends = agent.choose_aid(state, player=0)
+
+    # P1's unit is unit 1; should NOT be a support target.
+    assert 0 in orders
+    assert not (isinstance(orders[0], Support) and orders[0].target == 1), (
+        f"Patron-defense gate should block Support of P1; got {orders[0]}"
+    )
+
+    # No aid should go to P1's unit (unit 1).
+    for spend in spends:
+        assert spend.target_unit != 1, (
+            f"Patron-defense gate should block AidSpend for P1's unit; got {spend}"
+        )

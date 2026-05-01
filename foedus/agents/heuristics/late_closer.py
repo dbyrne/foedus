@@ -108,6 +108,9 @@ class LateCloser:
             ally_unit = state.units.get(ally_uid)
             if ally_unit is None or ally_unit.owner != ally_pid:
                 continue
+            # Patron-defense gate: skip allies with high inverse leverage.
+            if state.leverage(ally_pid, player) > 2:
+                continue
             # Check that dest is not defended by the ally themselves
             # (they're moving to it, so no defender issue from their side).
             for u in my_units:
@@ -175,6 +178,9 @@ class LateCloser:
             if my_prev.stance.get(other_pid, Stance.NEUTRAL) != Stance.ALLY:
                 continue
             if their_prev.stance.get(player, Stance.NEUTRAL) != Stance.ALLY:
+                continue
+            # Patron-defense gate: skip allies with high inverse leverage.
+            if state.leverage(other_pid, player) > 2:
                 continue
             for intent in press.intents:
                 if (intent.visible_to is not None

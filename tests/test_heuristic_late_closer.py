@@ -209,3 +209,40 @@ def test_late_closer_v2_does_not_trigger_betrayal():
     assert not betrayals_by_p0, (
         f"v2 LateCloser should not trigger BetrayalObservation; got: {betrayals_by_p0}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 6 (v3): skip aid when ally has high inverse leverage (Patron-defense)
+# ---------------------------------------------------------------------------
+
+def test_late_closer_skips_aid_when_inverse_leverage_high():
+    """P1 has leverage(1,0) = 3 (they gave us 3 tokens, Patron-buildup).
+    Even with visible Move-on-supply intent and mutual-ALLY history,
+    LateCloser should emit no AidSpend for P1.
+    """
+    s = _supply_map_state()
+    s = replace(s, aid_tokens={0: 3})
+
+    # Mutual-ALLY history.
+    hist_entry = {
+        0: Press(stance={1: Stance.ALLY}, intents=[]),
+        1: Press(stance={0: Stance.ALLY}, intents=[]),
+    }
+    s = replace(s, press_history=[hist_entry])
+
+    # P1 has given player 0 three tokens — Patron-buildup signature.
+    s = replace(s, aid_given={(1, 0): 3})
+    assert s.leverage(1, 0) == 3  # sanity
+
+    # P1 submits intent to move to supply node 2.
+    intent = Intent(unit_id=1, declared_order=Move(dest=2), visible_to=None)
+    press = Press(stance={0: Stance.ALLY}, intents=[intent])
+    s.round_press_pending[1] = press
+
+    from foedus.core import AidSpend
+    agent = LateCloser()
+    spends = agent.choose_aid(s, player=0)
+
+    assert spends == [], (
+        f"Patron-defense gate should block AidSpend for P1; got {spends}"
+    )
