@@ -15,7 +15,7 @@ from foedus.web.db import Base
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    github_id: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
+    github_id: Mapped[Optional[int]] = mapped_column(Integer, unique=True, nullable=True)
     github_login: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

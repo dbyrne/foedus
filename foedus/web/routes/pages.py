@@ -49,3 +49,21 @@ def install_pages(app: FastAPI, session_factory) -> None:
                                           "deadline": g.current_phase_deadline_at})
         return templates.TemplateResponse(request, "games_list.html",
                                           {"user": u, "grouped": dict(grouped)})
+
+    @app.get("/games/new", response_class=HTMLResponse)
+    def games_new(request: Request):
+        u = current_user(request, session_factory)
+        if u is None:
+            return RedirectResponse("/login", status_code=302)
+        return templates.TemplateResponse(request, "games_new.html",
+                                          {"user": u})
+
+    @app.post("/games")
+    async def games_create(request: Request):
+        u = current_user(request, session_factory)
+        if u is None:
+            return RedirectResponse("/login", status_code=302)
+        form = await request.form()
+        from foedus.web.driver import create_new_game
+        gid = create_new_game(session_factory, creator=u, form=dict(form))
+        return RedirectResponse(f"/games/{gid}", status_code=302)

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}New game — foedus{% endblock %}
+{% block body %}
+<h1>New game</h1>
+<form method="post" action="/games">
+  <label>Map preset
+    <select name="map_preset">
+      <option value="continental_sweep" selected>Continental Sweep</option>
+    </select></label>
+  <label>Max turns
+    <select name="max_turns">
+      <option value="5">5</option><option value="7" selected>7</option>
+      <option value="10">10</option><option value="15">15</option>
+    </select></label>
+  <label>Phase deadline
+    <select name="phase_deadline_hours">
+      <option value="">No limit</option>
+      <option value="12">12 hours</option>
+      <option value="24" selected>24 hours</option>
+      <option value="48">48 hours</option>
+      <option value="72">72 hours</option>
+    </select></label>
+  <label>Discord webhook URL (optional)
+    <input type="url" name="discord_webhook_url" placeholder="https://discord.com/api/webhooks/...">
+  </label>
+  <h2>Seats</h2>
+  {% for i in range(4) %}
+  <fieldset>
+    <legend>Seat {{ i }}</legend>
+    <label>Type
+      <select name="seat_{{ i }}_kind">
+        <option value="human">Human</option>
+        <option value="bot" {% if i > 0 %}selected{% endif %}>Bot</option>
+      </select></label>
+    <label>GitHub username (if human)
+      <input name="seat_{{ i }}_user" {% if i == 0 %}value="{{ user.github_login }}"{% endif %}>
+    </label>
+    <label>Bot class (if bot)
+      <select name="seat_{{ i }}_bot">
+        <option value="foedus.agents.heuristic.HeuristicAgent" selected>HeuristicAgent</option>
+        <option value="foedus.agents.heuristic.HoldAgent">HoldAgent</option>
+      </select></label>
+  </fieldset>
+  {% endfor %}
+  <button class="btn" type="submit">Create</button>
+</form>
+{% endblock %}

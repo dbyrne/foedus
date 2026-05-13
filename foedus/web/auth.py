@@ -53,7 +53,13 @@ def install_session_middleware(app: FastAPI, settings: Settings,
         resp = await oauth.github.get("user", token=token)
         gh = resp.json()
         with session_factory() as s:
+            # Find by github_id first (returning user), then by github_login
+            # (reconcile a placeholder row created by driver.create_new_game).
             existing = s.query(User).filter_by(github_id=gh["id"]).first()
+            if existing is None:
+                existing = s.query(User).filter_by(github_login=gh["login"]).first()
+                if existing is not None:
+                    existing.github_id = gh["id"]   # reconcile placeholder
             if existing is None:
                 existing = User(github_id=gh["id"], github_login=gh["login"])
                 s.add(existing); s.flush()
