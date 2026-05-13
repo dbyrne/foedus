@@ -101,6 +101,7 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         "config": serialize_config(state.config),
         "mutual_ally_streak": state.mutual_ally_streak,
         "chat_done": sorted(state.chat_done),
+        "round_done": sorted(state.round_done),
         # Bundle 4: aid resource + permanent leverage ledger.
         "aid_tokens": {str(p): n for p, n in state.aid_tokens.items()},
         # aid_given keys are (PlayerId, PlayerId) tuples; flatten to "A,B" strings.
@@ -152,6 +153,7 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
         config=deserialize_config(data["config"]),
         mutual_ally_streak=streak,
         chat_done=set(data.get("chat_done", [])),
+        round_done=set(data.get("round_done", [])),
         aid_tokens=aid_tokens,
         aid_given=aid_given,
         round_aid_pending=round_aid_pending,

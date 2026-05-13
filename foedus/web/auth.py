@@ -99,12 +99,8 @@ def current_user(request: Request, session_factory) -> User | None:
         row = s.get(SessionRow, token)
         if row is None:
             return None
-        # SQLite's DateTime(timezone=True) strips tzinfo on read; treat naive
-        # datetimes as UTC for comparison with our timezone-aware "now".
-        expires = row.expires_at
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        if expires < datetime.now(timezone.utc):
+        from foedus.web.util import as_utc
+        if as_utc(row.expires_at) < datetime.now(timezone.utc):
             return None
         return s.get(User, row.user_id)
 
