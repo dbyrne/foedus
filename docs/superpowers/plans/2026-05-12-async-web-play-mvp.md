@@ -295,7 +295,10 @@ Expected: clean install, no resolver errors.
 
 - [ ] **Step 3: Create the package init**
 
-Write `foedus/web/__init__.py`:
+Write `foedus/web/__init__.py` — keep it empty (just the docstring) so
+intermediate tasks can import submodules without tripping over the
+not-yet-existing `app.py`. Task 9.1 will add the `make_web_app`
+re-export once `app.py` lands.
 
 ```python
 """Async web-play MVP — FastAPI + sqlite over the foedus engine.
@@ -303,17 +306,6 @@ Write `foedus/web/__init__.py`:
 Optional dependency. Install with:
     pip install foedus[web]
 """
-from __future__ import annotations
-
-try:
-    from foedus.web.app import make_web_app
-except ImportError as e:  # pragma: no cover
-    raise ImportError(
-        "foedus.web requires the [web] extra. "
-        "Install with: pip install foedus[web]"
-    ) from e
-
-__all__ = ["make_web_app"]
 ```
 
 - [ ] **Step 4: Create Settings**
@@ -2715,10 +2707,27 @@ pytest tests/web/test_app.py -v
 ```
 Expected: 1 passed.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Update foedus/web/__init__.py to re-export make_web_app**
+
+Now that `app.py` exists, replace `foedus/web/__init__.py` with:
+
+```python
+"""Async web-play MVP — FastAPI + sqlite over the foedus engine.
+
+Optional dependency. Install with:
+    pip install foedus[web]
+"""
+from __future__ import annotations
+
+from foedus.web.app import make_web_app
+
+__all__ = ["make_web_app"]
+```
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add foedus/web/app.py tests/web/test_app.py
+git add foedus/web/app.py foedus/web/__init__.py tests/web/test_app.py
 git commit -m "feat(web): make_web_app factory + lifespan-managed deadline worker"
 ```
 
