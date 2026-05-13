@@ -232,3 +232,25 @@ feedback suggests improvements. Issues and PRs welcome.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Async web-play deployment (Fly.io)
+
+One-time setup:
+
+```sh
+flyctl launch --no-deploy --copy-config
+flyctl volume create foedus_data --size 1
+flyctl secrets set \
+  FOEDUS_SESSION_SECRET="$(openssl rand -hex 32)" \
+  FOEDUS_JWT_SECRET="$(openssl rand -hex 32)" \
+  FOEDUS_GITHUB_OAUTH_CLIENT_ID=<github oauth client id> \
+  FOEDUS_GITHUB_OAUTH_CLIENT_SECRET=<github oauth client secret>
+```
+
+Set the GitHub OAuth callback URL to `https://foedus-web.fly.dev/auth/github/callback`.
+
+Per-deploy:
+
+```sh
+flyctl deploy
+```

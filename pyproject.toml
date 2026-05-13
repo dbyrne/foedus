@@ -10,9 +10,10 @@ requires-python = ">=3.11"
 dependencies = ["click>=8.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "openskill>=6.0", "fastapi>=0.110", "uvicorn[standard]>=0.30", "httpx>=0.27"]
+dev = ["pytest>=7.0", "openskill>=6.0", "fastapi>=0.110", "uvicorn[standard]>=0.30", "httpx>=0.27", "sqlalchemy>=2.0", "alembic>=1.13", "authlib>=1.3", "itsdangerous>=2.2", "pyjwt>=2.8", "pydantic-settings>=2.2", "jinja2>=3.1", "pytest-asyncio>=0.23"]
 rating = ["openskill>=6.0"]
 remote = ["fastapi>=0.110", "uvicorn[standard]>=0.30", "httpx>=0.27"]
+web = ["fastapi>=0.110", "uvicorn[standard]>=0.30", "httpx>=0.27", "sqlalchemy>=2.0", "alembic>=1.13", "authlib>=1.3", "itsdangerous>=2.2", "pyjwt>=2.8", "pydantic-settings>=2.2", "jinja2>=3.1"]
 
 [project.scripts]
 foedus = "foedus.cli:main"
@@ -26,3 +27,4 @@ include = ["foedus*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_mode = "auto"

@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>foedus — {{ game.id }}</title>
+<style>html,body,iframe{margin:0;padding:0;border:0;width:100vw;height:100vh}
+.bar{position:fixed;top:0;left:0;right:0;background:#1f3a5f;color:#fff;padding:4px 8px;font:14px system-ui;z-index:10}
+.bar a{color:#fff;margin-right:8px}
+iframe{margin-top:28px;height:calc(100vh - 28px)}
+#loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font:18px system-ui;background:#1f3a5f;padding:1rem 2rem;border-radius:6px;z-index:5}</style>
+</head><body>
+<div class="bar"><a href="/games">← lobby</a> {{ game.id }} (you are P{{ player_idx }})</div>
+<div id="loading">Loading game… (first load ~10s)</div>
+<iframe id="game" allow="cross-origin-isolated"
+        onload="setTimeout(function(){var l=document.getElementById('loading');if(l)l.style.display='none';}, 1500)"></iframe>
+<script>
+  // Build api base from THIS page's origin so the iframe hits the same
+  // host (avoids CORS preflight whether served via localhost or 127.0.0.1,
+  // dev port or prod).
+  var qs = new URLSearchParams({
+    gid: "{{ game.id }}",
+    player_idx: "{{ player_idx }}",
+    token: "{{ token }}",
+    api: window.location.origin + "/api/v1"
+  });
+  document.getElementById("game").src = "/static/godot/index.html?" + qs.toString();
+</script>
+</body></html>

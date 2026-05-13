@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}foedus{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/main.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<header><a href="/games">foedus</a>
+  {% if user %}<form method="post" action="/auth/logout" style="display:inline">
+    <span>{{ user.github_login }}</span>
+    <button type="submit">log out</button></form>{% endif %}
+</header>
+<main>{% block body %}{% endblock %}</main>
+</body></html>

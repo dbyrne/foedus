@@ -84,9 +84,10 @@ class PressUpdateRequest(BaseModel):
     aid_spends: list[dict] = Field(default_factory=list)
 
 
-def make_app() -> FastAPI:
+def make_app(sessions: dict | None = None) -> FastAPI:
     app = FastAPI(title="foedus game server", version="0.1.0")
-    sessions: dict[str, GameSession] = {}
+    if sessions is None:
+        sessions = {}
 
     def _session(game_id: str) -> GameSession:
         sess = sessions.get(game_id)
