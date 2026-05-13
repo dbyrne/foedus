@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Your games — foedus{% endblock %}
+{% block body %}
+<h1>Your games</h1>
+<p><a class="btn" href="/games/new">New game</a></p>
+{% for bucket, label in [('active', 'Active'), ('pending', 'Pending'), ('finished', 'Finished')] %}
+<section>
+  <h2>{{ label }}</h2>
+  {% if grouped.get(bucket) %}
+  <ul>
+    {% for g in grouped[bucket] %}
+    <li><a href="/games/{{ g.id }}">{{ g.id }}</a>
+        — turn {{ g.turn }} / {{ g.max_turns }}
+        {% if g.deadline %}— deadline {{ g.deadline }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p>None.</p>{% endif %}
+</section>
+{% endfor %}
+{% endblock %}
