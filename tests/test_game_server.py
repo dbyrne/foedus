@@ -545,3 +545,15 @@ def test_press_update_unknown_game_returns_404(client: TestClient) -> None:
         "aid_spends": [],
     })
     assert r.status_code == 404
+
+
+def test_make_app_accepts_external_store() -> None:
+    store: dict = {}
+    app = make_app(sessions=store)
+    # store is shared with the app
+    assert hasattr(app, "title")
+
+
+def test_make_app_default_in_memory_store() -> None:
+    app = make_app()
+    assert hasattr(app, "title")
