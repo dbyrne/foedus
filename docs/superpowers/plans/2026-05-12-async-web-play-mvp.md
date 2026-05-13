@@ -3150,8 +3150,93 @@ git commit -m "ci(web): build Godot HTML5 + deploy to Fly on main"
 - [ ] `flyctl deploy` succeeds and `https://foedus-web.fly.dev/healthz` returns `{"ok": true}`
 - [ ] One real game played to completion with David + dbyrne on phones
 
-# Phase 9 follow-ups (from spike — fill in after Phase 0)
+# Phase 9 follow-ups (from spike — 2026-05-13)
 
-(Populate this section after Task 0.1's spike report. Each entry becomes a small foedus-godot or foedus.web task.)
+The Phase 0 spike passed (bundle 35 MB / ~10 MB brotli, COOP/COEP
+working, canvas + taps + SharedArrayBuffer all good, 0 console
+errors). Decision: proceed pure-Godot. Four caveats observed:
 
-- (empty until spike completes)
+- **FU-1: Server URL input clipped on 412 px viewport.** Godot-side
+  responsive-layout fix. Probably an anchor-width setting on the
+  `LineEdit` in `scenes/council/CouncilEntry.tscn`. Trivial; ship
+  alongside Task 10.1.
+
+- **FU-2: In-canvas lobby UI needs an "if URL params, skip" branch.**
+  When `gid` / `player_idx` / `token` / `api` are present in the URL,
+  the Godot client should hide its connection lobby and auto-connect.
+  Already covered by Task 10.1 — add an explicit check in
+  `_ready()` to skip the lobby Control node when `gid` is set.
+
+- **FU-3: Touch on the hex map is still unverified.** Rerun the
+  spike harness AFTER Task 10.1 completes, with a real game running.
+  Add as a new Task 10.2 below.
+
+- **FU-4: Slow WASM cold start (~5–10 s).** Add a "Loading game…"
+  splash in `templates/game_spa.html`. Already covered by Task 5.1's
+  HTML — add a CSS-positioned overlay that the Godot canvas's
+  `focus_canvas_on_start` fires `display: none` on. Add as Task 5.3.
+
+### Task 5.3: Loading splash overlay on the SPA wrapper page
+
+**Files:**
+- Modify: `foedus/web/templates/game_spa.html`
+
+- [ ] **Step 1: Add the overlay**
+
+In `game_spa.html`, replace the body section with:
+
+```html
+<body>
+<div class="bar"><a href="/games">← lobby</a> {{ game.id }} (you are P{{ player_idx }})</div>
+<div id="loading">Loading game… (first load ~10s)</div>
+<iframe id="game" src="/static/godot/index.html?gid={{ game.id }}&player_idx={{ player_idx }}&token={{ token }}&api={{ api_base }}"
+        allow="cross-origin-isolated"
+        onload="setTimeout(()=>document.getElementById('loading').style.display='none', 1500)"></iframe>
+<style>
+#loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font:18px system-ui;background:#1f3a5f;padding:1rem 2rem;border-radius:6px;z-index:5}
+#game{display:block}
+</style>
+</body>
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add foedus/web/templates/game_spa.html
+git commit -m "feat(web): loading splash on SPA wrapper for slow Godot cold start"
+```
+
+### Task 10.2: Second mobile spike pass with a live game
+
+**Files:**
+- Modify: `/tmp/foedus-eval/notes.md` (append findings)
+
+- [ ] **Step 1: Re-export foedus-godot with Task 10.1's changes**
+
+```bash
+cd /home/david/foedus-godot
+godot --headless --export-release "Web" /tmp/foedus-godot-web/index.html
+```
+
+- [ ] **Step 2: Run a real game**
+
+Start the foedus play-server with a 4-seat game (per Task 0.1 Step 5).
+Mint a JWT (use a Python REPL with `foedus.web.jwt_helper.mint_spa_token`).
+
+- [ ] **Step 3: Open the SPA with full URL params**
+
+```
+browser_resize 412 915
+browser_navigate http://localhost:8080/?gid=<gid>&player_idx=0&token=<jwt>&api=http://localhost:8765
+```
+
+- [ ] **Step 4: Walk through one full turn on the phone viewport**
+
+Document for each: tap hex node, drag/pinch on map, tap chat field,
+type message, send. Screenshot at each step into
+`/tmp/foedus-eval/10-*.png`.
+
+- [ ] **Step 5: Append findings to /tmp/foedus-eval/notes.md**
+
+If anything is broken: open a new follow-up task on the foedus-godot
+side. If everything works: mark FU-3 closed and proceed to Phase 11.

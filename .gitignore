@@ -44,3 +44,4 @@ Thumbs.db
 # pairs are not tracked — research docs link out and document repro.
 docs/research/depth/*.json
 !docs/research/depth/README.md
+.playwright-mcp/
