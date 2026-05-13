@@ -7,6 +7,8 @@ from foedus.web.models import User, Game, GameSeat
 
 def _client(settings, db):
     app = FastAPI()
+    from foedus.web.coop_coep import COOPCOEPMiddleware
+    app.add_middleware(COOPCOEPMiddleware)
     install_session_middleware(app, settings, db)
     install_pages(app, db)
     return TestClient(app)

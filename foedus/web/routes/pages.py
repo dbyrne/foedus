@@ -67,3 +67,29 @@ def install_pages(app: FastAPI, session_factory) -> None:
         from foedus.web.driver import create_new_game
         gid = create_new_game(session_factory, creator=u, form=dict(form))
         return RedirectResponse(f"/games/{gid}", status_code=302)
+
+    @app.get("/games/{gid}", response_class=HTMLResponse)
+    def game_spa(request: Request, gid: str):
+        from foedus.web.config import get_settings
+        from foedus.web.jwt_helper import mint_spa_token
+        u = current_user(request, session_factory)
+        if u is None:
+            return RedirectResponse("/login", status_code=302)
+        with session_factory() as s:
+            g = s.get(Game, gid)
+            if g is None:
+                return HTMLResponse("not found", status_code=404)
+            my_seat = (s.query(GameSeat).filter_by(game_id=gid, user_id=u.id)
+                       .first())
+            if my_seat is None:
+                return HTMLResponse("forbidden", status_code=403)
+            settings = get_settings()
+            token = mint_spa_token(user_id=u.id, game_id=gid,
+                                   player_idx=my_seat.player_idx,
+                                   secret=settings.jwt_secret,
+                                   ttl_seconds=settings.jwt_ttl_seconds)
+            return templates.TemplateResponse(request, "game_spa.html", {
+                "user": u, "game": g, "player_idx": my_seat.player_idx,
+                "token": token,
+                "api_base": settings.base_url.rstrip("/") + "/api/v1",
+            })
