@@ -1,0 +1,78 @@
+name: deploy web
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'foedus/**'
+      - 'migrations/**'
+      - 'pyproject.toml'
+      - 'Dockerfile.web'
+      - 'fly.toml'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -e .[dev]
+      - run: pytest -q
+
+  build-godot:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: dbyrne/foedus-godot
+          path: foedus-godot
+      - name: Install Godot 4.3
+        run: |
+          curl -L -o godot.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip
+          unzip godot.zip
+          sudo mv Godot_v4.3-stable_linux.x86_64 /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+      - name: Install export templates
+        run: |
+          curl -L -o tpz.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/4.3.stable
+          unzip -o tpz.zip -d ~/.local/share/godot/export_templates/4.3.stable
+      - name: Write export preset (foedus-godot .gitignores it by convention)
+        run: |
+          cat > foedus-godot/export_presets.cfg <<'EOF'
+          [preset.0]
+          name="Web"
+          platform="Web"
+          runnable=true
+          export_filter="all_resources"
+          export_path="../web/index.html"
+          [preset.0.options]
+          variant/thread_support=true
+          html/export_icon=true
+          html/canvas_resize_policy=2
+          html/focus_canvas_on_start=true
+          html/experimental_virtual_keyboard=true
+          progressive_web_app/ensure_cross_origin_isolation_headers=true
+          EOF
+      - name: Build web export
+        run: |
+          mkdir -p foedus/web/static/godot
+          godot --headless --path foedus-godot --export-release "Web" foedus/web/static/godot/index.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godot-web
+          path: foedus/web/static/godot/
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-godot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: godot-web, path: foedus/web/static/godot/ }
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
