@@ -3236,6 +3236,13 @@ errors). Decision: proceed pure-Godot. Four caveats observed:
   HTML — add a CSS-positioned overlay that the Godot canvas's
   `focus_canvas_on_start` fires `display: none` on. Add as Task 5.3.
 
+- **FU-5: Replace synthetic SeatSpec.name (`u{user_id}`) with
+  github_login.** In `SqliteSessionStore.__getitem__` (Task 2.2), human
+  seats are currently named `f"u{row.user_id}"`. Chat attribution and
+  any future render of player labels probably want `github_login`. Join
+  `User` when hydrating seats and store the login. Defer until Task
+  6.1 (chat handler) actually needs the field.
+
 ### Task 5.3: Loading splash overlay on the SPA wrapper page
 
 **Files:**
