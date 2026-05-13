@@ -63,18 +63,24 @@ def install_api(app: FastAPI, session_factory,
         uid, pidx = _resolve_player(request, session_factory, settings, game_id)
         body = await request.json()
         from foedus.web.driver import handle_chat
-        return JSONResponse(handle_chat(session_factory, store, game_id, pidx, body))
+        from foedus.web.locks import lock_for
+        async with lock_for(game_id):
+            return JSONResponse(handle_chat(session_factory, store, game_id, pidx, body))
 
     @app.post("/api/v1/games/{game_id}/commit")
     async def commit(game_id: str, request: Request):
         uid, pidx = _resolve_player(request, session_factory, settings, game_id)
         body = await request.json()
         from foedus.web.driver import handle_commit
-        return JSONResponse(handle_commit(session_factory, store, game_id, pidx, body))
+        from foedus.web.locks import lock_for
+        async with lock_for(game_id):
+            return JSONResponse(handle_commit(session_factory, store, game_id, pidx, body))
 
     @app.post("/api/v1/games/{game_id}/orders")
     async def orders(game_id: str, request: Request):
         uid, pidx = _resolve_player(request, session_factory, settings, game_id)
         body = await request.json()
         from foedus.web.driver import handle_orders
-        return JSONResponse(handle_orders(session_factory, store, game_id, pidx, body))
+        from foedus.web.locks import lock_for
+        async with lock_for(game_id):
+            return JSONResponse(handle_orders(session_factory, store, game_id, pidx, body))
