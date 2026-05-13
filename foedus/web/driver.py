@@ -116,7 +116,7 @@ def handle_chat(session_factory, store, game_id: str, pidx: int,
 
 
 def handle_commit(session_factory, store, game_id: str, pidx: int,
-                  body: dict) -> dict:
+                  body: dict, *, notifier=None) -> dict:
     """Final commit: press + orders + implicit signal_done. Auto-advances
     the round if all seats are in. Body schema:
       {"press": {"stance": {idx: "ally|enemy|neutral"}, "intents": [...]},
@@ -140,6 +140,13 @@ def handle_commit(session_factory, store, game_id: str, pidx: int,
     result = sess.submit_press_commit(pidx, press, orders,
                                        aid_spends or None)
     store.save(sess)
+    if result.get("round_advanced") and notifier is not None:
+        with session_factory() as s:
+            g = s.get(Game, game_id)
+            if g and g.discord_webhook_url:
+                msg = (f"foedus: round {sess.state.turn} of game {game_id} "
+                       f"has begun. Submit at /games/{game_id}")
+                notifier.notify(g.discord_webhook_url, msg)
     return result
 
 

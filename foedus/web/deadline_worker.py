@@ -26,7 +26,8 @@ from foedus.web.session_store import SqliteSessionStore
 log = logging.getLogger(__name__)
 
 
-async def sweep_once(session_factory, store: SqliteSessionStore) -> int:
+async def sweep_once(session_factory, store: SqliteSessionStore,
+                     notifier=None) -> int:
     """Advance every game whose deadline has passed. Returns count advanced."""
     now = datetime.now(timezone.utc)
     with session_factory() as s:
@@ -44,14 +45,15 @@ async def sweep_once(session_factory, store: SqliteSessionStore) -> int:
     for gid in expired_ids:
         async with lock_for(gid):
             try:
-                if _force_advance(session_factory, store, gid):
+                if _force_advance(session_factory, store, gid, notifier=notifier):
                     advanced += 1
             except Exception:
                 log.exception("force-advance failed for %s", gid)
     return advanced
 
 
-def _force_advance(session_factory, store: SqliteSessionStore, gid: str) -> bool:
+def _force_advance(session_factory, store: SqliteSessionStore, gid: str,
+                   notifier=None) -> bool:
     """Force the game past its current phase boundary. Returns True if any
     state change was attempted."""
     sess = store[gid]
@@ -87,6 +89,16 @@ def _force_advance(session_factory, store: SqliteSessionStore, gid: str) -> bool
 
     store.save(sess)
 
+    # If the round advanced (state.turn moved forward, or we transitioned
+    # phases), ping the configured webhook.
+    if notifier is not None:
+        with session_factory() as s:
+            g = s.get(Game, gid)
+            if g and g.discord_webhook_url:
+                msg = (f"foedus: deadline elapsed in game {gid} — "
+                       f"now round {sess.state.turn}. /games/{gid}")
+                notifier.notify(g.discord_webhook_url, msg)
+
     # Reset the deadline window relative to now.
     with session_factory() as s:
         g = s.get(Game, gid)
@@ -101,12 +113,13 @@ def _force_advance(session_factory, store: SqliteSessionStore, gid: str) -> bool
 
 
 async def run_worker(session_factory, store: SqliteSessionStore,
-                     tick_seconds: int = 60) -> None:
+                     tick_seconds: int = 60,
+                     notifier=None) -> None:
     """Long-running task started by the app lifespan."""
     log.info("deadline worker starting; tick=%ds", tick_seconds)
     while True:
         try:
-            n = await sweep_once(session_factory, store)
+            n = await sweep_once(session_factory, store, notifier=notifier)
             if n:
                 log.info("deadline worker advanced %d game(s)", n)
         except Exception:

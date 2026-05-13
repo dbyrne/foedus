@@ -45,7 +45,8 @@ def _resolve_player(request: Request, session_factory, settings: Settings,
 
 
 def install_api(app: FastAPI, session_factory,
-                store: SqliteSessionStore, settings: Settings) -> None:
+                store: SqliteSessionStore, settings: Settings,
+                notifier=None) -> None:
 
     @app.get("/api/v1/games/{game_id}/view/{player}")
     def view(game_id: str, player: int, request: Request):
@@ -74,7 +75,8 @@ def install_api(app: FastAPI, session_factory,
         from foedus.web.driver import handle_commit
         from foedus.web.locks import lock_for
         async with lock_for(game_id):
-            return JSONResponse(handle_commit(session_factory, store, game_id, pidx, body))
+            return JSONResponse(handle_commit(session_factory, store, game_id, pidx, body,
+                                               notifier=notifier))
 
     @app.post("/api/v1/games/{game_id}/orders")
     async def orders(game_id: str, request: Request):
