@@ -2700,6 +2700,14 @@ from foedus.web.deadline_worker import run_worker
 
 def make_web_app(session_factory_override=None) -> FastAPI:
     settings = get_settings()
+    # Fail fast if production secrets are still at their dev defaults.
+    # Unset BASE_URL on localhost is OK; in real deploys it must be set.
+    if not settings.session_secret or settings.session_secret == "dev-only-change-me":
+        if not settings.base_url.startswith("http://localhost"):
+            raise RuntimeError("FOEDUS_SESSION_SECRET must be set in production")
+    if not settings.jwt_secret or settings.jwt_secret == "dev-only-change-me-jwt":
+        if not settings.base_url.startswith("http://localhost"):
+            raise RuntimeError("FOEDUS_JWT_SECRET must be set in production")
     if session_factory_override is not None:
         SessionLocal = session_factory_override
     else:
