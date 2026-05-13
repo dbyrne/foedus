@@ -439,8 +439,33 @@ git commit -m "feat(web): sqlalchemy engine + session factory"
 ### Task 1.3: ORM models for User, Game, GameSeat, ChatMessage, Session
 
 **Files:**
+- Modify: `foedus/web/db.py` (attach FK pragma listener — see Step 0)
 - Create: `foedus/web/models.py`
 - Create: `tests/web/test_models.py`
+
+- [ ] **Step 0: Enable SQLite foreign keys via connect event listener**
+
+By default sqlite does not enforce foreign keys — silent FK violations
+would bite us during model work. Append to `foedus/web/db.py` after
+`make_session_factory`:
+
+```python
+from sqlalchemy import event
+
+@event.listens_for(Engine, "connect")
+def _sqlite_fk_pragma(dbapi_connection, connection_record):
+    # No-op for non-sqlite backends; the cursor() succeeds and the
+    # PRAGMA is silently ignored on PG/MySQL.
+    try:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+    except Exception:
+        pass
+```
+
+Verify with: after Step 3, `pytest tests/web/test_db.py -v` still passes
+(the existing test will still work — we're only adding an event hook).
 
 - [ ] **Step 1: Write the failing test**
 
