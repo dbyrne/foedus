@@ -87,3 +87,21 @@ def create_new_game(session_factory, creator: User, form: dict) -> str:
         s.add(g); s.flush()
         s.add_all(seats_rows); s.commit()
     return gid
+
+
+def handle_chat(session_factory, store, game_id: str, pidx: int,
+                body: dict) -> dict:
+    """Stub. Filled in Task 6.1."""
+    raise NotImplementedError("handle_chat not yet implemented; lands in Task 6.1")
+
+
+def handle_commit(session_factory, store, game_id: str, pidx: int,
+                  body: dict) -> dict:
+    """Stub. Filled in Task 6.1."""
+    raise NotImplementedError("handle_commit not yet implemented; lands in Task 6.1")
+
+
+def handle_orders(session_factory, store, game_id: str, pidx: int,
+                  body: dict) -> dict:
+    """Stub. Filled in Task 6.1."""
+    raise NotImplementedError("handle_orders not yet implemented; lands in Task 6.1")
