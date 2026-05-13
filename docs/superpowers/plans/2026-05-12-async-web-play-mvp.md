@@ -504,8 +504,8 @@ def test_create_user_and_game_with_seats(db):
 
 def test_chat_message_roundtrip(db):
     with db() as s:
-        u = User(github_id=1, github_login="x"); s.add(u)
-        s.add(Game(id="g-2", created_by=1, status="active", map_seed=0,
+        u = User(github_id=1, github_login="x"); s.add(u); s.flush()
+        s.add(Game(id="g-2", created_by=u.id, status="active", map_seed=0,
                    map_preset="P", max_turns=5, state_json="{}"))
         s.flush()
         s.add(ChatMessage(game_id="g-2", turn=0, sender_idx=0,

@@ -548,12 +548,24 @@ def test_press_update_unknown_game_returns_404(client: TestClient) -> None:
 
 
 def test_make_app_accepts_external_store() -> None:
+    """The store passed in is the same object the route handlers use."""
     store: dict = {}
     app = make_app(sessions=store)
-    # store is shared with the app
-    assert hasattr(app, "title")
+    client = TestClient(app)
+    # Healthz reports the count of sessions in the store. With empty store, it's 0.
+    r = client.get("/healthz")
+    assert r.status_code == 200
+    assert r.json()["sessions"] == 0
+    # After pre-seeding the store, the count goes up.
+    store["pretend-gid"] = "not-a-real-session"
+    r = client.get("/healthz")
+    assert r.json()["sessions"] == 1
 
 
 def test_make_app_default_in_memory_store() -> None:
+    """No-arg make_app() still works (backward compat)."""
     app = make_app()
-    assert hasattr(app, "title")
+    client = TestClient(app)
+    r = client.get("/healthz")
+    assert r.status_code == 200
+    assert r.json()["sessions"] == 0
