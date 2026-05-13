@@ -3111,6 +3111,23 @@ jobs:
           curl -L -o tpz.zip https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
           mkdir -p ~/.local/share/godot/export_templates/4.3.stable
           unzip -o tpz.zip -d ~/.local/share/godot/export_templates/4.3.stable
+      - name: Write export preset (foedus-godot .gitignores it by convention)
+        run: |
+          cat > foedus-godot/export_presets.cfg <<'EOF'
+          [preset.0]
+          name="Web"
+          platform="Web"
+          runnable=true
+          export_filter="all_resources"
+          export_path="../web/index.html"
+          [preset.0.options]
+          variant/thread_support=true
+          html/export_icon=true
+          html/canvas_resize_policy=2
+          html/focus_canvas_on_start=true
+          html/experimental_virtual_keyboard=true
+          progressive_web_app/ensure_cross_origin_isolation_headers=true
+          EOF
       - name: Build web export
         run: |
           mkdir -p foedus/web/static/godot
