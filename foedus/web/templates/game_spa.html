@@ -3,10 +3,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>foedus — {{ game.id }}</title>
-<style>html,body,iframe{margin:0;padding:0;border:0;width:100vw;height:100vh}
-.bar{position:fixed;top:0;left:0;right:0;background:#1f3a5f;color:#fff;padding:4px 8px;font:14px system-ui;z-index:10}
-.bar a{color:#fff;margin-right:8px}
-iframe{margin-top:28px;height:calc(100vh - 28px)}
+<style>
+/* Use dynamic-viewport-height (100dvh) so the iframe matches the
+   actually-visible area on mobile (URL bar + nav-bar aware). Fall back
+   to vh on older browsers. */
+html,body{margin:0;padding:0;width:100vw;width:100dvw;height:100vh;height:100dvh;background:#000;overflow:hidden}
+.bar{position:fixed;top:0;left:4px;background:rgba(31,58,95,0.85);color:#fff;padding:2px 8px;font:11px system-ui;z-index:10;border-radius:0 0 6px 6px}
+.bar a{color:#fff}
+iframe{display:block;margin:0;padding:0;border:0;width:100vw;width:100dvw;height:100vh;height:100dvh}
 #loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font:18px system-ui;background:#1f3a5f;padding:1rem 2rem;border-radius:6px;z-index:5}</style>
 </head><body>
 <div class="bar"><a href="/games">← lobby</a> {{ game.id }} (you are P{{ player_idx }})</div>
