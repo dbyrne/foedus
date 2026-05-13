@@ -11,11 +11,16 @@ import secrets
 import string
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
-from foedus.core import GameConfig, Archetype
+from foedus.core import GameConfig, Archetype, Press, Stance
 from foedus.resolve import initial_state
 from foedus.mapgen import generate_map
-from foedus.remote.wire import serialize_state
-from foedus.web.models import User, Game, GameSeat
+from foedus.remote.wire import (
+    serialize_state,
+    deserialize_intent,
+    deserialize_aid_spend,
+    deserialize_orders,
+)
+from foedus.web.models import User, Game, GameSeat, ChatMessage
 
 
 ALLOWED_BOT_CLASSES = frozenset({
@@ -91,17 +96,62 @@ def create_new_game(session_factory, creator: User, form: dict) -> str:
 
 def handle_chat(session_factory, store, game_id: str, pidx: int,
                 body: dict) -> dict:
-    """Stub. Filled in Task 6.1."""
-    raise NotImplementedError("handle_chat not yet implemented; lands in Task 6.1")
+    """Submit a chat message (and implicit chat-phase done) for player.
+    Body schema: {"draft": {"recipients": [int]|None, "body": str} | None}.
+    Returns the engine response augmented with the persisted ChatMessage id."""
+    draft = body.get("draft")
+    sess = store[game_id]
+    result = sess.submit_press_chat(pidx, draft)
+    # Persist the chat row separately for cheap history rendering.
+    if draft and not result.get("message_dropped"):
+        recipients = draft.get("recipients")
+        mask = -1 if not recipients else sum(1 << int(r) for r in recipients)
+        with session_factory() as s:
+            s.add(ChatMessage(game_id=game_id, turn=sess.state.turn,
+                              sender_idx=pidx, recipients_mask=mask,
+                              body=str(draft.get("body", ""))))
+            s.commit()
+    store.save(sess)
+    return result
 
 
 def handle_commit(session_factory, store, game_id: str, pidx: int,
                   body: dict) -> dict:
-    """Stub. Filled in Task 6.1."""
-    raise NotImplementedError("handle_commit not yet implemented; lands in Task 6.1")
+    """Final commit: press + orders + implicit signal_done. Auto-advances
+    the round if all seats are in. Body schema:
+      {"press": {"stance": {idx: "ally|enemy|neutral"}, "intents": [...]},
+       "orders": {unit_id: {...}},
+       "aid_spends": [...]}
+    """
+    sess = store[game_id]
+    press_raw = body.get("press") or {}
+
+    stance: dict[int, Stance] = {}
+    for k, v in (press_raw.get("stance") or {}).items():
+        stance[int(k)] = Stance(v)
+
+    intents = [deserialize_intent(it) for it in (press_raw.get("intents") or [])]
+    press = Press(stance=stance, intents=intents)
+
+    orders = deserialize_orders(body.get("orders") or {})
+    aid_spends_raw = body.get("aid_spends") or []
+    aid_spends = [deserialize_aid_spend(x) for x in aid_spends_raw]
+
+    result = sess.submit_press_commit(pidx, press, orders,
+                                       aid_spends or None)
+    store.save(sess)
+    return result
 
 
 def handle_orders(session_factory, store, game_id: str, pidx: int,
                   body: dict) -> dict:
-    """Stub. Filled in Task 6.1."""
-    raise NotImplementedError("handle_orders not yet implemented; lands in Task 6.1")
+    """Submit orders for player WITHOUT signaling done — for clients that
+    want to set orders before pressing commit. Body schema:
+      {"orders": {unit_id: {...}}}
+    Most clients use /commit instead. Provided for parity with the upstream
+    game_server endpoint."""
+    sess = store[game_id]
+    orders = deserialize_orders(body.get("orders") or {})
+    sess.submit_human_orders(pidx, orders)
+    store.save(sess)
+    return {"ok": True}
