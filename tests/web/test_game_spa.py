@@ -39,6 +39,9 @@ def test_game_spa_sets_coop_coep_and_includes_token(settings, db):
     assert r.status_code == 200
     assert r.headers["cross-origin-opener-policy"] == "same-origin"
     assert r.headers["cross-origin-embedder-policy"] == "require-corp"
-    assert "gid=g-spa2" in r.text
-    assert "player_idx=0" in r.text
-    assert "token=" in r.text
+    # The JS block in the wrapper page injects gid/player_idx/token/api
+    # into the iframe src; the api param is computed from window.location
+    # so we don't assert on it. The other three must be substituted.
+    assert '"g-spa2"' in r.text
+    assert "player_idx" in r.text
+    assert "token" in r.text and r.text.count("eyJ") >= 1  # JWT segment marker

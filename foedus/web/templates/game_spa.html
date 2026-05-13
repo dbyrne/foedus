@@ -11,7 +11,18 @@ iframe{margin-top:28px;height:calc(100vh - 28px)}
 </head><body>
 <div class="bar"><a href="/games">← lobby</a> {{ game.id }} (you are P{{ player_idx }})</div>
 <div id="loading">Loading game… (first load ~10s)</div>
-<iframe id="game" src="/static/godot/index.html?gid={{ game.id }}&player_idx={{ player_idx }}&token={{ token }}&api={{ api_base }}"
-        allow="cross-origin-isolated"
+<iframe id="game" allow="cross-origin-isolated"
         onload="setTimeout(function(){var l=document.getElementById('loading');if(l)l.style.display='none';}, 1500)"></iframe>
+<script>
+  // Build api base from THIS page's origin so the iframe hits the same
+  // host (avoids CORS preflight whether served via localhost or 127.0.0.1,
+  // dev port or prod).
+  var qs = new URLSearchParams({
+    gid: "{{ game.id }}",
+    player_idx: "{{ player_idx }}",
+    token: "{{ token }}",
+    api: window.location.origin + "/api/v1"
+  });
+  document.getElementById("game").src = "/static/godot/index.html?" + qs.toString();
+</script>
 </body></html>

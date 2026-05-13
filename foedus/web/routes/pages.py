@@ -91,5 +91,8 @@ def install_pages(app: FastAPI, session_factory) -> None:
             return templates.TemplateResponse(request, "game_spa.html", {
                 "user": u, "game": g, "player_idx": my_seat.player_idx,
                 "token": token,
-                "api_base": settings.base_url.rstrip("/") + "/api/v1",
+                # api_base mirrors the iframe's actual origin to avoid CORS
+                # (localhost vs 127.0.0.1, dev port vs prod, etc.). The trailing
+                # slash on request.base_url is stripped.
+                "api_base": str(request.base_url).rstrip("/") + "/api/v1",
             })
