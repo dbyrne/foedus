@@ -31,21 +31,29 @@ filling empty seats.
 | Q3 | Seat assignment: configurable per-seat at game creation (human/bot dropdowns, any GitHub user can fill a human seat) |
 | Q4 | Async pacing: per-game deadline picked at creation (12h / 24h / 48h / 72h / none); background worker auto-advances expired phases by substituting `HoldAgent` for missing humans |
 | Q5 | Notifications: Discord webhook only |
-| Q6 | Frontend: **hybrid** — htmx + Jinja for chrome, Godot HTML5 embed for the map view only |
-| Q7 | Press/chat UI: htmx panel rendered alongside the Godot map embed on the same page (side-by-side on desktop, stacked on mobile) |
+| Q6 | Frontend: **pure-Godot SPA + minimal htmx launcher shell** — see "Frontend (revised)" below |
+| Q7 | Press/chat UI: lives inside the Godot client (CouncilNegotiation already implements it) |
 | Q8 | Persistence: sqlite + sqlalchemy |
+
+### Q6 revision history
+
+Initial decision was a hybrid (htmx chrome + Godot HTML5 embed for the map only). A static read of `/home/david/foedus-godot/` after the spec was first written showed that the Godot client is materially more complete than assumed — CouncilNegotiation, PressController, OrderController, and the resolution playback are all implemented, and `GameClient.gd` already speaks the existing `foedus.game_server` JSON API. The hybrid would have meant rebuilding chat/orders UI in htmx and bridging it to Godot via `postMessage` — duplicate work plus a sync surface area we don't need. Revised approach: keep htmx only for the bits Godot doesn't do (OAuth landing, multi-game lobby), use Godot for everything in-game. A planned implementation-phase spike (Phase 0 below) verifies bundle size and mobile touch behaviour before we commit further.
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │ Browser (Android Chrome)                                 │
-│  ┌──────────────────────┐  ┌──────────────────────────┐  │
-│  │ htmx + Jinja chrome  │  │ Godot HTML5 map embed    │  │
-│  │ (login, lobby,       │  │ (one <iframe> per game)  │  │
-│  │  chat, settings,     │  └──────────────────────────┘  │
-│  │  game-list, results) │                                │
-│  └──────────────────────┘                                │
+│  ┌──────────────────────┐                                │
+│  │ htmx launcher shell  │   served at /, /login, /games  │
+│  │ (OAuth, lobby,       │   — thin Jinja pages only      │
+│  │  "New game" form)    │                                │
+│  └──────────┬───────────┘                                │
+│             │ link / redirect to /games/{gid}            │
+│  ┌──────────▼───────────────────────────────────────┐    │
+│  │ Godot HTML5 SPA (full Council UI: map, chat,    │    │
+│  │ press, orders, resolution playback)              │    │
+│  └──────────────────────────────────────────────────┘    │
 └──────────────┬───────────────────────────────────────────┘
                │ HTTPS (cookie-auth sessions)
 ┌──────────────▼───────────────────────────────────────────┐
@@ -122,29 +130,28 @@ broken out so we can render history without deserializing GameState.
 
 ## Routes
 
-### HTML pages (Jinja + htmx)
+### HTML pages (Jinja, launcher shell only)
 
 | Route | Purpose |
 |---|---|
-| `GET /` | Landing — redirect to `/games` if logged in, else "Sign in with GitHub" |
+| `GET /` | Landing — redirect to `/games` if logged in, else `/login` |
+| `GET /login` | "Sign in with GitHub" button |
 | `GET /auth/github/login` → `GET /auth/github/callback` | OAuth dance |
 | `POST /auth/logout` | Clear session |
 | `GET /games` | List of your games (active / pending / finished tabs) |
 | `GET /games/new` | Game creation form (preset, max_turns, deadline, seats, webhook URL) |
 | `POST /games` | Create game; redirect to `/games/{gid}` |
-| `GET /games/{gid}` | Main game page: Godot iframe + htmx chat/orders panel |
-| `POST /games/{gid}/chat` | Append chat message (htmx fragment swap) |
-| `POST /games/{gid}/intents` | Set/update press intents |
-| `POST /games/{gid}/done` | Signal done with negotiation phase |
-| `POST /games/{gid}/orders` | Submit orders (also callable by Godot embed) |
-| `GET /games/{gid}/state.json` | Fog-filtered GameState (Godot polls this) |
-| `GET /games/{gid}/events` | Server-sent events stream (optional) |
+| `GET /games/{gid}` | Wrapper page that loads the Godot SPA with `?gid=…&player_idx=…&token=…` |
+| `POST /games/{gid}/jwt` | Mint a short-lived JWT for the Godot SPA from the session cookie |
 
-### JSON API
+### JSON API (consumed by Godot SPA)
 
 The existing `foedus.game_server` endpoints are mounted under
-`/api/v1/games/{gid}/…` with a thin auth wrapper that resolves
-`session → user → seat → player_idx`.
+`/api/v1/games/{gid}/…` with a thin auth wrapper that accepts EITHER a
+session cookie OR a bearer JWT (Godot uses the JWT), then resolves
+`user → seat → player_idx`. These endpoints include chat post, intent
+set, signal-done, orders submit, fog-filtered state read, and the
+long-poll wait already implemented in Bundle 6.
 
 ## Server-Side Flows
 
@@ -181,29 +188,93 @@ Each game has a per-game `asyncio.Lock`. Any handler that mutates state
 read-modify-write. Two humans pressing "done" simultaneously serialize
 through the lock.
 
-## Frontend
+## Frontend (revised)
 
-### Chrome (htmx + Jinja)
+### Launcher shell (htmx + Jinja)
 
-- Jinja templates rendered server-side.
-- htmx attributes (`hx-post`, `hx-target`) for partial updates — chat
-  append, intent save, "done" button, refresh state.
-- One CSS file, mobile-first. No build step.
-- Avoid red/green status colors (David is red/green colorblind); use
-  blue/orange/yellow plus icons/labels.
+Owns only the screens Godot doesn't already do well. Three pages, each
+a single Jinja template:
 
-### Map embed (Godot HTML5)
+- `GET /` → landing. Redirects to `/games` if logged in, else to
+  `/login`.
+- `GET /login` → "Sign in with GitHub" button. OAuth dance lands the
+  user on `/games`.
+- `GET /games` → list of the user's games (active / pending / finished
+  tabs) plus a "New game" button.
+- `GET /games/new` → seat-assignment form (preset / max_turns /
+  deadline / per-seat human-or-bot / Discord webhook URL).
+- `POST /games` → creates the row, redirects to `/games/{gid}`.
 
-- A static export of foedus-godot lives under `foedus/web/static/godot/`.
-- The game page wraps it in an `<iframe>` whose query string carries
-  `gid` + a short-lived JWT.
-- The embed polls `/api/v1/games/{gid}/state` (SSE if straightforward,
-  else 5s poll).
-- The embed POSTs orders to `/games/{gid}/orders` with the JWT in the
-  `Authorization:` header.
+All other actions happen inside the Godot SPA. No htmx chat panel, no
+htmx orders panel, no `postMessage` bridge.
 
-**Assumption to verify in plan:** foedus-godot has touch-friendly
-node-tap order entry. If not, that work must precede integration.
+CSS notes: mobile-first, one file, no build step. Avoid red/green
+status colors (David is red/green colorblind); use blue/orange/yellow
+plus icons/labels.
+
+### Game SPA (Godot HTML5)
+
+- A static export of foedus-godot is served from
+  `foedus/web/static/godot/`.
+- `GET /games/{gid}` returns a minimal HTML page that loads
+  `static/godot/index.html` with query-string parameters: `gid`,
+  `player_idx`, and a short-lived JWT minted by `foedus.web` from the
+  user's session cookie.
+- The SPA calls the existing `foedus.game_server` endpoints (mounted
+  under `/api/v1/games/{gid}/…`) for state, chat, intents, done, and
+  orders. `GameClient.gd` already speaks this API; only the JWT
+  bearer-auth wiring is new.
+- COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin`,
+  `Cross-Origin-Embedder-Policy: require-corp`) are required by Godot
+  4 HTML5 for `SharedArrayBuffer` (threads). FastAPI middleware sets
+  them.
+
+### What's not in foedus-godot yet (build during MVP)
+
+- Reading `gid` / `player_idx` / JWT from the URL query string instead
+  of from environment defaults.
+- A "back to lobby" link in the SPA that navigates the browser to
+  `/games`.
+- Whatever the Phase 0 spike (below) reveals as mobile-blocking.
+
+## Phase 0: foedus-godot mobile spike (FIRST TASK)
+
+Before any backend work, the implementation plan's first task is a
+time-boxed spike that produces evidence — not architecture analysis —
+about whether the Godot client is mobile-ready. The decision to go
+pure-Godot was made on a static read of the codebase; this spike
+verifies that read with real bytes and real touches.
+
+**Deliverables:**
+
+1. HTML5 release export of foedus-godot produced via
+   `godot --headless --export-release` (set up the web preset and CI
+   step now; download the official 4.3-stable export templates).
+2. Bundle size measurement: `du -sh` of the export directory + per-file
+   breakdown of the top 5 largest files. Pass criterion: total
+   gzipped/brotli'd transfer under ~30 MB.
+3. A throwaway local harness that runs the existing
+   `foedus.game_server` against a fresh 4-seat game, serves the Godot
+   export with COOP/COEP headers, and opens it in a real mobile
+   browser (Android Chrome on David's phone) or a phone-emulated
+   desktop browser.
+4. A walkthrough of one full negotiation→orders→resolution round on
+   that mobile viewport. Record: cold-start time to first
+   interaction; tap responsiveness on hex nodes; pinch/pan behaviour;
+   whether the Android keyboard cooperates with the in-canvas chat
+   input; any console errors.
+
+**Decision gate:**
+
+- If the spike passes (bundle within budget, taps land, chat keyboard
+  works, no fatal console errors): proceed with pure-Godot SPA as
+  specified.
+- If touch/keyboard issues are minor: log them as Godot-side tasks in
+  the implementation plan and proceed.
+- If the bundle is over budget or chat input is unusable on mobile:
+  revisit the frontend decision before writing any backend code. The
+  fallback is the original hybrid (htmx chat panel + Godot map embed)
+  — the backend design is unchanged either way.
 
 ## Code Layout
 
@@ -219,10 +290,13 @@ foedus/
     deadline_worker.py  # background asyncio task
     notify.py           # Discord webhook poster
     routes/
-      pages.py          # HTML routes (htmx + Jinja)
-      api.py            # JSON API wrappers around game_server endpoints
+      pages.py          # HTML launcher routes (Jinja)
+      api.py            # JSON API: cookie-or-JWT auth wrapper around game_server endpoints
     templates/
-    static/             # CSS, htmx.min.js, godot export bundle
+    static/
+      css/              # one mobile-first stylesheet
+      htmx.min.js
+      godot/            # HTML5 export of foedus-godot (built in CI)
 migrations/             # alembic
 tests/web/              # FastAPI TestClient integration tests
 ```
@@ -249,14 +323,23 @@ tests/web/              # FastAPI TestClient integration tests
 
 ## Open Implementation Risks
 
-1. **foedus-godot touch UX** — verify (or build) touch-friendly
-   node-tap order entry before integrating the embed.
+1. **foedus-godot mobile readiness** — bundle size, pinch/pan touch
+   behaviour, and Android-keyboard-vs-in-canvas-chat-input are all
+   unverified. Phase 0 spike (above) is the gating check.
 2. **Wire-protocol coverage** — persisting `state_json` may surface
    `GameState` fields that don't round-trip cleanly through
    `foedus/remote/wire.py`.
 3. **Per-game async lock** — verify the lock prevents lost updates
    under concurrent human actions and the deadline worker firing
    simultaneously.
+4. **JWT-to-Godot handoff** — `GameClient.gd` will need a small change
+   to read `gid` / `player_idx` / token from `window.location.search`
+   and use the token as a bearer header. Mechanical, but a foedus-godot
+   change is on the critical path.
+5. **COOP/COEP headers + OAuth callback** — the OAuth callback page
+   (htmx) and the Godot SPA page (Godot) need different header
+   policies; COOP/COEP for the SPA can break GitHub's OAuth popup if
+   applied site-wide. Apply per-route.
 
 ## Future (post-MVP)
 
