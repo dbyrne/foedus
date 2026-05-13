@@ -786,14 +786,23 @@ Add to `tests/test_game_server.py` (if file doesn't exist, create it):
 from foedus.game_server import make_app
 
 def test_make_app_accepts_external_store():
+    """The store passed in is the same object the route handlers use."""
     store: dict = {}
     app = make_app(sessions=store)
-    # store is shared with the app
-    assert hasattr(app, "title")
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+    r = client.get("/healthz")
+    assert r.status_code == 200 and r.json()["sessions"] == 0
+    store["pretend-gid"] = "not-a-real-session"
+    assert client.get("/healthz").json()["sessions"] == 1
 
 def test_make_app_default_in_memory_store():
+    """No-arg make_app() still works (backward compat)."""
     app = make_app()
-    assert hasattr(app, "title")
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+    r = client.get("/healthz")
+    assert r.status_code == 200 and r.json()["sessions"] == 0
 ```
 
 - [ ] **Step 2: Run, expect failure**
