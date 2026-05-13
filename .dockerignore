@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+.git
+.pytest_cache
+tests/
+foedus_web.db
+/tmp
+docs/
+.github/
+.playwright-mcp/
+*.egg-info/
