@@ -54,3 +54,23 @@ The income ledger must never drift from what the engine pays, or it's worse than
    one verified correctness claim), so optional.
 3. Push branch + open PR to `dbyrne/foedus` when David approves (not done — outward action).
 4. Separately fix the stale `test_detente_uses_tied_top_ranks`.
+
+## Behavioral exit-gate result (PASS)
+Re-ran the 4-agent playtest against the **branch** code (conflict preset, commit-only, 2 turns)
+with **fresh, naive agents** and a rule-light briefing (the prompt, not the briefing, had to teach
+capture). Result:
+- **4/4 understood move-then-Hold from turn 1** — all cited the stated capture rule and the income
+  ledger's "OCCUPYING (not yet converted) — stay put to capture" line; three explicitly reasoned
+  "occupying but not converted, so I Hold to lock in the capture."
+- **Used the newly-visible per-center values** — P3 identified `6$2` as the board's best center and
+  grabbed it; by turn 2 P3 leads (4) precisely because of the value-2 capture.
+- **Used adjacency** (P0 defended its home route) and **combat reasoning** (can't dislodge a
+  holding defender 1v1).
+- **Scores reconcile exactly** with owned-center values: P0=3, P1=3, P3=4, P2=2 (P2 one turn behind
+  only because it chose a plain hub node turn 1 — sound positional call, not confusion).
+- **Contrast with the first playtest:** 0/4 understood capture, ~3 of 7 turns wasted, scores
+  unreconcilable. The F1/F2 legibility fixes work.
+
+Not yet observed (out of 0a scope): actual combat/betrayal emergence — expected, since agents are
+still expanding into open centers. That's what **0b** (private stance, joint/conditional intents,
+betrayal teeth) + a longer run targets. **0a is behaviorally verified.**
