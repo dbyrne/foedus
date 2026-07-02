@@ -28,6 +28,7 @@ from foedus.core import (
     Order,
     PactStatus,
     PlayerId,
+    ReputationTally,
     Support,
 )
 
@@ -284,5 +285,27 @@ def render_pact_breach_ledger(state: GameState, player: PlayerId) -> str:
             f"pledged u{b.term.unit_id} -> "
             f"{order_to_str(b.term.declared_order, state)}, "
             f"actually issued {order_to_str(b.actual_order, state)}"
+        )
+    return "\n".join(lines)
+
+
+def render_reputation(state: GameState, player: PlayerId) -> str:
+    """F6: PUBLIC cumulative breach tally, visible to every player (not just
+    victims like `render_betrayal_ledger`/`render_pact_breach_ledger`) — the
+    social cost that lets the whole table refuse to ally with a proven
+    betrayer. Lists every surviving player, defaulting absent entries to
+    zero, so a clean record is as legible as a bad one."""
+    survivors = sorted(
+        p for p in range(state.config.num_players) if p not in state.eliminated
+    )
+    lines = [
+        "REPUTATION (public, cumulative; intent breaches / pact breaches / total):"
+    ]
+    for p in survivors:
+        r = state.reputation.get(p, ReputationTally())
+        marker = " (you)" if p == player else ""
+        lines.append(
+            f"  p{p}{marker}: {r.intent_breaches} intent / "
+            f"{r.pact_breaches} pact / {r.total} total"
         )
     return "\n".join(lines)

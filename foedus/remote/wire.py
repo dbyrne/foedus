@@ -127,6 +127,9 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         # agent blind to the negotiation layer — so they are deliberately
         # omitted here. deserialize_state defaults them empty; states round-trip
         # cleanly (a remote agent never sees or acts on pacts).
+        # Phase 0b (F6): `reputation` is the same kind of press-layer social
+        # state (a cumulative breach tally) and is omitted for the same
+        # reason; deserialize_state defaults it empty.
         # Task 11: new event lists from the alliance/support/intent redesign.
         "support_lapses": [serialize_support_lapsed(e) for e in state.support_lapses],
         "intent_revisions": [serialize_intent_revised(e) for e in state.intent_revisions],

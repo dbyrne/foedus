@@ -97,6 +97,12 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
     ]
     your_pact_breaches = list(state.pact_breaches.get(player, []))
 
+    # F6: public cumulative breach tally, visible to every player regardless
+    # of who a breach was directed at (unlike betrayals/pact_breaches above,
+    # which are observer-gated) -- same full-transparency treatment as
+    # `scores`.
+    public_reputation = dict(state.reputation)
+
     # Round-in-progress data (visible during NEGOTIATION phase).
     your_pending_press = state.round_press_pending.get(player)
     round_chat_so_far = [
@@ -122,6 +128,7 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
         "your_betrayals": your_betrayals,
         "your_pacts": your_pacts,
         "your_pact_breaches": your_pact_breaches,
+        "public_reputation": public_reputation,
         "your_pending_press": your_pending_press,
         "round_chat_so_far": round_chat_so_far,
         "current_round_phase": state.phase.value,
