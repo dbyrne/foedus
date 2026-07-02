@@ -913,6 +913,12 @@ def resolve_turn(state: GameState,
     `orders_by_player[player][unit_id] = order`. Missing units default to Hold.
     Spoofed orders (a player ordering another's unit) are dropped silently.
 
+    NB: this is the press-less path — it intentionally drops ALL press-layer
+    state (betrayals, aid ledgers, press/chat history, and F5 pacts /
+    pact_breaches / next_pact_id), since it builds a fresh GameState and
+    bypasses finalize_round's carry-forward. No caller mixes pacts with this
+    path; press-aware callers use finalize_round.
+
     For new code prefer foedus.press.advance_turn or foedus.press.finalize_round.
     """
     return _resolve_orders(state, orders_by_player)

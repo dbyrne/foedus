@@ -51,7 +51,14 @@ def node_label(m: Map, n: NodeId) -> str:
     supply_value() because mapgen's high-value assignment only ever
     targets NodeType.SUPPLY (see resolve.py::_assign_high_value_supplies);
     HOME nodes are always value 1 by construction.
+
+    Falls back to the bare id string for a node not in the map, so rendering
+    an order that references an out-of-map id (e.g. an untrusted agent/LLM
+    submitting Move(dest=<bogus>) as an intent or pact term) never crashes the
+    prompt — resolution already drops such orders via normalization.
     """
+    if n not in m.node_types:
+        return str(n)
     t = m.node_types[n]
     if t == NodeType.SUPPLY:
         return f"{n}${m.supply_value(n)}"

@@ -5,7 +5,12 @@ from __future__ import annotations
 from foedus.core import Hold, Move, Support
 from foedus.core import PactTerm
 from foedus.press import accept_pact, propose_pact
-from foedus.render_common import render_active_pacts, render_pact_breach_ledger
+from foedus.render_common import (
+    node_label,
+    order_to_str,
+    render_active_pacts,
+    render_pact_breach_ledger,
+)
 
 from tests.helpers import line_map, make_state
 from foedus.core import Unit
@@ -65,6 +70,31 @@ def test_render_active_pacts_hidden_from_third_party() -> None:
 
 
 # --- render_pact_breach_ledger ----------------------------------------------
+
+
+def test_node_label_unknown_node_falls_back_to_str() -> None:
+    """Untrusted agent/LLM input can reference a node id that isn't in the
+    map; the shared label helper must not crash (KeyError)."""
+    m = line_map(3)
+    assert node_label(m, 999) == "999"
+
+
+def test_render_active_pacts_tolerates_out_of_map_move_dest() -> None:
+    """A pact term with an illegal Move dest must render, not crash — the
+    order renderer is shared with the intent/betrayal ledgers."""
+    s = _state()
+    terms = (
+        PactTerm(player=0, unit_id=3, declared_order=Move(dest=999)),
+        PactTerm(player=1, unit_id=4, declared_order=Hold()),
+    )
+    s = propose_pact(s, 0, 1, terms)
+    out = render_active_pacts(s, 0)   # must not raise
+    assert "999" in out
+
+
+def test_order_to_str_tolerates_out_of_map_move_dest() -> None:
+    s = _state()
+    assert order_to_str(Move(dest=999), s) == "Move(dest=999)"
 
 
 def test_render_pact_breach_ledger_none() -> None:
