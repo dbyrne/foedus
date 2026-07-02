@@ -182,6 +182,19 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
             len(state.betrayals.get(p, []))
             for p in range(num_players)
         ],
+        # F6: cumulative PUBLIC breach counts by COMMITTER (state.reputation),
+        # as opposed to betrayal_count_per_player above which is keyed by
+        # the observing/victim party. Needed to tell whether the deceptive
+        # heuristics (DishonestCooperator, OpportunisticBetrayer, Sycophant)
+        # actually breach, independent of who they breached against.
+        "reputation_intent_breaches_per_player": [
+            state.reputation[p].intent_breaches if p in state.reputation else 0
+            for p in range(num_players)
+        ],
+        "reputation_pact_breaches_per_player": [
+            state.reputation[p].pact_breaches if p in state.reputation else 0
+            for p in range(num_players)
+        ],
         "aid_spends_count": aid_spends_count,
         "alliance_bonuses_fired": alliance_bonuses_fired,
         "combat_rewards_fired": combat_rewards_fired,
@@ -286,6 +299,15 @@ def main():
                         help="Bundle 4: 1 (default) resets the détente "
                              "streak on any observed betrayal (closes the "
                              "détente-by-lying bug); 0 preserves v1 behavior.")
+    # --- Phase 0b (F6): betrayal teeth ---
+    parser.add_argument("--intent-breach-penalty", type=float, default=None,
+                        help="F6: score penalty per broken declared Intent "
+                             "(default 1.0). Pass 0 to isolate F6's effect "
+                             "(penalties-off arm).")
+    parser.add_argument("--pact-breach-penalty", type=float, default=None,
+                        help="F6: score penalty per broken accepted Pact "
+                             "term (default 2.0). Pass 0 to isolate F6's "
+                             "effect (penalties-off arm).")
     # --- Bundle 5b (C3): variable supply values ---
     parser.add_argument("--high-value-fraction", type=float, default=None,
                         help="Bundle 5b (C3): fraction of non-HOME SUPPLY "
@@ -362,6 +384,10 @@ def main():
         bundle4_overrides["alliance_requires_aid"] = bool(args.alliance_requires_aid)
     if args.betrayal_resets_detente is not None:
         bundle4_overrides["betrayal_resets_detente"] = bool(args.betrayal_resets_detente)
+    if args.intent_breach_penalty is not None:
+        bundle4_overrides["intent_breach_penalty"] = args.intent_breach_penalty
+    if args.pact_breach_penalty is not None:
+        bundle4_overrides["pact_breach_penalty"] = args.pact_breach_penalty
     if args.high_value_fraction is not None:
         bundle4_overrides["high_value_supply_fraction"] = args.high_value_fraction
     if args.high_value_yield is not None:
