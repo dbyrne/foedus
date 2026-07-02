@@ -285,6 +285,15 @@ def _passes_reciprocation_gate(state: GameState, mover_pid: PlayerId) -> bool:
     Passes iff the mover has not taken ally support in the rolling window
     (received==0 -> not free-riding) OR its reciprocation standing meets the
     floor. A free-rider (received>0, given=0 -> recip 0) fails.
+
+    KNOWN RESIDUAL (both code reviews): the gate reads the PRIOR window's
+    `received` (this turn's support isn't in the ledger yet), so a free-rider
+    that goes a full window without support sees received==0 and collects the
+    mover bonus on its next supported capture. This recurs whenever the window
+    empties, not just on turn 1 — it is the design's accepted floor ("raise the
+    free-rider's cost from 0 to ~1 effective support per window"), and the
+    MinimalReciprocator probe is in the roster to bound it. Left as-is
+    deliberately; counting this turn's receipt would over-tighten the gate.
     """
     received = state.reciprocation_received(mover_pid)
     if received == 0:

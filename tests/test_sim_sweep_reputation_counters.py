@@ -18,12 +18,14 @@ import sys
 from pathlib import Path
 
 
-# seed=1 with this fixed 4-seat matchup reliably produces harm-typed intent
+# seed=15 with this fixed 4-seat matchup reliably produces harm-typed intent
 # breaches by seat 0 (Sycophant captures an allied Cooperator's supply) within
 # 10 turns on the conflict preset (continental_sweep, map_radius=2), while the
 # honest Cooperators — whose only deviations are pro-social Move->Support
-# redirects — commit zero harm-typed breaches.
+# redirects — commit zero harm-typed breaches (verified under the unit-scoped
+# harm attribution).
 SEATS = "Sycophant,Cooperator,Cooperator,Cooperator"
+SEED = "15"
 
 
 def _run_sweep(out_path: Path, extra_args: list[str]) -> list[dict]:
@@ -38,7 +40,7 @@ def _run_sweep(out_path: Path, extra_args: list[str]) -> list[dict]:
             "--archetype", "continental_sweep",
             "--map-radius", "2",
             "--seats", SEATS,
-            "--seed", "1",
+            "--seed", SEED,
             "--workers", "1",
             "--out", str(out_path),
             *extra_args,
@@ -61,7 +63,7 @@ def test_sweep_emits_reputation_breach_counters(tmp_path):
         assert len(rec[field]) == 4
         assert all(isinstance(v, int) and v >= 0 for v in rec[field])
     assert rec["reputation_intent_breaches_per_player"][0] > 0, \
-        "seed=1 matchup should trigger real breaches by seat 0"
+        "seed=15 matchup should trigger real breaches by seat 0"
     assert rec["reputation_intent_breaches_per_player"][1:] == [0, 0, 0]
     assert rec["reputation_pact_breaches_per_player"] == [0, 0, 0, 0]
 

@@ -651,34 +651,6 @@ def _pact_committed_party(pact: Pact, term: PactTerm) -> PlayerId:
     return pact.counterparty if term.player == pact.proposer else pact.proposer
 
 
-def _responsible_players(
-    attacker_uid: UnitId,
-    detail: "object",
-    state: GameState,
-) -> set[PlayerId]:
-    """Owners who swung or (uncut) backed the attack led by `attacker_uid`:
-    the attacker's owner plus every player whose uncut Support backed that
-    unit's move this turn."""
-    out: set[PlayerId] = set()
-    atk_unit = state.units.get(attacker_uid)
-    if atk_unit is not None:
-        out.add(atk_unit.owner)
-    atk_order = detail.canon.get(attacker_uid)
-    for uid, order in detail.canon.items():
-        if uid in detail.cut:
-            continue
-        if not isinstance(order, Support) or order.target != attacker_uid:
-            continue
-        if (order.require_dest is not None
-                and isinstance(atk_order, Move)
-                and order.require_dest != atk_order.dest):
-            continue
-        sup = state.units.get(uid)
-        if sup is not None:
-            out.add(sup.owner)
-    return out
-
-
 def _breach_harms_party(
     breacher: PlayerId,
     X: PlayerId,
@@ -688,34 +660,59 @@ def _breach_harms_party(
     s_after: GameState,
     detail: "object",
 ) -> bool:
-    """True iff `breacher`'s divergence harmed committed party X (H1 or H2)."""
+    """True iff the DEVIATING unit `unit_id`'s actual action harmed committed
+    party X (H1 aggression / H2 abandoned defense).
+
+    Attribution is scoped to the specific deviating unit — NOT the breacher as
+    a whole — so a pro-social redirect on one unit is never flagged just because
+    a *different* unit of the same player harmed X the same turn (the false
+    positive both code reviews caught). H1 fires only if THIS unit's own Move,
+    or the (uncut) Move its own Support backed, dislodged X's unit or captured
+    X's supply/home center.
+    """
     m = state.map
-    # H1a (capture): a supply/home center X owned is now owned by the breacher.
-    for n, owner in state.ownership.items():
-        if owner == X and m.is_supply(n) and s_after.ownership.get(n) == breacher:
+    canon_order = detail.canon.get(unit_id)
+    # The mover(s) this unit is responsible for: its own Move, or the mover its
+    # uncut Support backed (a pinned Support must match the mover's dest).
+    movers: list[UnitId] = []
+    if isinstance(canon_order, Move):
+        movers.append(unit_id)
+    elif isinstance(canon_order, Support) and unit_id not in detail.cut:
+        tgt_order = detail.canon.get(canon_order.target)
+        if isinstance(tgt_order, Move) and (
+            canon_order.require_dest is None
+            or canon_order.require_dest == tgt_order.dest
+        ):
+            movers.append(canon_order.target)
+    for mv in movers:
+        if detail.outcome.get(mv) != "success":
+            continue
+        mv_order = detail.canon.get(mv)
+        if not isinstance(mv_order, Move):
+            continue
+        # H1b (dislodge): this move dislodged an X unit.
+        for d_uid, atk in detail.dislodged_by.items():
+            if atk != mv:
+                continue
+            victim = state.units.get(d_uid)
+            if victim is not None and victim.owner == X:
+                return True
+        # H1a (capture): this move captured an X supply/home center FOR THE
+        # breacher. (A supporter-backed cross-player capture flips ownership to
+        # the mover, not the breacher, and is caught by the H1b check above.)
+        n = mv_order.dest
+        if (m.is_supply(n) and state.ownership.get(n) == X
+                and s_after.ownership.get(n) == breacher):
             return True
-    # H1b (dislodge): an X unit was dislodged by the breacher's own move or a
-    # move the breacher's uncut Support backed.
-    for d_uid, res in detail.outcome.items():
-        if res != "dislodged":
-            continue
-        victim = state.units.get(d_uid)
-        if victim is None or victim.owner != X:
-            continue
-        attacker_uid = detail.dislodged_by.get(d_uid)
-        if attacker_uid is None:
-            continue
-        if breacher in _responsible_players(attacker_uid, detail, state):
-            return True
-    # H2a (abandoned support-defense): declared Support of X's unit, abandoned,
-    # and that unit was dislodged this turn.
+    # H2a (abandoned support-defense): THIS unit's DECLARED order was a Support
+    # of X's unit, abandoned, and that unit was dislodged this turn.
     if isinstance(declared_order, Support):
         tgt = state.units.get(declared_order.target)
         if (tgt is not None and tgt.owner == X
                 and detail.outcome.get(tgt.id) == "dislodged"):
             return True
-    # H2b (abandoned hold-defense): declared Hold adjacent to an X supply/home
-    # center that was captured (flipped away from X) this turn.
+    # H2b (abandoned hold-defense): THIS unit's DECLARED order was a Hold
+    # adjacent to an X supply/home center captured (flipped from X) this turn.
     if isinstance(declared_order, Hold):
         u = state.units.get(unit_id)
         if u is not None:

@@ -344,6 +344,62 @@ def test_harmful_intent_penalty_isolated_via_on_off_diff() -> None:
     assert off - on == 1.0  # the harmful breach paid exactly the fine
 
 
+def test_harm_is_attributed_per_unit_not_per_player() -> None:
+    """Regression (both code reviews): harm is scoped to the DEVIATING unit.
+
+    p0 declares ALLY->p1 and two broken intents: U0 (declared Move, redirected
+    to SUPPORT p1's own move — pro-social) and U3 (declared Hold, actually stabs
+    p1's other unit with U4's backing). The stab harms p1; U0's redirect helps
+    p1. Only U3 must be flagged — a player-level harm check would wrongly flag
+    U0 too, resurrecting the exact 'penalize helping' bug harm-typing exists to
+    kill."""
+    # Two disjoint clusters: {n0,n1,n2} (U0 supports p1's U1 into empty n2) and
+    # {n3,n4,n5} (p0's U3+U4 dislodge p1's U2 on the n3 supply).
+    coords = {i: (i, 0) for i in range(6)}
+    edges = {
+        0: frozenset({2}), 1: frozenset({2}), 2: frozenset({0, 1}),
+        3: frozenset({4, 5}), 4: frozenset({3}), 5: frozenset({3}),
+    }
+    node_types = {
+        0: NodeType.PLAIN, 1: NodeType.PLAIN, 2: NodeType.PLAIN,
+        3: NodeType.SUPPLY, 4: NodeType.PLAIN, 5: NodeType.PLAIN,
+    }
+    m = Map(coords=coords, edges=edges, node_types=node_types,
+            home_assignments={})
+    units = [
+        Unit(0, 0, 0),  # p0 U0 (pro-social supporter)
+        Unit(1, 1, 1),  # p1 U1 (the helped mover)
+        Unit(2, 1, 3),  # p1 U2 (the stabbed victim, on the n3 supply)
+        Unit(3, 0, 4),  # p0 U3 (the stabber)
+        Unit(4, 0, 5),  # p0 U4 (backs the stab)
+    ]
+    ownership = {n: None for n in m.nodes}
+    ownership[3] = 1  # p1 owns the contested supply
+    for u in units:
+        ownership[u.location] = u.owner
+    cfg = GameConfig(num_players=2, max_turns=50, build_period=999,
+                     detente_threshold=0, high_value_supply_fraction=0.0)
+    s = GameState(
+        turn=0, map=m, units={u.id: u for u in units}, ownership=ownership,
+        scores={0: 0.0, 1: 0.0}, eliminated=set(), next_unit_id=5, config=cfg,
+    )
+    intents = [
+        Intent(unit_id=0, declared_order=Move(dest=2), visible_to=None),
+        Intent(unit_id=3, declared_order=Hold(), visible_to=None),
+    ]
+    s2 = _finalize(
+        s,
+        {0: Press(stance=_ally(1), intents=intents)},
+        {
+            0: {0: Support(target=1), 3: Move(dest=3), 4: Support(target=3)},
+            1: {1: Move(dest=2), 2: Hold()},
+        },
+    )
+    assert s2.ownership[3] == 0  # the stab captured p1's supply (harm happened)
+    # Exactly ONE breach — U3's stab — NOT U0's pro-social redirect.
+    assert s2.reputation.get(0, ReputationTally()).intent_breaches == 1
+
+
 def test_intent_penalty_default_positive() -> None:
     assert GameConfig().intent_breach_penalty > 0
     assert GameConfig().pact_breach_penalty > 0

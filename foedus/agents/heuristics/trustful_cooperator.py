@@ -1,22 +1,19 @@
-"""TrustfulCooperator — Bundle 4 aware cooperator.
+"""TrustfulCooperator — reciprocation-aware cooperator.
 
-Like Cooperator (cross-supports allied attacks based on declared Intents),
-but ALSO engages with the Bundle 4 aid resource: spends aid tokens on
-mutual-ALLY partners to back their declared Move intents, while
-reciprocating to keep `aid_given` balanced.
+Like Cooperator (cross-supports allied Move-on-supply intents), but chooses
+*which* ally to back by the public reciprocation ledger (Primitive B): it
+prioritises supporting allies in good reciprocation standing over free-riders,
+using its scarce unit-actions on partners who actually reciprocate. This is the
+reciprocity-model reincarnation of the old (deleted) aid-ledger reciprocity
+gate — same "reward the reciprocators" intent, expressed through real Support
+orders and the new `reciprocation_standing` signal instead of aid tokens.
 
 Strategy:
   Press: ALLY toward all surviving non-eliminated opponents; publish own
-    GreedyHold-planned Moves as Intents (so other Cooperators see what to
-    support).
-  Aid spending: for each affordable token, find a mutual-ALLY partner whose
-    declared Intent is a Move-on-supply we'd like to support. Prefer
-    partners with higher `aid_given[partner→self]` (i.e. partners who have
-    given us aid; reciprocate to keep leverage balanced) over partners
-    we've already aided heavily.
-  Orders: Support for declared cross-player Move-on-supply intents we
-    can reach geographically (same as Cooperator). Else fall back to
-    GreedyHold.
+    GreedyHold-planned Moves as Intents (so other cooperators see what to back).
+  Orders: among reachable cross-player Move-on-supply intents, back the ones
+    whose owner has the highest reciprocation standing first (freeriders last);
+    remaining units fall back to GreedyHold.
 """
 
 from __future__ import annotations
@@ -46,31 +43,40 @@ class TrustfulCooperator:
         my_unit_ids = {u.id for u in my_units}
         orders: dict[UnitId, Order] = {}
         used: set[UnitId] = set()
+
+        # Gather reachable cross-player Move-on-supply support opportunities as
+        # (-standing, ally_uid, dest), then serve them
+        # highest-reciprocation-standing-first: back genuine reciprocators
+        # before free-riders. Tiebreak: lower unit id (stable).
+        candidates: list[tuple[float, int, int]] = []
         for other_pid, press in state.round_press_pending.items():
             if other_pid == player or other_pid in state.eliminated:
                 continue
-            their_stance_to_me = press.stance.get(player, Stance.NEUTRAL)
-            if their_stance_to_me == Stance.HOSTILE:
+            if press.stance.get(player, Stance.NEUTRAL) == Stance.HOSTILE:
                 continue
+            standing = state.reciprocation_standing(other_pid)
             for intent in press.intents:
                 order = intent.declared_order
-                if not isinstance(order, Move):
+                if not isinstance(order, Move) or not m.is_supply(order.dest):
                     continue
-                if not m.is_supply(order.dest):
+                target_unit = state.units.get(intent.unit_id)
+                if target_unit is None or target_unit.owner != other_pid:
                     continue
-                for u in my_units:
-                    if u.id in used:
-                        continue
-                    if not m.is_adjacent(u.location, order.dest):
-                        continue
-                    if u.location == order.dest:
-                        continue
-                    target_unit = state.units.get(intent.unit_id)
-                    if target_unit is None or target_unit.owner != other_pid:
-                        continue
-                    orders[u.id] = Support(target=intent.unit_id)
-                    used.add(u.id)
-                    break
+                candidates.append((-standing, intent.unit_id, order.dest))
+        candidates.sort(key=lambda c: (c[0], c[1]))
+
+        for _, ally_uid, ally_dest in candidates:
+            for u in my_units:
+                if u.id in used:
+                    continue
+                if not m.is_adjacent(u.location, ally_dest):
+                    continue
+                if u.location == ally_dest:
+                    continue
+                orders[u.id] = Support(target=ally_uid)
+                used.add(u.id)
+                break
+
         fallback = self._inner.choose_orders(state, player)
         for uid in my_unit_ids:
             if uid not in orders:

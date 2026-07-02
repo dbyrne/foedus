@@ -385,24 +385,19 @@ class GameConfig:
     # ALLY but secretly racing for supplies, closing peaceful collective
     # victory while breaking publicly declared intents).
     betrayal_resets_detente: bool = True
-    # --- Phase 0b (F6): betrayal teeth ---
-    # Score penalty deducted from the BREACHER at finalize for each broken
-    # declared Intent (BetrayalObservation) / broken accepted Pact term
-    # (PactBreach) this turn. Counted once per broken commitment, not once
-    # per observer (a public intent with visible_to=None still fans
-    # BetrayalObservation out to every survivor, but it's one broken
-    # promise). 0 disables that penalty (pre-F6 behavior).
+    # --- betrayal teeth (harm-typed, 2026-07-02 reciprocity model) ---
+    # Score penalty deducted from the BREACHER at finalize for each HARM-TYPED
+    # broken declared Intent / broken accepted Pact term this turn (only fires
+    # when the divergence harmed a committed ally — Primitive A). Counted once
+    # per harmful broken commitment, not once per observer. 0 disables the
+    # penalty (reputation-only for that commitment type).
     #
-    # Defaults justified against the tiered supply-value scale: home/base
-    # supplies yield 1.0/turn, high-value supplies 2.0/turn, and
-    # combat_reward/supporter_combat_reward are 1.0 each. intent_breach_penalty
-    # =1.0 roughly offsets a single opportunistic combat_reward, so a stab is a
-    # real cost, not free money -- but it's not game-ending against a healthy
-    # multi-supply economy. pact_breach_penalty=2.0 is strictly greater
-    # because a ratified two-party Pact is a stronger commitment than a
-    # unilateral declared Intent.
+    # Both default to 1.0. The design (§4) recommends the pact fine "start ≈
+    # 1.0" as a small, revisitable knob; harm-typing removes the pro-social
+    # confound that previously made the flat fine over-penalize cooperators, so
+    # a modest, equal value on each is the natural baseline.
     intent_breach_penalty: float = 1.0
-    pact_breach_penalty: float = 2.0
+    pact_breach_penalty: float = 1.0
     # --- Bundle 5b (C3): variable supply values ---
     # Fraction of non-HOME SUPPLY nodes marked as high-value (worth +2/turn
     # instead of +1). 0.0 reverts to v1 uniform-value scoring. Default 0.20
