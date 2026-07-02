@@ -244,6 +244,16 @@ def test_capture_rule_text_states_hold_and_persistence() -> None:
     assert "stays yours" in CAPTURE_RULE_TEXT.lower()
 
 
+def test_capture_rule_text_states_instant_combat_capture() -> None:
+    """Code review finding: the walk-then-Hold sentence alone undersells the
+    combat path — dislodging an enemy unit on a supply/home flips ownership
+    IMMEDIATELY that same turn (resolve.py rule (a)), no Hold required. The
+    text must say so explicitly, not just imply it via the "how it's lost"
+    framing, since surfacing real combat is this phase's whole point."""
+    assert "dislodg" in CAPTURE_RULE_TEXT.lower()
+    assert "instant" in CAPTURE_RULE_TEXT.lower()
+
+
 def _all_done(s):
     for p in range(s.config.num_players):
         s = submit_press_tokens(s, p, Press(stance={}, intents=[]))

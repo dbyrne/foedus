@@ -132,7 +132,7 @@ def render_commit_prompt(state: GameState, player: PlayerId) -> str:
 
     out.write(
         "MAP (^ = mountain, ~ = water, $<value> = supply, H = home, "
-        "[node-mark:owner], u<id>p<player> = unit):\n"
+        "[node-mark:owner]):\n"
     )
     out.write(render_map(state) + "\n\n")
     out.write(f"Your visible nodes: {view['visible_nodes']}\n")

@@ -31,11 +31,13 @@ from foedus.core import (
 )
 
 CAPTURE_RULE_TEXT = (
-    "CAPTURE RULE: you capture a supply/home center by moving onto it and "
-    "then Holding it through the next resolution; passing through captures "
-    "nothing. Plain nodes flip ownership on entry every turn. A captured "
-    "center stays yours after you leave, until another player captures it "
-    "(by dislodging you, or by the same move-then-Hold rule)."
+    "CAPTURE RULE: two ways to capture a supply/home center. (1) INSTANT: "
+    "win a combat that dislodges the enemy unit occupying it — ownership "
+    "flips the same turn, no Hold required. (2) WALK-IN: move onto an "
+    "unoccupied/undefended one and then Hold it through the next "
+    "resolution — passing through captures nothing. Plain nodes flip "
+    "ownership on entry every turn. A captured center stays yours after "
+    "you leave, until another player captures it by either method above."
 )
 
 
@@ -44,7 +46,10 @@ def node_label(m: Map, n: NodeId) -> str:
 
     Examples: "29$2" (value-2 supply), "24$1" (value-1 supply), "5H" (home
     — always value 1, so no value suffix), "8^" (mountain), "3~" (water),
-    "12" (plain).
+    "12" (plain). HOME never gets a value suffix without consulting
+    supply_value() because mapgen's high-value assignment only ever
+    targets NodeType.SUPPLY (see resolve.py::_assign_high_value_supplies);
+    HOME nodes are always value 1 by construction.
     """
     t = m.node_types[n]
     if t == NodeType.SUPPLY:
@@ -161,7 +166,8 @@ def render_income_ledger(state: GameState, player: PlayerId) -> str:
     if data["occupying"]:
         occ_s = ",".join(f"{n}(v{v})" for n, v in data["occupying"])
         lines.append(
-            f"OCCUPYING (not yet converted): {{{occ_s}}} — Hold to capture."
+            f"OCCUPYING (not yet converted): {{{occ_s}}} — stay put "
+            f"(Hold/Support) through the next resolution to capture."
         )
     bt = build_turns(state)
     bt_s = ", ".join(str(t) for t in bt) if bt else "none"

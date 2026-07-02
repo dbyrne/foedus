@@ -85,7 +85,19 @@ def test_commit_prompt_states_capture_rule() -> None:
     s = initial_state(cfg, m)
     out = render_commit_prompt(s, 0)
     assert "CAPTURE RULE" in out
-    assert "Holding" in out
+    assert "Hold" in out
+    assert "dislodg" in out.lower()
+
+
+def test_commit_prompt_map_legend_does_not_claim_to_render_units() -> None:
+    """Code review finding: render_map only draws terrain/owner marks, not
+    units (those are in the separate VISIBLE UNITS section) — the legend
+    must not claim otherwise."""
+    cfg = GameConfig(num_players=4, max_turns=7)
+    m = generate_map(4, seed=42)
+    s = initial_state(cfg, m)
+    out = render_commit_prompt(s, 0)
+    assert "u<id>p<player>" not in out
 
 
 def test_commit_prompt_shows_supply_value_on_map() -> None:

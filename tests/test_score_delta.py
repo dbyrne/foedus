@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from foedus.core import Hold, Press, Unit
+from foedus.core import Hold, Move, Press, Support, Unit
 from foedus.press import finalize_round, signal_done, submit_press_tokens
 from foedus.resolve import initial_state, resolve_turn
 
@@ -63,19 +63,53 @@ def test_finalize_round_score_delta_includes_stagnation_cost() -> None:
     assert s2.scores == {0: 0.0, 1: 0.0}
 
 
-def test_finalize_round_score_delta_matches_actual_delta_with_movement() -> None:
-    """Sanity check across a non-trivial finalize_round call: the recorded
-    delta always equals the actual before/after score change, regardless of
-    which scoring sub-steps fired."""
-    s = simple_two_player_state()
+def test_finalize_round_score_delta_matches_actual_delta_with_dislodgement_and_support() -> None:
+    """Code review finding: the delta must be verified against a scenario
+    that actually exercises combat + cross-player support, not just Holds
+    — that's where score components beyond tiered income (combat_reward,
+    supporter_combat_reward) come from, and where a naive re-derivation of
+    "last turn's score" would be most likely to drift from resolve.py's
+    actual computation.
+
+    Scenario (line_map(5): 0(H,p0)-1$-2$-3$-4(H,p1)):
+      p0: home unit at n0 (Hold); attacker unit at n1 -> Move(dest=2).
+      p1: home unit at n4 (Hold); supporter unit at n3 -> Support(target=attacker).
+      p2: defender unit at n2 (Hold, unsupported).
+    p0's attacker (str 1) + p1's cross-player support (+1) = str 2 beats
+    p2's unsupported hold (str 1) -> p2 dislodged, n2 captured by p0
+    immediately (Mechanic A rule (a), no Hold-through-next-turn needed).
+
+    Expected per-player totals (all nodes value 1, default combat_reward=
+    supporter_combat_reward=1.0, alliance bonus doesn't fire since no
+    AidSpend backs the support):
+      p0: owns {n0 home, n1 (retained after leaving), n2 (fresh combat
+          capture)} = 3 tiered, + combat_reward 1.0 = 4.0
+      p1: owns {n4 home, n3 (supporter's unit, held there since turn 0)}
+          = 2 tiered, + supporter_combat_reward 1.0 = 3.0
+      p2: dislodged, owns nothing = 0.0 (and is eliminated for future
+          turns, but this turn's own delta must still be well-defined)
+    """
+    m = line_map(5)
+    u0 = Unit(0, 0, 0)   # p0 home
+    u1 = Unit(1, 1, 4)   # p1 home
+    u2 = Unit(2, 2, 2)   # p2 defender
+    u3 = Unit(3, 0, 1)   # p0 attacker
+    u4 = Unit(4, 1, 3)   # p1 supporter
+    s = make_state(m, [u0, u1, u2, u3, u4], num_players=3)
     before = dict(s.scores)
-    survivors = [p for p in range(s.config.num_players) if p not in s.eliminated]
-    for p in survivors:
+    for p in range(3):
         s = submit_press_tokens(s, p, Press(stance={}, intents=[]))
         s = signal_done(s, p)
-    orders = {p: {u.id: Hold() for u in s.units_of(p)} for p in survivors}
+    orders = {
+        0: {3: Move(dest=2)},
+        1: {4: Support(target=3)},
+        2: {},
+    }
     s2 = finalize_round(s, orders)
-    for p in survivors:
+
+    assert s2.scores == {0: 4.0, 1: 3.0, 2: 0.0}
+    assert s2.last_turn_score_delta == {0: 4.0, 1: 3.0, 2: 0.0}
+    for p in range(3):
         assert s2.last_turn_score_delta[p] == s2.scores.get(p, 0.0) - before.get(p, 0.0)
 
 
