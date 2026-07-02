@@ -32,6 +32,7 @@ from foedus.core import (
     Intent,
     Move,
     Order,
+    PactTerm,
     Press,
     Stance,
     Support,
@@ -41,7 +42,9 @@ from foedus.fog import visible_state_for
 from foedus.legal import legal_orders_for_unit
 from foedus.mapgen import generate_map
 from foedus.press import (
+    accept_pact,
     finalize_round,
+    propose_pact,
     record_chat_message,
     signal_done,
     submit_press_tokens,
@@ -49,10 +52,12 @@ from foedus.press import (
 from foedus.render_common import (
     CAPTURE_RULE_TEXT,
     order_to_str,
+    render_active_pacts,
     render_adjacency_table,
     render_betrayal_ledger,
     render_income_ledger,
     render_map,
+    render_pact_breach_ledger,
     render_turn_calendar,
 )
 from foedus.resolve import initial_state
@@ -216,6 +221,10 @@ def cmd_prompt_chat(player: int) -> None:
 
     print(render_betrayal_ledger(state, player))
     print()
+    print(render_active_pacts(state, player))
+    print()
+    print(render_pact_breach_ledger(state, player))
+    print()
 
     # Round chat so far (other players' chat earlier in this round).
     if view["round_chat_so_far"]:
@@ -329,6 +338,10 @@ def cmd_prompt_commit(player: int) -> None:
     print()
     print(render_betrayal_ledger(state, player))
     print()
+    print(render_active_pacts(state, player))
+    print()
+    print(render_pact_breach_ledger(state, player))
+    print()
 
     # Visible units.
     print("VISIBLE UNITS:")
@@ -360,6 +373,14 @@ def cmd_prompt_commit(player: int) -> None:
     print('       "visible_to": null | [<pid>, ...]}')
     print('    ]')
     print('  },')
+    print('  "pacts": {')
+    print('    "propose": [')
+    print('      {"counterparty": <pid>,')
+    print('       "terms": [{"player": <pid>, "unit_id": <int>,')
+    print('                  "declared_order": <order>}, ...]}')
+    print('    ],')
+    print('    "accept": [<pact_id>, ...]')
+    print('  },')
     print('  "orders": {"<unit_id>": <order>, ...}')
     print('}')
     print()
@@ -375,6 +396,11 @@ def cmd_prompt_commit(player: int) -> None:
     print("- intents about units you don't own are silently dropped.")
     print("- if your declared_order doesn't match your actual order at finalize,")
     print("  recipients see a BetrayalObservation. Plan accordingly.")
+    print("- pacts is optional. A PACT is a BINDING two-party commitment: its")
+    print("  terms must span both you and the counterparty (>=1 unit each), or")
+    print("  it's dropped. The counterparty ratifies via pacts.accept next.")
+    print("  Once accepted, any party diverging from its term at finalize emits")
+    print("  a PactBreach the other party sees (stronger than an intent).")
     print("- orders is required; default-Hold any owned unit you omit.")
 
 
@@ -406,6 +432,28 @@ def _parse_intent(d: dict) -> Intent | None:
         return None
 
 
+def _parse_pact_proposal(d: dict) -> tuple[int, list[PactTerm]] | None:
+    """Parse one pact-proposal dict into (counterparty, terms). Returns None
+    if the counterparty is unparseable; individual bad terms are skipped
+    (the engine drops the whole proposal if a party ends up with no term)."""
+    try:
+        counterparty = int(d["counterparty"])
+    except (KeyError, TypeError, ValueError) as e:
+        print(f"WARN: bad pact proposal (counterparty) {d!r}: {e}; skipping")
+        return None
+    terms: list[PactTerm] = []
+    for t in d.get("terms") or []:
+        try:
+            terms.append(PactTerm(
+                player=int(t["player"]),
+                unit_id=int(t["unit_id"]),
+                declared_order=parse_order(t["declared_order"]),
+            ))
+        except (KeyError, TypeError, ValueError) as e:
+            print(f"WARN: bad pact term {t!r}: {e}; skipping")
+    return counterparty, terms
+
+
 def cmd_apply_commit(player: int, path: str) -> None:
     """Parse {press, orders} JSON, submit press, store orders for advance."""
     state = load()
@@ -421,6 +469,41 @@ def cmd_apply_commit(player: int, path: str) -> None:
             intents.append(parsed)
     press = Press(stance=stance, intents=intents)
     state = submit_press_tokens(state, player, press)
+
+    # Pacts (optional): propose then accept. Proposals must precede
+    # acceptances so a counterparty can ratify a same-round proposal.
+    pacts_raw = raw.get("pacts") or {}
+    for prop_raw in pacts_raw.get("propose") or []:
+        parsed = _parse_pact_proposal(prop_raw)
+        if parsed is None:
+            continue
+        counterparty, terms = parsed
+        before = len(state.pacts)
+        state = propose_pact(state, player, counterparty, terms)
+        if len(state.pacts) > before:
+            pact = state.pacts[-1]
+            print(f"player {player} proposed pact #{pact.pact_id} to "
+                  f"p{counterparty} ({len(pact.terms)} term(s))")
+        else:
+            print(f"WARN: pact proposal from p{player} to p{counterparty} "
+                  f"dropped (needs a valid term from each party; both must be "
+                  f"active and not done)")
+    for pid_raw in pacts_raw.get("accept") or []:
+        try:
+            pid = int(pid_raw)
+        except (TypeError, ValueError):
+            print(f"WARN: bad pact id to accept {pid_raw!r}; skipping")
+            continue
+        matched = next((p for p in state.pacts if p.pact_id == pid), None)
+        state = accept_pact(state, pid, player)
+        after = next((p for p in state.pacts if p.pact_id == pid), None)
+        if after is not None and after.status.value == "accepted":
+            print(f"player {player} accepted pact #{pid}")
+        else:
+            why = ("unknown pact id" if matched is None
+                   else "not your pact / already resolved")
+            print(f"WARN: p{player} could not accept pact #{pid} ({why})")
+
     save(state)
     # Note: there's a small atomicity gap between this save() and the
     # orders pickle write below. If the process crashes between the

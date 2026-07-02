@@ -6,7 +6,9 @@ from foedus.agents.base import Agent
 from foedus.core import GameConfig, GameState, Order, PlayerId, UnitId
 from foedus.mapgen import generate_map
 from foedus.press import (
+    accept_pact,
     finalize_round,
+    propose_pact,
     record_chat_message,
     signal_done,
     submit_aid_spends,
@@ -48,7 +50,19 @@ def play_game(
                 continue
             press = agent.choose_press(state, player_id)
             state = submit_press_tokens(state, player_id, press)
-        # Second pass: aid spends + chat + done.
+        # F5: pact-proposal pass. Run BEFORE any acceptance so a player can
+        # accept a same-round proposal (choose_pacts is optional, like
+        # choose_aid — hasattr-guarded to keep the Agent protocol minimal).
+        for player_id, agent in agents.items():
+            if player_id in state.eliminated:
+                continue
+            if not hasattr(agent, "choose_pacts"):
+                continue
+            for prop in agent.choose_pacts(state, player_id):
+                state = propose_pact(
+                    state, player_id, prop.counterparty, prop.terms
+                )
+        # Second pass: aid spends + chat + pact acceptances + done.
         for player_id, agent in agents.items():
             if player_id in state.eliminated:
                 continue
@@ -57,6 +71,9 @@ def play_game(
                 state = submit_aid_spends(state, player_id, aid)
             for draft in agent.chat_drafts(state, player_id):
                 state = record_chat_message(state, player_id, draft)
+            if hasattr(agent, "accept_pacts"):
+                for pact_id in agent.accept_pacts(state, player_id):
+                    state = accept_pact(state, pact_id, player_id)
             state = signal_done(state, player_id)
 
         # 2. Orders phase: collect orders from each survivor.
