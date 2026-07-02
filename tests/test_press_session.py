@@ -58,6 +58,20 @@ def test_submit_press_chat_with_draft_records_message() -> None:
     assert result["message_dropped"] is False
 
 
+def test_submit_press_chat_over_cap_gives_specific_drop_reason() -> None:
+    """Phase 0a (F3): an over-cap chat message must surface a specific,
+    visible reason (not the generic 'engine dropped' catch-all) so the
+    sender knows exactly what to fix."""
+    s = _build_session()
+    cap = s.state.config.chat_char_cap
+    long_body = "x" * (cap + 1)
+    result = s.submit_press_chat(0, {"recipients": None, "body": long_body})
+    assert result["message_dropped"] is True
+    assert "exceeds" in result["drop_reason"]
+    assert str(cap) in result["drop_reason"]
+    assert str(len(long_body)) in result["drop_reason"]
+
+
 def test_submit_press_chat_double_signal_raises() -> None:
     s = _build_session()
     s.submit_press_chat(0, None)

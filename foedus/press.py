@@ -525,6 +525,13 @@ def finalize_round(state: GameState,
     for p, delta in deltas.items():
         new_scores[p] = new_scores.get(p, 0.0) + delta
 
+    # Phase 0a (F1): fold the stagnation adjustment into the score delta
+    # _resolve_orders already recorded, so last_turn_score_delta always
+    # equals the true before/after score change for this turn.
+    new_score_delta = dict(s_after.last_turn_score_delta)
+    for p, delta in deltas.items():
+        new_score_delta[p] = new_score_delta.get(p, 0.0) + delta
+
     # Update mutual_ally_streak. Bundle 4: any observed betrayal this turn
     # resets the streak to 0 (subject to config.betrayal_resets_detente).
     # This closes the "détente by lying" bug where Sycophant tables declare
@@ -603,6 +610,7 @@ def finalize_round(state: GameState,
         betrayals=merged_betrayals,
         aid_tokens=new_aid_tokens,
         aid_given=new_aid_given,
+        last_turn_score_delta=new_score_delta,
         # Reset round scratch fields for next turn.
         phase=Phase.NEGOTIATION,
         round_chat=[],

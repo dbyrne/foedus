@@ -1,76 +1,31 @@
 """Press-aware prompt rendering for the game server.
 
 Functions here build the plain-text prompts shown to LLM-seat players in
-chat phase and commit phase. Logic ported from scripts/foedus_press_play.py
-so the server can serve the same prompts that the orchestrator script
-prints to stdout.
+chat phase and commit phase. String-formatting logic that's identical
+between this server-side renderer and the offline orchestrator
+(scripts/foedus_press_play.py) lives in foedus.render_common so the two
+never drift.
 
 Spec: docs/superpowers/specs/2026-04-29-autonomous-press-harness-design.md
+Phase 0a legibility fixes: docs/superpowers/specs/2026-07-01-foedus-phase0-arena-fixes-design.md
 """
 
 from __future__ import annotations
 
 from io import StringIO
 
-from foedus.core import (
-    GameState,
-    Hold,
-    Move,
-    NodeType,
-    Order,
-    PlayerId,
-    Support,
-)
+from foedus.core import GameState, PlayerId
 from foedus.fog import visible_state_for
 from foedus.legal import legal_orders_for_unit
-
-
-def _order_to_str(o: Order) -> str:
-    if isinstance(o, Hold):
-        return "Hold"
-    if isinstance(o, Move):
-        return f"Move(dest={o.dest})"
-    if isinstance(o, Support):
-        if o.require_dest is None:
-            return f"Support(target=u{o.target})"
-        return f"Support(target=u{o.target}, require_dest={o.require_dest})"
-    return str(o)
-
-
-def _render_map(state: GameState) -> str:
-    """ASCII hex map with owner + node-type marks."""
-    coords = state.map.coords
-    qs = [c[0] for c in coords.values()]
-    rs = [c[1] for c in coords.values()]
-    qmin, qmax = min(qs), max(qs)
-    rmin, rmax = min(rs), max(rs)
-    by_qr = {coords[n]: n for n in coords}
-    occupant = {u.location: u for u in state.units.values()}
-    lines = []
-    for r in range(rmin, rmax + 1):
-        indent = " " * (3 * (r - rmin))
-        row = indent
-        for q in range(qmin, qmax + 1):
-            n = by_qr.get((q, r))
-            if n is None:
-                row += "      "
-                continue
-            t = state.map.node_types[n]
-            if t == NodeType.HOME:
-                mark = "H"
-            elif t == NodeType.SUPPLY:
-                mark = "$"
-            elif t == NodeType.MOUNTAIN:
-                mark = "^"
-            elif t == NodeType.WATER:
-                mark = "~"
-            else:
-                mark = "."
-            owner = state.ownership.get(n)
-            owner_s = str(owner) if owner is not None else "-"
-            row += f"[{n:>2}{mark}{owner_s}]"
-        lines.append(row)
-    return "\n".join(lines)
+from foedus.render_common import (
+    CAPTURE_RULE_TEXT,
+    order_to_str,
+    render_adjacency_table,
+    render_betrayal_ledger,
+    render_income_ledger,
+    render_map,
+    render_turn_calendar,
+)
 
 
 def render_chat_prompt(state: GameState, player: PlayerId) -> str:
@@ -92,8 +47,11 @@ def render_chat_prompt(state: GameState, player: PlayerId) -> str:
     out.write(f"Scores: {view['scores']}\n")
     out.write(
         f"Mutual-ally streak: {state.mutual_ally_streak}/"
-        f"{state.config.detente_threshold} (détente fires at threshold)\n\n"
+        f"{state.config.detente_threshold} (détente fires at threshold)\n"
     )
+    out.write(render_turn_calendar(state) + "\n\n")
+    out.write(CAPTURE_RULE_TEXT + "\n\n")
+    out.write(render_income_ledger(state, player) + "\n\n")
 
     if view["public_stance_matrix"]:
         out.write("PUBLIC STANCE MATRIX (last round):\n")
@@ -112,24 +70,12 @@ def render_chat_prompt(state: GameState, player: PlayerId) -> str:
                       else sorted(it.visible_to))
                 out.write(
                     f"  p{sender} declared u{it.unit_id} -> "
-                    f"{_order_to_str(it.declared_order)} "
+                    f"{order_to_str(it.declared_order, state)} "
                     f"(visible_to={vt})\n"
                 )
         out.write("\n")
 
-    if view["your_betrayals"]:
-        out.write(
-            f"BETRAYALS observed (cumulative, "
-            f"{len(view['your_betrayals'])}):\n"
-        )
-        for b in view["your_betrayals"][-5:]:
-            out.write(
-                f"  turn {b.turn}: p{b.betrayer} declared "
-                f"u{b.intent.unit_id} -> "
-                f"{_order_to_str(b.intent.declared_order)}, "
-                f"actually issued {_order_to_str(b.actual_order)}\n"
-            )
-        out.write("\n")
+    out.write(render_betrayal_ledger(state, player) + "\n\n")
 
     if view["round_chat_so_far"]:
         out.write(
@@ -182,18 +128,24 @@ def render_commit_prompt(state: GameState, player: PlayerId) -> str:
     else:
         out.write("(no chat this round)\n\n")
 
+    out.write(CAPTURE_RULE_TEXT + "\n\n")
+
     out.write(
-        "MAP (^ = mountain, ~ = water, $ = supply, H = home, "
-        "[node-type-owner], u<id>p<player> = unit):\n"
+        "MAP (^ = mountain, ~ = water, $<value> = supply, H = home, "
+        "[node-mark:owner]):\n"
     )
-    out.write(_render_map(state) + "\n\n")
+    out.write(render_map(state) + "\n\n")
     out.write(f"Your visible nodes: {view['visible_nodes']}\n")
     out.write(f"Your supply count: {view['supply_count_you']}\n")
     out.write(f"Scores: {view['scores']}\n")
     out.write(
         f"Mutual-ally streak: {state.mutual_ally_streak}/"
-        f"{state.config.detente_threshold}\n\n"
+        f"{state.config.detente_threshold}\n"
     )
+    out.write(render_turn_calendar(state) + "\n\n")
+    out.write(render_income_ledger(state, player) + "\n\n")
+    out.write(render_adjacency_table(state, view["visible_nodes"]) + "\n\n")
+    out.write(render_betrayal_ledger(state, player) + "\n\n")
 
     out.write("VISIBLE UNITS:\n")
     for u in view["visible_units"]:
@@ -211,7 +163,7 @@ def render_commit_prompt(state: GameState, player: PlayerId) -> str:
             f"{sorted(state.map.neighbors(u.location))})\n"
         )
         for i, o in enumerate(legal):
-            out.write(f"    [{i}] {_order_to_str(o)}\n")
+            out.write(f"    [{i}] {order_to_str(o, state)}\n")
     out.write("\n")
 
     out.write("=== RESPONSE FORMAT ===\n")
