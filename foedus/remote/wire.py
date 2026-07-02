@@ -72,6 +72,15 @@ def serialize_config(c: GameConfig) -> dict[str, Any]:
         # can label high-value supplies and engines can re-replay maps.
         "high_value_supply_fraction": c.high_value_supply_fraction,
         "high_value_supply_yield": c.high_value_supply_yield,
+        # Retreats change a first-order rule (dislodged units survive vs die),
+        # so it must round-trip for faithful replay/remote resolution.
+        "retreats_enabled": c.retreats_enabled,
+        # Leader-counterweight knobs: also scoring-affecting, and the web
+        # SqliteSessionStore round-trips the whole config on every save/load,
+        # so they must round-trip or an enabled tax silently resets to 0 on
+        # the next turn of a persisted game.
+        "supply_upkeep": c.supply_upkeep,
+        "supply_upkeep_free": c.supply_upkeep_free,
     }
 
 

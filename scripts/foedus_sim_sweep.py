@@ -289,6 +289,17 @@ def main():
     parser.add_argument("--high-value-yield", type=int, default=None,
                         help="Bundle 5b (C3): score yield for high-value "
                              "supplies (default 2).")
+    # --- retreats (lethality-softening) ---
+    parser.add_argument("--retreats", action="store_true",
+                        help="Enable the retreat mechanic: a dislodged unit "
+                             "retreats to its home node (tempo cost) instead "
+                             "of being eliminated. Default off (v1 lethality).")
+    parser.add_argument("--supply-upkeep", type=float, default=None,
+                        help="Leader counterweight: per-turn score upkeep per "
+                             "controlled supply above --supply-upkeep-free. "
+                             "Default 0 (off).")
+    parser.add_argument("--supply-upkeep-free", type=int, default=None,
+                        help="Supplies exempt from --supply-upkeep (default 3).")
     parser.add_argument("--roster", default="",
                         help="comma-separated heuristic names; default: all")
     parser.add_argument("--seats", default="",
@@ -356,6 +367,12 @@ def main():
         config_overrides["high_value_supply_fraction"] = args.high_value_fraction
     if args.high_value_yield is not None:
         config_overrides["high_value_supply_yield"] = args.high_value_yield
+    if args.retreats:
+        config_overrides["retreats_enabled"] = True
+    if args.supply_upkeep is not None:
+        config_overrides["supply_upkeep"] = args.supply_upkeep
+    if args.supply_upkeep_free is not None:
+        config_overrides["supply_upkeep_free"] = args.supply_upkeep_free
     fixed_seats: list[str] | None = None
     if args.seats:
         fixed_seats = args.seats.split(",")

@@ -1,7 +1,9 @@
 """Simultaneous-order resolution and state transitions.
 
 v1 simplifications vs. full DATC Diplomacy:
-- Dislodged units are eliminated (no retreat/disband phase).
+- Dislodged units are eliminated (no retreat/disband phase) UNLESS
+  GameConfig.retreats_enabled, in which case a dislodged unit retreats to its
+  home node (see `_resolve_retreats`).
 - No convoys (armies cannot cross water/non-adjacent).
 - Head-to-head resolved by direct move-strength comparison.
 - N-unit cycles (A->B->C->A) detected and resolved as all-success.
@@ -14,7 +16,7 @@ from __future__ import annotations
 import math
 import os
 import random
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field, replace
 
 from foedus.core import (
@@ -492,6 +494,130 @@ def _resolve_moves(canon: dict[UnitId, Order], move_str: dict[UnitId, int],
     return outcome
 
 
+# --- Retreats --------------------------------------------------------------
+
+
+def _nearest_empty_owned_node(
+    m: Map,
+    new_owner: dict[NodeId, PlayerId | None],
+    occupied: set[NodeId],
+    home: NodeId,
+    owner: PlayerId,
+) -> NodeId | None:
+    """BFS from `home` over passable edges; return the nearest node that is
+    owned by `owner`, passable, and unoccupied (excluding `home` itself).
+
+    Tie-break among equidistant candidates is the lowest node id, so the
+    result is deterministic. Returns None when no reachable owned empty node
+    exists (the caller then eliminates the unit).
+    """
+    dist: dict[NodeId, int] = {home: 0}
+    q: deque[NodeId] = deque([home])
+    while q:
+        n = q.popleft()
+        for nbr in sorted(m.neighbors(n)):
+            if nbr in dist or not m.is_passable(nbr):
+                continue
+            dist[nbr] = dist[n] + 1
+            q.append(nbr)
+    candidates = [
+        n for n in dist
+        if n != home
+        and new_owner.get(n) == owner
+        and m.is_passable(n)
+        and n not in occupied
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda n: (dist[n], n))
+
+
+def _resolve_retreats(
+    state: GameState,
+    dislodged_units: list[Unit],
+    new_units: dict[UnitId, Unit],
+    new_owner: dict[NodeId, PlayerId | None],
+    log: list[str],
+) -> None:
+    """Relocate each dislodged unit (retreats-enabled path), or eliminate it.
+
+    Rule ladder (see GameConfig.retreats_enabled):
+      A. home node no longer owned by the player (captured by an enemy)
+         -> eliminate (terminal; no fallback).
+      B. home owned by the player and unoccupied -> retreat there (teleport
+         home; the tempo cost is the lost forward position).
+      C. home owned but occupied (by any unit) -> nearest empty owned passable
+         node; if none, eliminate.
+
+    Mutates `new_units` and `log`. Units are processed in ascending id order,
+    and each placement is immediately visible to later retreats, so two units
+    cannot land on the same node and the outcome is deterministic.
+
+    NOTE: assignment is greedy by unit id, not a global maximum matching. If two
+    units of a player both want the one free home, the lower-id unit takes it and
+    the other falls back (or is eliminated) — a global assignment could
+    occasionally save one more unit. This is deterministic and spec-consistent;
+    the simplicity is intentional (retreats are already an edge path).
+    """
+    m = state.map
+    # One home per player in practice; sorted iteration keeps the mapping
+    # deterministic if a map ever assigns a player multiple homes.
+    home_of: dict[PlayerId, NodeId] = {}
+    for node in sorted(m.home_assignments):
+        home_of.setdefault(m.home_assignments[node], node)
+
+    for unit in sorted(dislodged_units, key=lambda u: u.id):
+        occupied = {u.location for u in new_units.values()}
+        home = home_of.get(unit.owner)
+        if home is None:
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) eliminated "
+                f"(no home to retreat to)"
+            )
+            continue
+        # A. home no longer owned by the player -> eliminate (terminal). This
+        # is "captured by an enemy" in practice; `!= owner` also covers the
+        # (normally unreachable) unowned case, since a home you don't own is
+        # not a valid retreat target either.
+        if new_owner.get(home) != unit.owner:
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) eliminated "
+                f"(home n{home} lost)"
+            )
+            continue
+        # B. home owned and empty -> retreat home.
+        if home not in occupied and m.is_passable(home):
+            new_units[unit.id] = replace(unit, location=home)
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) retreated to home n{home}"
+            )
+            continue
+        # C. home owned but occupied -> nearest empty owned node, else eliminate.
+        dest = _nearest_empty_owned_node(m, new_owner, occupied, home, unit.owner)
+        if dest is not None:
+            new_units[unit.id] = replace(unit, location=dest)
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) retreated to n{dest} "
+                f"(home n{home} blocked)"
+            )
+        else:
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) eliminated "
+                f"(home n{home} blocked, no retreat)"
+            )
+
+
+def _owned_supply_nodes(
+    m: Map, owner_map: dict[NodeId, PlayerId | None], player: PlayerId
+) -> list[NodeId]:
+    """Supply/home nodes owned by `player` under `owner_map`. Shared by the
+    per-turn income and leader-upkeep loops so the two never drift."""
+    return [
+        n for n, t in m.node_types.items()
+        if t in (NodeType.SUPPLY, NodeType.HOME) and owner_map.get(n) == player
+    ]
+
+
 # --- Top-level turn function ----------------------------------------------
 
 
@@ -597,11 +723,19 @@ def _resolve_orders_detailed(
             dislodged_by[d_uid] = attacker_id
 
     # 5. Apply: build new units dict, log moves and dislodgements.
+    #
+    # A dislodged unit is, by default (retreats disabled), eliminated: it is
+    # simply not carried into new_units. When retreats are enabled it is set
+    # aside and relocated to its home (or a fallback) in step 6.5 below.
+    retreats_on = state.config.retreats_enabled
+    dislodged_units: list[Unit] = []
     new_units: dict[UnitId, Unit] = {}
     for u_id, unit in state.units.items():
         result = outcome.get(u_id)
         if result == "dislodged":
             log.append(f"  u{u_id} (p{unit.owner}) dislodged at n{unit.location}")
+            if retreats_on:
+                dislodged_units.append(unit)
             continue
         order = canon[u_id]
         if isinstance(order, Move) and result == "success":
@@ -678,6 +812,16 @@ def _resolve_orders_detailed(
         if not state.map.is_supply(unit.location):
             new_owner[unit.location] = unit.owner
 
+    # 6.5 Retreats (opt-in): relocate dislodged units to their home node, or a
+    # fallback owned node, else eliminate. Runs AFTER the ownership update (it
+    # reads new_owner to detect a captured home and to find owned fallback
+    # nodes) and BEFORE builds/eliminations (a retreated unit counts toward its
+    # player's supply-need and can save the player from elimination). Retreats
+    # place a unit on an already-owned node, so they never change new_owner or
+    # award score — the only cost is the lost forward position.
+    if retreats_on and dislodged_units:
+        _resolve_retreats(state, dislodged_units, new_units, new_owner, log)
+
     # 7. Build phase (every config.build_period turns).
     next_id = state.next_unit_id
     new_turn = state.turn + 1
@@ -716,11 +860,28 @@ def _resolve_orders_detailed(
             continue
         supply_score = sum(
             state.map.supply_value(n)
-            for n, t in state.map.node_types.items()
-            if t in (NodeType.SUPPLY, NodeType.HOME)
-            and new_owner.get(n) == player
+            for n in _owned_supply_nodes(state.map, new_owner, player)
         )
         new_scores[player] = new_scores.get(player, 0.0) + supply_score
+
+    # 8a. Leader counterweight (optional): per-turn upkeep charged on every
+    # controlled supply ABOVE `supply_upkeep_free`. Default off
+    # (supply_upkeep=0.0). Uses the END-of-turn supply COUNT (not value) so it
+    # scales with the current leader's board size, per Fable's suggestion.
+    upkeep = state.config.supply_upkeep
+    if upkeep:
+        free = state.config.supply_upkeep_free
+        for player in range(state.config.num_players):
+            if player in state.eliminated:
+                continue
+            supplies = len(_owned_supply_nodes(state.map, new_owner, player))
+            taxed = max(0, supplies - free)
+            if taxed:
+                new_scores[player] = new_scores.get(player, 0.0) - upkeep * taxed
+                log.append(
+                    f"  leader upkeep -{upkeep * taxed:g} to p{player} "
+                    f"({supplies} supplies, {taxed} above free {free})"
+                )
 
     # 8b. EXPERIMENTAL: alliance-capture bonus.
     #
