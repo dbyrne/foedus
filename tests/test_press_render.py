@@ -171,3 +171,47 @@ def test_chat_prompt_shows_turn_calendar() -> None:
     s = initial_state(cfg, m)
     out = render_chat_prompt(s, 0)
     assert "TURN CALENDAR" in out
+
+
+# --- F5: pact rendering in seat prompts -------------------------------------
+
+
+def _state_with_pact():
+    from foedus.core import Move, Support, PactTerm
+    from foedus.press import propose_pact, accept_pact
+    m = line_map(5)
+    units = [Unit(0, 0, 0), Unit(1, 1, 4), Unit(2, 2, 2),
+             Unit(3, 0, 1), Unit(4, 1, 3)]
+    s = make_state(m, units, num_players=3)
+    terms = (
+        PactTerm(player=0, unit_id=3, declared_order=Move(dest=2)),
+        PactTerm(player=1, unit_id=4, declared_order=Support(target=3)),
+    )
+    s = propose_pact(s, 0, 1, terms)
+    return accept_pact(s, 0, 1)
+
+
+def test_commit_prompt_shows_active_pacts() -> None:
+    s = _state_with_pact()
+    out = render_commit_prompt(s, 0)
+    assert "ACTIVE PACTS" in out
+    assert "pact #0" in out
+
+
+def test_commit_prompt_shows_pact_breach_ledger() -> None:
+    s = _state_with_pact()
+    out = render_commit_prompt(s, 0)
+    assert "PACT BREACH LEDGER" in out
+
+
+def test_chat_prompt_shows_active_pacts() -> None:
+    s = _state_with_pact()
+    out = render_chat_prompt(s, 1)
+    assert "ACTIVE PACTS" in out
+    assert "pact #0" in out
+
+
+def test_commit_prompt_hides_pacts_from_third_party() -> None:
+    s = _state_with_pact()
+    out = render_commit_prompt(s, 2)
+    assert "ACTIVE PACTS: none" in out
