@@ -219,10 +219,22 @@ class GameSession:
                     or len(new_state.round_chat) ==
                         len(self.state.round_chat)):
                 message_dropped = True
-                drop_reason = (
-                    f"engine dropped (len={len(chat_draft.body)}, "
-                    f"cap={self.state.config.chat_char_cap})"
-                )
+                cap = self.state.config.chat_char_cap
+                body_len = len(chat_draft.body)
+                if body_len > cap:
+                    # Phase 0a (F3): give a specific, actionable reason for
+                    # the most common drop cause instead of a generic
+                    # catch-all — the playtest lost a whole coordination
+                    # message to a silent over-cap drop.
+                    drop_reason = (
+                        f"message length {body_len} exceeds the "
+                        f"{cap}-character cap; NOT sent, shorten and resend"
+                    )
+                else:
+                    drop_reason = (
+                        f"engine dropped (len={body_len}, cap={cap}); "
+                        f"check eliminations, recipients, or phase"
+                    )
             else:
                 self.state = new_state
         self.state = signal_chat_done(self.state, player)
