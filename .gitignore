@@ -45,3 +45,6 @@ Thumbs.db
 docs/research/depth/*.json
 !docs/research/depth/README.md
 .playwright-mcp/
+
+# Git worktrees for isolated feature work
+.worktrees/
