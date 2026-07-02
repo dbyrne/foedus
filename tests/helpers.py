@@ -81,7 +81,8 @@ def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
                build_period: int = 999, max_turns: int = 20,
                turn: int = 0, fog_radius: int = 1,
                detente_threshold: int | None = None,
-               peace_threshold: int | None = None) -> GameState:
+               peace_threshold: int | None = None,
+               retreats_enabled: bool = False) -> GameState:
     """Build a GameState with units placed and ownership inferred from unit
     positions.
 
@@ -120,7 +121,8 @@ def make_state(m: Map, units: list[Unit], *, num_players: int = 2,
         next_unit_id=max((u.id for u in units), default=-1) + 1,
         config=GameConfig(num_players=num_players, max_turns=max_turns,
                           build_period=build_period, fog_radius=fog_radius,
-                          detente_threshold=detente_threshold),
+                          detente_threshold=detente_threshold,
+                          retreats_enabled=retreats_enabled),
     )
 
 

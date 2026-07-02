@@ -410,6 +410,17 @@ class GameConfig:
     # (one step up from the default 1). Future bundles may add a tier of
     # value=3 supplies on a smaller fraction.
     high_value_supply_yield: int = 2
+    # --- retreats (2026-07-02 lethality-softening pass) ---
+    # When True, a dislodged unit RETREATS to its home node instead of being
+    # eliminated (v1 default). The tempo cost is losing its forward position
+    # (it is teleported home, not to where it was pushed). Fallbacks when the
+    # home is unavailable are resolved in resolve.py:
+    #   - home captured by an enemy (no longer owned by the player) -> eliminate
+    #   - home owned but occupied (by any unit) -> nearest empty owned passable
+    #     node (BFS from home, tie-break lowest node id); if none -> eliminate
+    # Default OFF so v1 tests/behavior are unchanged and the retreats-on/off
+    # sweep can A/B cleanly. See docs for the falsifiable-bar rationale.
+    retreats_enabled: bool = False
     # Deprecated alias for detente_threshold; kept for one minor version.
     peace_threshold: int | None = None
 
