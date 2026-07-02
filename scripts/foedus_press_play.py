@@ -58,6 +58,7 @@ from foedus.render_common import (
     render_income_ledger,
     render_map,
     render_pact_breach_ledger,
+    render_reputation,
     render_turn_calendar,
 )
 from foedus.resolve import initial_state
@@ -225,6 +226,8 @@ def cmd_prompt_chat(player: int) -> None:
     print()
     print(render_pact_breach_ledger(state, player))
     print()
+    print(render_reputation(state, player))
+    print()
 
     # Round chat so far (other players' chat earlier in this round).
     if view["round_chat_so_far"]:
@@ -341,6 +344,8 @@ def cmd_prompt_commit(player: int) -> None:
     print(render_active_pacts(state, player))
     print()
     print(render_pact_breach_ledger(state, player))
+    print()
+    print(render_reputation(state, player))
     print()
 
     # Visible units.

@@ -26,6 +26,7 @@ from foedus.render_common import (
     render_income_ledger,
     render_map,
     render_pact_breach_ledger,
+    render_reputation,
     render_turn_calendar,
 )
 
@@ -80,6 +81,7 @@ def render_chat_prompt(state: GameState, player: PlayerId) -> str:
     out.write(render_betrayal_ledger(state, player) + "\n\n")
     out.write(render_active_pacts(state, player) + "\n\n")
     out.write(render_pact_breach_ledger(state, player) + "\n\n")
+    out.write(render_reputation(state, player) + "\n\n")
 
     if view["round_chat_so_far"]:
         out.write(
@@ -152,6 +154,7 @@ def render_commit_prompt(state: GameState, player: PlayerId) -> str:
     out.write(render_betrayal_ledger(state, player) + "\n\n")
     out.write(render_active_pacts(state, player) + "\n\n")
     out.write(render_pact_breach_ledger(state, player) + "\n\n")
+    out.write(render_reputation(state, player) + "\n\n")
 
     out.write("VISIBLE UNITS:\n")
     for u in view["visible_units"]:

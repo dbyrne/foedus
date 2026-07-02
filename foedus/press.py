@@ -29,6 +29,7 @@ from foedus.core import (
     Phase,
     PlayerId,
     Press,
+    ReputationTally,
     Stance,
     Support,
     UnitId,
@@ -500,6 +501,31 @@ def record_chat_message(state: GameState, sender: PlayerId,
     return replace(state, round_chat=new_chat)
 
 
+def _broken_intents(
+    flat: dict[UnitId, Order],
+    state: GameState,
+) -> list[tuple[PlayerId, Intent, Order]]:
+    """Return (sender, intent, actual_order) for every declared Intent in the
+    locked round press whose sender's RAW submitted order doesn't match.
+
+    Shared by `_verify_intents` (which fans each broken intent out to every
+    observer in its `visible_to` set) and F6's breach-penalty/reputation
+    accounting (which must count each broken intent exactly ONCE regardless
+    of how many players observe it -- a public intent with visible_to=None
+    still reaches every survivor, but it's one broken promise).
+    """
+    out: list[tuple[PlayerId, Intent, Order]] = []
+    for sender, press in state.round_press_pending.items():
+        for intent in press.intents:
+            unit = state.units.get(intent.unit_id)
+            if unit is None or unit.owner != sender:
+                continue  # void: unit dead or never owned by sender
+            submitted = flat.get(intent.unit_id, Hold())
+            if submitted != intent.declared_order:
+                out.append((sender, intent, submitted))
+    return out
+
+
 def _verify_intents(
     flat: dict[UnitId, Order],
     state: GameState,
@@ -513,30 +539,22 @@ def _verify_intents(
     survivors = {
         p for p in range(state.config.num_players) if p not in state.eliminated
     }
-    for sender, press in state.round_press_pending.items():
-        for intent in press.intents:
-            unit = state.units.get(intent.unit_id)
-            if unit is None or unit.owner != sender:
-                continue  # void: unit dead or never owned by sender
-
-            submitted = flat.get(intent.unit_id, Hold())
-
-            if submitted != intent.declared_order:
-                # Determine who observes the betrayal.
-                if intent.visible_to is None:
-                    recipients = {p for p in survivors if p != sender}
-                else:
-                    recipients = {
-                        p for p in intent.visible_to
-                        if p in survivors and p != sender
-                    }
-                for recipient in recipients:
-                    out[recipient].append(BetrayalObservation(
-                        turn=state.turn + 1,
-                        betrayer=sender,
-                        intent=intent,
-                        actual_order=submitted,
-                    ))
+    for sender, intent, submitted in _broken_intents(flat, state):
+        # Determine who observes the betrayal.
+        if intent.visible_to is None:
+            recipients = {p for p in survivors if p != sender}
+        else:
+            recipients = {
+                p for p in intent.visible_to
+                if p in survivors and p != sender
+            }
+        for recipient in recipients:
+            out[recipient].append(BetrayalObservation(
+                turn=state.turn + 1,
+                betrayer=sender,
+                intent=intent,
+                actual_order=submitted,
+            ))
     return dict(out)
 
 
@@ -696,6 +714,51 @@ def finalize_round(state: GameState,
     for p, delta in deltas.items():
         new_score_delta[p] = new_score_delta.get(p, 0.0) + delta
 
+    # F6: betrayal teeth. Deduct a configurable score penalty from the
+    # BREACHER for each broken declared Intent or broken accepted Pact term
+    # this turn, and increment their PUBLIC reputation tally regardless of
+    # penalty config (reputation tracks true behavior, not the mechanical
+    # cost). `broken_intents` is computed once and reused for both signals —
+    # see `_broken_intents`' docstring on why a public (visible_to=None)
+    # intent breach must count as ONE broken commitment even though
+    # `_verify_intents` fans it out to every observer. Pact breaches don't
+    # have that fan-out problem: `_verify_pacts` delivers each breach to
+    # exactly one observer (the pact's other party), so flattening
+    # `new_pact_breaches.values()` double-counts nothing.
+    #
+    # Clamping: like stagnation_cost, this can push a raw score negative.
+    # scoring.py's payout functions already clamp with max(0, ...) at
+    # consumption time, so raw scores are left unclamped here as the true
+    # record of what happened this turn.
+    broken_intents = _broken_intents(flat, state)
+    intent_penalty = state.config.intent_breach_penalty
+    pact_penalty = state.config.pact_breach_penalty
+
+    breach_penalty: dict[PlayerId, float] = defaultdict(float)
+    if intent_penalty:
+        for breacher, _, _ in broken_intents:
+            breach_penalty[breacher] += intent_penalty
+    if pact_penalty:
+        for breach_list in new_pact_breaches.values():
+            for b in breach_list:
+                breach_penalty[b.breacher] += pact_penalty
+    for p, penalty in breach_penalty.items():
+        new_scores[p] = new_scores.get(p, 0.0) - penalty
+        new_score_delta[p] = new_score_delta.get(p, 0.0) - penalty
+
+    new_reputation = dict(state.reputation)
+    for breacher, _, _ in broken_intents:
+        prev = new_reputation.get(breacher, ReputationTally())
+        new_reputation[breacher] = replace(
+            prev, intent_breaches=prev.intent_breaches + 1
+        )
+    for breach_list in new_pact_breaches.values():
+        for b in breach_list:
+            prev = new_reputation.get(b.breacher, ReputationTally())
+            new_reputation[b.breacher] = replace(
+                prev, pact_breaches=prev.pact_breaches + 1
+            )
+
     # Update mutual_ally_streak. Bundle 4: any observed betrayal this turn
     # resets the streak to 0 (subject to config.betrayal_resets_detente).
     # This closes the "détente by lying" bug where Sycophant tables declare
@@ -797,6 +860,10 @@ def finalize_round(state: GameState,
         pacts=surviving_pacts,
         next_pact_id=state.next_pact_id,
         pact_breaches=merged_pact_breaches,
+        # F6: public cumulative breach tally by breacher (see
+        # ReputationTally). Already carries forward state.reputation via
+        # new_reputation's dict(state.reputation) base.
+        reputation=new_reputation,
         # Reset round scratch fields for next turn.
         phase=Phase.NEGOTIATION,
         round_chat=[],
