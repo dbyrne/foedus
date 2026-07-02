@@ -1,15 +1,18 @@
-"""Patron — aggressive aid giver with late-game betrayal switch.
+"""Patron — allies broadly, then turns on its strongest partner late.
 
 Strategy:
   Press: ALLY toward all surviving non-eliminated opponents.
-  Aid spending: spend ALL available tokens each turn on the highest-supply
-    mutual-ALLY partner. Builds up `aid_given[self→partner]` rapidly,
-    accumulating leverage (and thus combat advantage) over them.
   Orders:
-    Early/mid game: GreedyHold.
+    Early/mid game: GreedyHold expansion.
     Late game (after turn = max_turns * late_game_threshold): switch to
-    attacking the partner against whom we have the most leverage. Their
-    units are mechanically vulnerable to our attacks via leverage_bonus.
+    raiding the highest-supply mutual-ALLY partner — the strong neighbour the
+    Patron rode alongside, now the most valuable target. Where no unit is
+    adjacent to that partner's territory, fall back to GreedyHold.
+
+The aid/leverage economy that used to drive this heuristic's buildup-then-
+betray arc was deleted in the 2026-07-02 reciprocity model; target selection
+is now by supply count (the strongest ally), preserving the "generous ally,
+late defector" character without the removed mechanic.
 
 Defaults `late_game_threshold = 0.6` so a 25-turn game switches at turn 15.
 """
@@ -18,9 +21,7 @@ from __future__ import annotations
 
 from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.core import (
-    AidSpend,
     GameState,
-    Intent,
     Move,
     Order,
     PlayerId,
@@ -38,26 +39,36 @@ class Patron:
     def _is_late_game(self, state: GameState) -> bool:
         return state.turn >= state.config.max_turns * self._late_threshold
 
-    def _most_leveraged_target(self, state: GameState,
-                               player: PlayerId) -> PlayerId | None:
-        """Player against whom we have the most positive leverage."""
-        candidates = [
-            p for p in range(state.config.num_players)
-            if p != player and p not in state.eliminated
-        ]
-        if not candidates:
+    def _richest_ally(self, state: GameState,
+                      player: PlayerId) -> PlayerId | None:
+        """Highest-supply mutual-ALLY partner (by last locked press), or None.
+
+        Mutual ALLY is read from the previous turn's archived press; at turn 0
+        (no history) every surviving opponent is eligible so an early switch
+        still has a target. Tiebreak: lowest pid."""
+        last = state.press_history[-1] if state.press_history else {}
+        my_prev = last.get(player)
+        partners: list[PlayerId] = []
+        for other in range(state.config.num_players):
+            if other == player or other in state.eliminated:
+                continue
+            their_prev = last.get(other)
+            if my_prev is None or their_prev is None:
+                partners.append(other)  # no prior stance -> eligible
+                continue
+            if (my_prev.stance.get(other, Stance.NEUTRAL) == Stance.ALLY
+                    and their_prev.stance.get(player, Stance.NEUTRAL) == Stance.ALLY):
+                partners.append(other)
+        if not partners:
             return None
-        scored = [(state.leverage(player, p), p) for p in candidates]
-        scored.sort(key=lambda x: -x[0])
-        if scored[0][0] <= 0:
-            return None
-        return scored[0][1]
+        partners.sort(key=lambda p: (-state.supply_count(p), p))
+        return partners[0]
 
     def choose_orders(self, state: GameState,
                       player: PlayerId) -> dict[UnitId, Order]:
         if not self._is_late_game(state):
             return self._inner.choose_orders(state, player)
-        target = self._most_leveraged_target(state, player)
+        target = self._richest_ally(state, player)
         if target is None:
             return self._inner.choose_orders(state, player)
         # Late-game raid: each of our units tries to Move into a target-owned
@@ -86,56 +97,6 @@ class Patron:
             if p != player and p not in state.eliminated
         }
         return Press(stance=opponents, intents=[])
-
-    def choose_aid(self, state: GameState,
-                   player: PlayerId) -> list[AidSpend]:
-        balance = state.aid_tokens.get(player, 0)
-        if balance <= 0:
-            return []
-        if not state.press_history:
-            return []
-        last = state.press_history[-1]
-        my_prev = last.get(player)
-        if my_prev is None:
-            return []
-        # Find all mutual-ALLY partners.
-        partners: list[PlayerId] = []
-        for other_pid in range(state.config.num_players):
-            if other_pid == player or other_pid in state.eliminated:
-                continue
-            their_prev = last.get(other_pid)
-            if their_prev is None:
-                continue
-            if my_prev.stance.get(other_pid, Stance.NEUTRAL) != Stance.ALLY:
-                continue
-            if their_prev.stance.get(player, Stance.NEUTRAL) != Stance.ALLY:
-                continue
-            partners.append(other_pid)
-        if not partners:
-            return []
-        # Pick the highest-supply partner.
-        partners.sort(key=lambda p: -state.supply_count(p))
-        recipient = partners[0]
-        # Find one of their declared Move intents to back. If none, no spends.
-        their_pending = state.round_aid_pending  # not useful — different field
-        # Use round_press_pending for declared intents.
-        pending = state.round_press_pending.get(recipient)
-        if pending is None:
-            return []
-        target_intents = [
-            i for i in pending.intents
-            if isinstance(i.declared_order, Move)
-        ]
-        if not target_intents:
-            return []
-        # Spend up to balance, cycling through their intents.
-        spends: list[AidSpend] = []
-        for i in range(balance):
-            intent = target_intents[i % len(target_intents)]
-            spends.append(AidSpend(
-                target_unit=intent.unit_id,
-            ))
-        return spends
 
     def chat_drafts(self, state, player):
         return []

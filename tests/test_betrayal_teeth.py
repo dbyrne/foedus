@@ -1,19 +1,15 @@
-"""Tests for F6 (Phase 0b): betrayal teeth.
+"""Betrayal teeth, harm-typed (2026-07-02 reciprocity model).
 
-Playtest finding: betrayal was "untested theater" because breaking a
-declared Intent or an accepted Pact cost nothing mechanically. F6 attaches
-two costs to the two existing breach signals (BetrayalObservation from
-press.py::_verify_intents, PactBreach from press.py::_verify_pacts):
+A broken declared Intent or accepted Pact term now costs the breacher a score
+penalty + a public reputation increment ONLY when the divergence harmed a
+committed party (Primitive A — see tests/test_harm_typed_breaches.py for the
+harm/no-harm boundary). This file exercises the *teeth* on confirmed-harmful
+breaches: penalty amounts, once-per-breach counting, observer-eliminated
+accounting, reputation ledger, and wire/fog exposure.
 
-  1. A configurable score penalty deducted from the BREACHER at finalize
-     (GameConfig.intent_breach_penalty / pact_breach_penalty).
-  2. A PUBLIC cumulative reputation tally (GameState.reputation), visible to
-     every player via fog -- not just the observer/victim like
-     betrayals/pact_breaches -- so the social cost compounds.
-
-Mirrors the rigor of tests/test_score_delta.py and tests/test_pacts.py:
-hand-derived scenarios, exact score/delta assertions, no re-derivation of
-engine math.
+The pre-redesign version of this file fined *any* per-unit order deviation,
+which conflated pro-social redirects (Cooperator's Move->Support) with stabs;
+those flat-fine scenarios are gone — the fine is now reserved for harm.
 """
 
 from __future__ import annotations
@@ -22,68 +18,56 @@ from dataclasses import replace
 
 from foedus.core import (
     GameConfig,
+    GameState,
     Hold,
     Intent,
     Move,
+    Pact,
+    PactStatus,
     PactTerm,
     Press,
     ReputationTally,
+    Stance,
     Support,
     Unit,
 )
 from foedus.fog import visible_state_for
-from foedus.press import (
-    accept_pact,
-    finalize_round,
-    propose_pact,
-    signal_done,
-    submit_press_tokens,
-)
+from foedus.press import finalize_round, signal_done, submit_press_tokens
 
-from tests.helpers import line_map, make_state
+from tests.helpers import harm_map, line_map, make_state
 
 
 # --- fixtures ---------------------------------------------------------------
 
 
-def _home_income_state(num_players: int = 2) -> "GameState":
-    """line_map(3): 0(H,p0)-1$-2(H,p1). Each player Holds at home ->
-    baseline +1.0/turn each (matches test_score_delta's home-income case)."""
-    m = line_map(3)
-    return make_state(m, [Unit(0, 0, 0), Unit(1, 1, 2)], num_players=num_players)
+def _harm_state(num_players: int = 2) -> GameState:
+    """harm_map with p0's two attackers (u0@n0, u2@n2), p1's victim u1@n1.
 
-
-def _three_player_public_state() -> "GameState":
-    """line_map(5): 0(H,p0)-1$-2$-3$-4(H,p1), plus a p2 unit at n2.
-    Three survivors, so a public (visible_to=None) broken intent fans out
-    BetrayalObservation to two observers -- the scenario that would
-    over-count a naive "one penalty per observation" implementation."""
-    m = line_map(5)
-    return make_state(
-        m,
-        [Unit(0, 0, 0), Unit(1, 1, 4), Unit(2, 2, 2)],
-        num_players=3,
+    p0 can dislodge p1's n1 unit via Move(u0->n1)+Support(u2->u0); p1 keeps
+    home n3 so it survives. Scores after a clean p0 capture of n1 are easy to
+    reason about: p0 owns n0(home)+n1(captured supply), p1 owns n3(home)."""
+    m = harm_map()
+    ownership = {n: None for n in m.nodes}
+    for node, player in m.home_assignments.items():
+        ownership[node] = player
+    ownership[1] = 1  # p1 owns the contested supply at start
+    units = [Unit(0, 0, 0), Unit(2, 0, 2), Unit(1, 1, 1)]
+    for u in units:
+        ownership[u.location] = u.owner
+    cfg = GameConfig(num_players=num_players, max_turns=50, build_period=999,
+                     detente_threshold=0, high_value_supply_fraction=0.0)
+    return GameState(
+        turn=0, map=m, units={u.id: u for u in units}, ownership=ownership,
+        scores={p: 0.0 for p in range(num_players)}, eliminated=set(),
+        next_unit_id=3, config=cfg,
     )
 
 
-def _pact_hold_state():
-    """line_map(3): 0(H,p0)-1$-2(H,p1). A trivial mutual-Hold pact so a
-    breach (p0 moving instead) doesn't entangle combat resolution -- keeps
-    the penalty assertion isolated from resolve.py's combat math."""
-    return _home_income_state()
+def _ally(*players):
+    return {p: Stance.ALLY for p in players}
 
 
-def _pact_hold_terms():
-    return (
-        PactTerm(player=0, unit_id=0, declared_order=Hold()),
-        PactTerm(player=1, unit_id=1, declared_order=Hold()),
-    )
-
-
-def _finalize_with_press(state, press_by_player, orders):
-    """Submit `press_by_player[p]` (or empty Press) for every survivor,
-    signal done, then finalize. Mirrors test_pacts.py::_run_finalize but
-    allows per-player press payloads (needed to declare intents)."""
+def _finalize(state, press_by_player, orders):
     for p in range(state.config.num_players):
         if p in state.eliminated:
             continue
@@ -93,331 +77,203 @@ def _finalize_with_press(state, press_by_player, orders):
     return finalize_round(state, orders)
 
 
+# p0 declares Hold on u0, then stabs p1 (Move u0->n1 dislodging u1, u2 backs).
+_STAB_ORDERS = {0: {0: Move(dest=1), 2: Support(target=0)}, 1: {1: Hold()}}
+_STAB_INTENT = Intent(unit_id=0, declared_order=Hold(), visible_to=None)
+
+
 # --- GameConfig defaults -----------------------------------------------------
 
 
-def test_default_penalties_are_nonzero_and_pact_exceeds_intent() -> None:
+def test_default_penalties_are_nonzero() -> None:
     cfg = GameConfig()
     assert cfg.intent_breach_penalty > 0
-    assert cfg.pact_breach_penalty > cfg.intent_breach_penalty
+    assert cfg.pact_breach_penalty > 0
 
 
-# --- honored commitments: no penalty ----------------------------------------
+# --- honored / non-harmful commitments: no penalty --------------------------
 
 
 def test_honored_intent_no_penalty() -> None:
-    s = _home_income_state()
-    intent = Intent(unit_id=0, declared_order=Hold(), visible_to=frozenset({1}))
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
-    )
-    assert s2.scores == {0: 1.0, 1: 1.0}
-    assert s2.last_turn_score_delta == {0: 1.0, 1: 1.0}
+    s = _harm_state()
+    intent = Intent(unit_id=0, declared_order=Hold(), visible_to=None)
+    s2 = _finalize(s, {0: Press(stance=_ally(1), intents=[intent])},
+                   {0: {0: Hold(), 2: Hold()}, 1: {1: Hold()}})
     assert s2.reputation == {}
 
 
-def test_honored_pact_no_penalty() -> None:
-    s = _pact_hold_state()
-    s = propose_pact(s, 0, 1, _pact_hold_terms())
-    s = accept_pact(s, 0, 1)
-    s2 = _finalize_with_press(s, {}, {0: {0: Hold()}, 1: {1: Hold()}})
-    assert s2.scores == {0: 1.0, 1: 1.0}
-    assert s2.reputation == {}
-
-
-# --- intent breach: penalty hits the breacher, not the victim --------------
-
-
-def test_intent_breach_deducts_penalty_from_breacher() -> None:
-    s = _home_income_state()
-    # p0 declares it will Move but actually Holds.
-    intent = Intent(unit_id=0, declared_order=Move(dest=1),
-                    visible_to=frozenset({1}))
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
+def test_nonharmful_deviation_no_penalty() -> None:
+    """p0 declares Hold, redirects u0 to SUPPORT p1 (helps the ally). Deviation
+    but no harm -> no penalty, no reputation."""
+    s = _harm_state()
+    intent = Intent(unit_id=0, declared_order=Hold(), visible_to=None)
+    s2 = _finalize(
+        s, {0: Press(stance=_ally(1), intents=[intent])},
+        {0: {0: Support(target=1), 2: Hold()}, 1: {1: Move(dest=3)}},
     )
+    assert s2.reputation == {}
+    # p0 keeps only its home income (no penalty deducted).
+    assert s2.scores[0] == 1.0
+
+
+# --- harmful intent breach: penalty hits the breacher, not the victim -------
+
+
+def test_harmful_intent_breach_deducts_penalty_from_breacher() -> None:
+    s = _harm_state()
     penalty = s.config.intent_breach_penalty
-    assert s2.scores == {0: 1.0 - penalty, 1: 1.0}
-    assert s2.last_turn_score_delta == {0: 1.0 - penalty, 1: 1.0}
-
-
-def test_intent_breach_penalty_hits_breacher_not_observer() -> None:
-    """p0 breaches an intent visible to p1 -- p1 is the victim/observer,
-    p0 is the breacher. The penalty must land on p0."""
-    s = _home_income_state()
-    intent = Intent(unit_id=0, declared_order=Move(dest=1),
-                    visible_to=frozenset({1}))
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
+    s_on = _finalize(s, {0: Press(stance=_ally(1), intents=[_STAB_INTENT])},
+                     _STAB_ORDERS)
+    s_off = _finalize(
+        replace(s, config=replace(s.config, intent_breach_penalty=0.0)),
+        {0: Press(stance=_ally(1), intents=[_STAB_INTENT])}, _STAB_ORDERS,
     )
-    assert set(s2.betrayals) == {1}  # p1 is the observer
+    # Isolate the fine: on-vs-off differs by exactly one intent penalty.
+    assert s_off.scores[0] - s_on.scores[0] == penalty
+    assert s_on.reputation[0].intent_breaches == 1
+    assert s_on.scores[1] == s_off.scores[1]  # victim's score unaffected by fine
+
+
+def test_harmful_breach_penalty_hits_breacher_not_observer() -> None:
+    s = _harm_state()
+    s2 = _finalize(s, {0: Press(stance=_ally(1), intents=[_STAB_INTENT])},
+                   _STAB_ORDERS)
+    assert set(s2.betrayals) == {1}      # p1 observes the (harmful) betrayal
     assert s2.betrayals[1][0].betrayer == 0
-    assert s2.scores[1] == 1.0  # victim untouched
-    assert s2.scores[0] < 1.0  # breacher penalized
+    assert s2.reputation[0].intent_breaches == 1  # breacher tracked
 
 
-def test_intent_breach_penalty_disabled_at_zero() -> None:
-    s = _home_income_state()
-    s = replace(s, config=replace(s.config, intent_breach_penalty=0.0))
-    intent = Intent(unit_id=0, declared_order=Move(dest=1),
-                    visible_to=frozenset({1}))
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
+def test_public_harmful_breach_counted_once_not_per_observer() -> None:
+    """A public harmful breach fans BetrayalObservation to every survivor but
+    counts as ONE broken commitment for penalty/reputation."""
+    s = _harm_state(num_players=3)  # p2 is a third observer (phantom seat)
+    s2 = _finalize(
+        s, {0: Press(stance=_ally(1, 2), intents=[_STAB_INTENT])},
+        {0: {0: Move(dest=1), 2: Support(target=0)}, 1: {1: Hold()}, 2: {}},
     )
-    assert s2.scores == {0: 1.0, 1: 1.0}  # unchanged vs pre-F6 behavior
+    assert 1 in s2.betrayals  # observers see it
+    assert s2.reputation[0].intent_breaches == 1  # counted once
 
 
-def test_n_intent_breaches_in_one_turn_sum_penalties() -> None:
-    """p0 owns two units, each with a broken intent -- exactly 2 penalties."""
-    m = line_map(5)
-    s = make_state(
-        m,
-        [Unit(0, 0, 0), Unit(1, 1, 4), Unit(2, 0, 1)],  # u2: p0's 2nd unit
-        num_players=2,
-    )
-    intents = [
-        Intent(unit_id=0, declared_order=Move(dest=1), visible_to=frozenset({1})),
-        Intent(unit_id=2, declared_order=Move(dest=0), visible_to=frozenset({1})),
-    ]
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=intents)},
-        {0: {0: Hold(), 2: Hold()}, 1: {1: Hold()}},
-    )
-    base = 2.0  # p0 owns n0 (home) + n1 (pre-owned supply) = 2 income
-    penalty = 2 * s.config.intent_breach_penalty
-    assert s2.scores[0] == base - penalty
+def test_harmful_breach_recorded_even_when_it_eliminates_the_victim() -> None:
+    """Penalty/reputation track true behavior: a harmful breach that WIPES OUT
+    the committed ally this turn is still recorded against the breacher. The
+    victim is a pre-resolution survivor (so it is a committed party) whose only
+    holding is n1, so the stab eliminates it."""
+    s = _harm_state()
+    s.ownership[3] = None  # strip p1's fallback home -> n1 is its only holding
+    s2 = _finalize(s, {0: Press(stance=_ally(1), intents=[_STAB_INTENT])},
+                   _STAB_ORDERS)
+    assert 1 in s2.eliminated               # victim wiped out by the stab
+    assert s2.reputation[0].intent_breaches == 1  # still recorded
 
 
-def test_public_intent_breach_counted_once_not_per_observer() -> None:
-    """A public intent (visible_to=None) fans BetrayalObservation out to
-    every surviving non-sender. That must still be exactly ONE broken
-    commitment for penalty purposes, not one penalty per observer."""
-    s = _three_player_public_state()
-    intent = Intent(unit_id=0, declared_order=Move(dest=1), visible_to=None)
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}, 2: {2: Hold()}},
-    )
-    # Two observers (p1, p2) both see the betrayal...
-    assert set(s2.betrayals) == {1, 2}
-    # ...but only one penalty was charged against the breacher p0.
+def test_n_harmful_breaches_in_one_turn_sum_penalties() -> None:
+    """Two of p0's units each break a harmful intent -> two penalties.
+    Both u0 and u2 declare Hold, then together dislodge p1 (both diverge)."""
+    s = _harm_state()
     penalty = s.config.intent_breach_penalty
-    assert s2.scores[0] == 1.0 - penalty  # p0 home income (1.0) minus ONE penalty
-    assert s2.reputation[0].intent_breaches == 1  # not 2
+    intents = [
+        Intent(unit_id=0, declared_order=Hold(), visible_to=None),
+        Intent(unit_id=2, declared_order=Hold(), visible_to=None),
+    ]
+    s_on = _finalize(s, {0: Press(stance=_ally(1), intents=intents)},
+                     _STAB_ORDERS)
+    s_off = _finalize(
+        replace(s, config=replace(s.config, intent_breach_penalty=0.0)),
+        {0: Press(stance=_ally(1), intents=intents)}, _STAB_ORDERS,
+    )
+    # Both u0 (moved) and u2 (supported the kill) diverged harmfully -> 2 fines.
+    assert s_off.scores[0] - s_on.scores[0] == 2 * penalty
+    assert s_on.reputation[0].intent_breaches == 2
 
 
-def test_intent_breach_still_penalized_when_sole_observer_is_eliminated() -> None:
-    """Code review finding: penalty/reputation must track true behavior, not
-    just delivered observations -- otherwise a player could dodge the cost
-    of a betrayal by timing it against an ally who won't survive to be
-    notified. Bypasses submit_press_tokens (which would normally strip an
-    eliminated recipient from visible_to at submission time) to exercise
-    finalize_round's accounting directly against a hand-built
-    round_press_pending, mirroring how a direct/untrusted state-constructing
-    driver could reach this shape."""
-    s = _home_income_state()
-    s.eliminated.add(1)
-    intent = Intent(unit_id=0, declared_order=Move(dest=1), visible_to=frozenset({1}))
-    s.round_press_pending[0] = Press(stance={}, intents=[intent])
-    s2 = finalize_round(s, {0: {0: Hold()}})
-    # No BetrayalObservation delivered -- the sole named observer is dead.
-    assert s2.betrayals == {}
-    # ...but the breacher is still penalized and reputation-tracked.
-    assert s2.reputation[0].intent_breaches == 1
-    assert s2.scores[0] == 1.0 - s.config.intent_breach_penalty
+# --- harmful pact breach -----------------------------------------------------
 
 
-# --- pact breach: larger penalty, hits the breacher -------------------------
-
-
-def test_pact_breach_deducts_larger_penalty_from_breacher() -> None:
-    s = _pact_hold_state()
-    s = propose_pact(s, 0, 1, _pact_hold_terms())
-    s = accept_pact(s, 0, 1)
-    # p0 breaches: moves instead of holding. Walk-in capture needs a
-    # subsequent Hold, so this turn p0's score is still just home income.
-    s2 = _finalize_with_press(s, {}, {0: {0: Move(dest=1)}, 1: {1: Hold()}})
-    penalty = s.config.pact_breach_penalty
-    assert s2.scores == {0: 1.0 - penalty, 1: 1.0}
-    assert set(s2.pact_breaches) == {1}
-    assert s2.pact_breaches[1][0].breacher == 0
-
-
-def test_pact_breach_still_penalized_when_observer_is_eliminated() -> None:
-    """Pact-side analog of test_intent_breach_still_penalized_when_sole_-
-    observer_is_eliminated. An ACCEPTED pact can't reach finalize with an
-    eliminated counterparty via the normal propose_pact/accept_pact API
-    (both reject eliminated parties) or via mid-round elimination timing
-    (eliminations only happen inside finalize_round itself, strictly AFTER
-    this accounting runs) -- so this constructs the pact directly to prove
-    finalize_round doesn't silently waive the penalty/reputation cost for a
-    breach whose observer happens to be dead, matching the intent side."""
-    from foedus.core import Pact, PactStatus
-
-    s = _pact_hold_state()
+def _accepted_hold_pact(s: GameState) -> GameState:
     pact = Pact(
         pact_id=0, proposer=0, counterparty=1,
-        terms=_pact_hold_terms(), status=PactStatus.ACCEPTED,
-        proposed_turn=0,
+        terms=(PactTerm(player=0, unit_id=0, declared_order=Hold()),
+               PactTerm(player=1, unit_id=1, declared_order=Hold())),
+        status=PactStatus.ACCEPTED, proposed_turn=0,
     )
-    s = replace(s, pacts=[pact])
-    s.eliminated.add(1)
-    s2 = finalize_round(s, {0: {0: Move(dest=1)}})
-    # No PactBreach delivered to the observer's private ledger -- they're dead.
+    return replace(s, pacts=[pact])
+
+
+def test_harmful_pact_breach_deducts_penalty_and_records() -> None:
+    penalty = GameConfig().pact_breach_penalty
+    s_on = _finalize(_accepted_hold_pact(_harm_state()), {}, _STAB_ORDERS)
+    s0 = _harm_state()
+    s0 = replace(s0, config=replace(s0.config, pact_breach_penalty=0.0))
+    s_off = _finalize(_accepted_hold_pact(s0), {}, _STAB_ORDERS)
+    assert s_off.scores[0] - s_on.scores[0] == penalty
+    assert set(s_on.pact_breaches) == {1}
+    assert s_on.pact_breaches[1][0].breacher == 0
+    assert s_on.reputation[0].pact_breaches == 1
+
+
+def test_nonharmful_pact_divergence_not_penalized() -> None:
+    """p0 diverges from a pact Hold term by redirecting to Support p1 -- helps
+    the co-signer, harms nobody -> not a breach."""
+    s = _accepted_hold_pact(_harm_state())
+    s2 = _finalize(
+        s, {},
+        {0: {0: Support(target=1), 2: Hold()}, 1: {1: Move(dest=3)}},
+    )
+    assert s2.reputation == {}
     assert s2.pact_breaches == {}
-    # ...but the breacher is still penalized and reputation-tracked.
-    assert s2.reputation[0].pact_breaches == 1
-    assert s2.scores[0] == 1.0 - s.config.pact_breach_penalty
-
-
-def test_pact_breach_penalty_disabled_at_zero() -> None:
-    s = _pact_hold_state()
-    s = replace(s, config=replace(s.config, pact_breach_penalty=0.0))
-    s = propose_pact(s, 0, 1, _pact_hold_terms())
-    s = accept_pact(s, 0, 1)
-    s2 = _finalize_with_press(s, {}, {0: {0: Move(dest=1)}, 1: {1: Hold()}})
-    assert s2.scores == {0: 1.0, 1: 1.0}
 
 
 def test_score_can_go_negative_from_penalty() -> None:
-    """Clamping decision: raw scores.py are allowed to go negative from a
-    breach penalty (like stagnation_cost); scoring.py's payout functions
-    already clamp with max(0, ...) at consumption time, so the raw score
-    stays the true record of what happened this game."""
-    s = _pact_hold_state()
-    s = replace(s, config=replace(s.config, pact_breach_penalty=5.0))
-    s = propose_pact(s, 0, 1, _pact_hold_terms())
-    s = accept_pact(s, 0, 1)
-    s2 = _finalize_with_press(s, {}, {0: {0: Move(dest=1)}, 1: {1: Hold()}})
-    assert s2.scores[0] == 1.0 - 5.0
-    assert s2.scores[0] < 0
-
-
-def test_mixed_intent_and_pact_breach_same_turn_sums_both_penalties() -> None:
-    """A player who breaks both a declared Intent (on one unit) AND an
-    accepted Pact term (on a different unit) in the same turn pays both
-    penalties and accrues both reputation counters -- the two commitment
-    types are independent, not deduplicated against each other."""
-    m = line_map(5)
-    s = make_state(
-        m,
-        [Unit(0, 0, 0), Unit(1, 1, 4), Unit(2, 0, 3)],  # u2: p0's 2nd unit, at n3
-        num_players=2,
-    )
-    s = propose_pact(s, 0, 1, (
-        PactTerm(player=0, unit_id=0, declared_order=Hold()),
-        PactTerm(player=1, unit_id=1, declared_order=Hold()),
-    ))
-    s = accept_pact(s, 0, 1)
-    intent = Intent(unit_id=2, declared_order=Move(dest=2), visible_to=frozenset({1}))
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        # p0 breaches BOTH: moves its home unit (breaks the pact's Hold
-        # term) and holds its second unit instead of the declared Move
-        # (breaks the intent).
-        {0: {0: Move(dest=1), 2: Hold()}, 1: {1: Hold()}},
-    )
-    base = 2.0  # p0: n0 home (retained despite vacating) + n3 supply (retained)
-    total_penalty = s.config.intent_breach_penalty + s.config.pact_breach_penalty
-    assert s2.scores[0] == base - total_penalty
-    assert s2.reputation[0] == ReputationTally(intent_breaches=1, pact_breaches=1)
-    assert s2.scores[1] == 1.0  # p1 unaffected
+    s = _accepted_hold_pact(_harm_state())
+    s = replace(s, config=replace(s.config, pact_breach_penalty=20.0))
+    s2 = _finalize(s, {}, _STAB_ORDERS)
+    assert s2.scores[0] < 0  # raw score unclamped; scoring.py clamps at payout
 
 
 # --- public reputation tally -------------------------------------------------
 
 
 def test_reputation_empty_before_any_breach() -> None:
-    s = _home_income_state()
-    assert s.reputation == {}
-
-
-def test_reputation_increments_for_intent_breach() -> None:
-    s = _home_income_state()
-    intent = Intent(unit_id=0, declared_order=Move(dest=1),
-                    visible_to=frozenset({1}))
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
-    )
-    assert s2.reputation[0] == ReputationTally(intent_breaches=1, pact_breaches=0)
-    assert s2.reputation[0].total == 1
-    assert 1 not in s2.reputation  # p1 never breached
-
-
-def test_reputation_increments_for_pact_breach() -> None:
-    s = _pact_hold_state()
-    s = propose_pact(s, 0, 1, _pact_hold_terms())
-    s = accept_pact(s, 0, 1)
-    s2 = _finalize_with_press(s, {}, {0: {0: Move(dest=1)}, 1: {1: Hold()}})
-    assert s2.reputation[0] == ReputationTally(intent_breaches=0, pact_breaches=1)
-    assert s2.reputation[0].total == 1
+    assert _harm_state().reputation == {}
 
 
 def test_reputation_updates_even_when_penalty_disabled() -> None:
-    """Reputation tracks true behavior, independent of whether the
-    mechanical penalty is configured on."""
-    s = _home_income_state()
+    s = _harm_state()
     s = replace(s, config=replace(s.config, intent_breach_penalty=0.0))
-    intent = Intent(unit_id=0, declared_order=Move(dest=1),
-                    visible_to=frozenset({1}))
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
-    )
+    s2 = _finalize(s, {0: Press(stance=_ally(1), intents=[_STAB_INTENT])},
+                   _STAB_ORDERS)
     assert s2.reputation[0].intent_breaches == 1
 
 
-def test_reputation_is_cumulative_across_turns() -> None:
-    s = _home_income_state()
-    intent = Intent(unit_id=0, declared_order=Move(dest=1),
-                    visible_to=frozenset({1}))
-    s = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
-    )
-    assert s.reputation[0].intent_breaches == 1
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
-    )
-    assert s2.reputation[0].intent_breaches == 2
+def test_reputation_is_cumulative() -> None:
+    """finalize_round adds to the existing tally, never overwrites it."""
+    s = _harm_state()
+    s = replace(s, reputation={0: ReputationTally(intent_breaches=5)})
+    s2 = _finalize(s, {0: Press(stance=_ally(1), intents=[_STAB_INTENT])},
+                   _STAB_ORDERS)
+    assert s2.reputation[0].intent_breaches == 6
 
 
 def test_reputation_visible_to_all_players_via_fog() -> None:
-    """Unlike betrayals/pact_breaches (observer-only), reputation is fully
-    public -- every fog view sees the same tally, like scores."""
-    s = _three_player_public_state()
-    intent = Intent(unit_id=0, declared_order=Move(dest=1), visible_to=frozenset({1}))
-    s2 = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}, 2: {2: Hold()}},
+    s = _harm_state(num_players=3)
+    s2 = _finalize(
+        s, {0: Press(stance=_ally(1, 2), intents=[_STAB_INTENT])},
+        {0: {0: Move(dest=1), 2: Support(target=0)}, 1: {1: Hold()}, 2: {}},
     )
     view_victim = visible_state_for(s2, 1)
-    view_third_party = visible_state_for(s2, 2)
-    assert view_victim["public_reputation"] == {0: ReputationTally(intent_breaches=1)}
-    assert view_third_party["public_reputation"] == view_victim["public_reputation"]
-    # Contrast: the betrayal ledger itself IS observer-gated.
-    assert visible_state_for(s2, 2)["your_betrayals"] == []
-
-
-# --- wire protocol: reputation is press-layer (omitted), like pacts --------
+    view_third = visible_state_for(s2, 2)
+    assert view_victim["public_reputation"][0].intent_breaches == 1
+    assert view_third["public_reputation"] == view_victim["public_reputation"]
 
 
 def test_wire_omits_reputation_and_round_trips_clean() -> None:
     from foedus.remote.wire import deserialize_state, serialize_state
 
-    s = _home_income_state()
-    intent = Intent(unit_id=0, declared_order=Move(dest=1),
-                    visible_to=frozenset({1}))
-    s = _finalize_with_press(
-        s, {0: Press(stance={}, intents=[intent])},
-        {0: {0: Hold()}, 1: {1: Hold()}},
-    )
+    s = _finalize(_harm_state(),
+                  {0: Press(stance=_ally(1), intents=[_STAB_INTENT])},
+                  _STAB_ORDERS)
     assert s.reputation  # sanity: non-empty before round-tripping
     blob = serialize_state(s)
     assert "reputation" not in blob

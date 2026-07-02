@@ -1,6 +1,5 @@
 """Live-intent visibility + dependency-aware signal_done auto-clear."""
 from foedus.core import (
-    AidSpend,
     Hold,
     Intent,
     IntentRevised,
@@ -11,7 +10,6 @@ from foedus.core import (
 from foedus.press import (
     intent_dependencies,
     signal_done,
-    submit_aid_spends,
     submit_press_tokens,
 )
 from tests.helpers import build_state_with_units

@@ -11,7 +11,6 @@ from collections import defaultdict
 from dataclasses import replace
 
 from foedus.core import (
-    AidSpend,
     BetrayalObservation,
     ChatDraft,
     ChatMessage,
@@ -32,6 +31,7 @@ from foedus.core import (
     ReputationTally,
     Stance,
     Support,
+    SupportRound,
     UnitId,
 )
 
@@ -42,13 +42,10 @@ def intent_dependencies(
     """Return per-player set of (other_player, unit) pairs whose intents/orders
     that player's pending plans mechanically depend on.
 
-    A player P depends on (Q, U) iff P has at least one of:
-      - A declared Intent for one of P's units whose order is Support(target=U)
-        where state.units[U].owner == Q.
-      - A pending AidSpend with target_unit=U where state.units[U].owner == Q.
-      - A declared Intent whose order is Support(target=U, require_dest=X)
-        (the pin variant — same dependency rule, since the pin's viability
-        hinges on Q's choice for U).
+    A player P depends on (Q, U) iff P has a declared Intent for one of P's
+    units whose order is Support(target=U) where state.units[U].owner == Q
+    (including the Support(target=U, require_dest=X) pin variant — same
+    dependency rule, since the pin's viability hinges on Q's choice for U).
 
     Self-dependencies (Q == P) are excluded; Q must be a different player.
     The graph is unit-grained: a single ally with two units yields up to two
@@ -65,15 +62,6 @@ def intent_dependencies(
             if target_unit is None or target_unit.owner == player:
                 continue
             out.setdefault(player, set()).add(
-                (target_unit.owner, target_unit.id)
-            )
-    # Walk pending aid spends.
-    for spender, spends in state.round_aid_pending.items():
-        for spend in spends:
-            target_unit = state.units.get(spend.target_unit)
-            if target_unit is None or target_unit.owner == spender:
-                continue
-            out.setdefault(spender, set()).add(
                 (target_unit.owner, target_unit.id)
             )
     return {p: frozenset(deps) for p, deps in out.items()}
@@ -192,97 +180,6 @@ def submit_press_tokens(state: GameState, player: PlayerId,
         intent_revisions=new_revisions,
         done_clears=new_clears,
         round_done=new_done,
-    )
-
-
-def submit_aid_spends(state: GameState, player: PlayerId,
-                      spends: list[AidSpend]) -> GameState:
-    """Set/replace `player`'s pending aid spends for the current round.
-
-    Each spend pays one aid token to add +1 strength to the named ally unit's
-    canon order this turn (reactive — lands on whatever the recipient does).
-    Spends are filtered:
-    - target_unit unknown or eliminated-player-owned → dropped
-    - target_unit owned by spender → dropped (can't aid self)
-    - recipient not mutual ALLY in previous turn's locked press → dropped
-
-    Token balance capped at submit time. Multiple calls overwrite.
-    Returns state unchanged if phase != NEGOTIATION, player eliminated, or
-    player has signaled done.
-    """
-    if state.phase != Phase.NEGOTIATION:
-        return state
-    if player in state.eliminated:
-        return state
-    if player in state.round_done:
-        return state
-
-    cleaned: list[AidSpend] = []
-    survivors = {
-        p for p in range(state.config.num_players) if p not in state.eliminated
-    }
-    last_press = state.press_history[-1] if state.press_history else {}
-    for spend in spends:
-        target = state.units.get(spend.target_unit)
-        if target is None:
-            continue
-        if target.owner == player:
-            continue
-        if target.owner not in survivors:
-            continue
-        # Mutual-ALLY gate from previous turn's locked press.
-        my_prev = last_press.get(player)
-        their_prev = last_press.get(target.owner)
-        if my_prev is None or their_prev is None:
-            # No archived press yet (turn 0): allow, since there's no prior
-            # stance to gate on. Players can establish initial alliances.
-            cleaned.append(spend)
-            continue
-        if my_prev.stance.get(target.owner, Stance.NEUTRAL) != Stance.ALLY:
-            continue
-        if their_prev.stance.get(player, Stance.NEUTRAL) != Stance.ALLY:
-            continue
-        cleaned.append(spend)
-
-    # Cap by token balance. Tokens are consumed at finalize regardless of
-    # whether the aid "lands" (recipient may not follow through), so we cap
-    # the COMMITMENT here rather than refunding wasted aid later.
-    balance = state.aid_tokens.get(player, 0)
-    if len(cleaned) > balance:
-        cleaned = cleaned[:balance]
-
-    new_pending = dict(state.round_aid_pending)
-    prev_spends = state.round_aid_pending.get(player, [])
-    prev_targets = {s.target_unit for s in prev_spends}
-    new_targets = {s.target_unit for s in cleaned}
-    # E3: only retractions (prev_targets - new_targets) trigger auto-clear.
-    # Freshly added aid spends do not, matching the press-intent rule.
-    revised_unit_keys = {(player, u) for u in (prev_targets - new_targets)}
-
-    new_pending[player] = cleaned
-    s_pending = replace(state, round_aid_pending=new_pending)
-    deps = intent_dependencies(s_pending)
-
-    new_done = set(state.round_done)
-    new_clears = list(state.done_clears)
-    for dependent_player, dep_set in deps.items():
-        if dependent_player == player:
-            continue
-        for revised_key in revised_unit_keys:
-            if revised_key in dep_set and dependent_player in new_done:
-                new_done.discard(dependent_player)
-                new_clears.append(DoneCleared(
-                    turn=state.turn + 1,
-                    player=dependent_player,
-                    source_player=player,
-                    source_unit=revised_key[1],
-                ))
-                break
-
-    return replace(
-        s_pending,
-        round_done=new_done,
-        done_clears=new_clears,
     )
 
 
@@ -716,6 +613,199 @@ def _stagnation_cost_deltas(
     return out
 
 
+# --- Primitive A: harm-typed breaches ---------------------------------------
+#
+# A divergence (submitted != declared) is a BREACH only when it harms a
+# COMMITTED party X. For an Intent, X is a player the breacher declared ALLY
+# toward within the intent's audience; for a Pact term, X is the co-signer.
+# Harm is computed from engine state (pre-state vs post-resolution + the
+# resolver's ResolutionDetail), never from self-reported labels. Pro-social
+# redirects (Move -> Support a third party or the ally itself) harm no
+# committed party and are NOT breaches.
+
+
+def _committed_parties_for_intent(
+    sender: PlayerId,
+    intent: Intent,
+    locked_press: dict[PlayerId, Press],
+    survivors: set[PlayerId],
+) -> set[PlayerId]:
+    """Players toward whom `sender`'s current-round stance is ALLY, within the
+    intent's audience (all survivors for a public intent, else visible_to).
+
+    A unilateral Move-intent toward a NEUTRAL/HOSTILE player is information,
+    not a promise — deviating from it can betray no one.
+    """
+    press = locked_press.get(sender)
+    stance = press.stance if press is not None else {}
+    audience = survivors if intent.visible_to is None else intent.visible_to
+    return {
+        x for x in audience
+        if x != sender and x in survivors
+        and stance.get(x, Stance.NEUTRAL) == Stance.ALLY
+    }
+
+
+def _pact_committed_party(pact: Pact, term: PactTerm) -> PlayerId:
+    """The pact's OTHER signer — the party who relied on this term."""
+    return pact.counterparty if term.player == pact.proposer else pact.proposer
+
+
+def _breach_harms_party(
+    breacher: PlayerId,
+    X: PlayerId,
+    unit_id: UnitId,
+    declared_order: Order,
+    state: GameState,
+    s_after: GameState,
+    detail: "object",
+) -> bool:
+    """True iff the DEVIATING unit `unit_id`'s actual action harmed committed
+    party X (H1 aggression / H2 abandoned defense).
+
+    Attribution is scoped to the specific deviating unit — NOT the breacher as
+    a whole — so a pro-social redirect on one unit is never flagged just because
+    a *different* unit of the same player harmed X the same turn (the false
+    positive both code reviews caught). H1 fires only if THIS unit's own Move,
+    or the (uncut) Move its own Support backed, dislodged X's unit or captured
+    X's supply/home center.
+    """
+    m = state.map
+    canon_order = detail.canon.get(unit_id)
+    # The mover(s) this unit is responsible for: its own Move, or the mover its
+    # uncut Support backed (a pinned Support must match the mover's dest).
+    movers: list[UnitId] = []
+    if isinstance(canon_order, Move):
+        movers.append(unit_id)
+    elif isinstance(canon_order, Support) and unit_id not in detail.cut:
+        tgt_order = detail.canon.get(canon_order.target)
+        if isinstance(tgt_order, Move) and (
+            canon_order.require_dest is None
+            or canon_order.require_dest == tgt_order.dest
+        ):
+            movers.append(canon_order.target)
+    for mv in movers:
+        if detail.outcome.get(mv) != "success":
+            continue
+        mv_order = detail.canon.get(mv)
+        if not isinstance(mv_order, Move):
+            continue
+        # H1b (dislodge): this move dislodged an X unit.
+        for d_uid, atk in detail.dislodged_by.items():
+            if atk != mv:
+                continue
+            victim = state.units.get(d_uid)
+            if victim is not None and victim.owner == X:
+                return True
+        # H1a (capture): this move captured an X supply/home center FOR THE
+        # breacher. (A supporter-backed cross-player capture flips ownership to
+        # the mover, not the breacher, and is caught by the H1b check above.)
+        n = mv_order.dest
+        if (m.is_supply(n) and state.ownership.get(n) == X
+                and s_after.ownership.get(n) == breacher):
+            return True
+    # H2a (abandoned support-defense): THIS unit's DECLARED order was a Support
+    # of X's unit, abandoned, and that unit was dislodged this turn.
+    if isinstance(declared_order, Support):
+        tgt = state.units.get(declared_order.target)
+        if (tgt is not None and tgt.owner == X
+                and detail.outcome.get(tgt.id) == "dislodged"):
+            return True
+    # H2b (abandoned hold-defense): THIS unit's DECLARED order was a Hold
+    # adjacent to an X supply/home center captured (flipped from X) this turn.
+    if isinstance(declared_order, Hold):
+        u = state.units.get(unit_id)
+        if u is not None:
+            for c in m.neighbors(u.location):
+                if not m.is_supply(c):
+                    continue
+                if state.ownership.get(c) != X:
+                    continue
+                new_owner = s_after.ownership.get(c)
+                if new_owner is not None and new_owner != X:
+                    return True
+    return False
+
+
+def _harmful_intent_breaches(
+    broken: list[tuple[PlayerId, Intent, Order]],
+    state: GameState,
+    s_after: GameState,
+    detail: "object",
+    locked_press: dict[PlayerId, Press],
+) -> list[tuple[PlayerId, Intent, Order]]:
+    """Filter raw intent deviations to the harm-typed subset (Primitive A)."""
+    survivors = {
+        p for p in range(state.config.num_players) if p not in state.eliminated
+    }
+    out: list[tuple[PlayerId, Intent, Order]] = []
+    for sender, intent, submitted in broken:
+        parties = _committed_parties_for_intent(
+            sender, intent, locked_press, survivors
+        )
+        if any(
+            _breach_harms_party(
+                sender, X, intent.unit_id, intent.declared_order,
+                state, s_after, detail,
+            )
+            for X in parties
+        ):
+            out.append((sender, intent, submitted))
+    return out
+
+
+def _harmful_pact_breaches(
+    broken: list[tuple[Pact, PactTerm, Order]],
+    state: GameState,
+    s_after: GameState,
+    detail: "object",
+) -> list[tuple[Pact, PactTerm, Order]]:
+    """Filter raw pact-term deviations to the harm-typed subset (Primitive A)."""
+    out: list[tuple[Pact, PactTerm, Order]] = []
+    for pact, term, submitted in broken:
+        X = _pact_committed_party(pact, term)
+        if _breach_harms_party(
+            term.player, X, term.unit_id, term.declared_order,
+            state, s_after, detail,
+        ):
+            out.append((pact, term, submitted))
+    return out
+
+
+# --- Primitive B: per-turn reciprocation ledger -----------------------------
+
+
+def _reciprocation_round(
+    state: GameState,
+    detail: "object",
+    locked_press: dict[PlayerId, Press],
+) -> tuple[frozenset[PlayerId], frozenset[PlayerId]]:
+    """Compute this turn's (gave, received) sets for the reciprocation window.
+
+    A player GAVE iff it issued >=1 uncut cross-player Support of a beneficiary
+    it declared ALLY toward this round; the beneficiary's owner RECEIVED. Uses
+    only real Support orders (present on every driver path).
+    """
+    gave: set[PlayerId] = set()
+    received: set[PlayerId] = set()
+    for uid, order in detail.canon.items():
+        if uid in detail.cut:
+            continue
+        if not isinstance(order, Support):
+            continue
+        sup = state.units.get(uid)
+        tgt = state.units.get(order.target)
+        if sup is None or tgt is None or tgt.owner == sup.owner:
+            continue
+        press = locked_press.get(sup.owner)
+        stance = press.stance if press is not None else {}
+        if stance.get(tgt.owner, Stance.NEUTRAL) != Stance.ALLY:
+            continue
+        gave.add(sup.owner)
+        received.add(tgt.owner)
+    return frozenset(gave), frozenset(received)
+
+
 def finalize_round(state: GameState,
                    orders_by_player: dict[PlayerId, dict[UnitId, Order]]
                    ) -> GameState:
@@ -738,35 +828,37 @@ def finalize_round(state: GameState,
     for u_id in state.units:
         flat.setdefault(u_id, Hold())
 
-    # Verify intents BEFORE running _resolve_orders so we can compare against
-    # raw input. (The verifier inspects state.round_press_pending.) Computed
-    # once and reused below for both the observer fan-out (new_betrayals) and
-    # F6's breach-penalty/reputation accounting, so neither can drift from
-    # the other and neither recomputes the same scan twice.
-    broken_intents = _broken_intents(flat, state)
-    new_betrayals = _fan_out_betrayals(broken_intents, state)
-
-    # F5: resolve pact obligations against the same raw `flat`. Emits
-    # PactBreach signals (consumed ACCEPTED pacts) and returns the pacts that
-    # survive into the next round (this-round proposals awaiting acceptance).
-    # Same once-computed-reused pattern as broken_intents above.
-    broken_pact_terms = _broken_pact_terms(flat, state)
-    new_pact_breaches = _fan_out_pact_breaches(broken_pact_terms, state)
+    # Compute the RAW per-unit deviations from declared Intents / accepted Pact
+    # terms (submitted != declared). These are harm-typed below via Primitive A
+    # once resolution attribution is available.
+    broken_intents_raw = _broken_intents(flat, state)
+    broken_pact_terms_raw = _broken_pact_terms(flat, state)
     surviving_pacts = [
         pact for pact in state.pacts
         if pact.status != PactStatus.ACCEPTED and pact.proposed_turn == state.turn
     ]
 
-    # Build a parallel canon dict for stagnation cost evaluation.
-    from foedus.resolve import _normalize
-    canon = {u_id: _normalize(state, u_id, o, flat) for u_id, o in flat.items()}
-
     # Compute stance-matrix update against locked press.
     streak_increment = _all_pairs_mutual_ally(state)
 
-    # Run the order resolution.
-    from foedus.resolve import _resolve_orders
-    s_after = _resolve_orders(state, orders_by_player)
+    # Run the order resolution, capturing attribution (outcome + dislodge map)
+    # for harm-typing.
+    from foedus.resolve import _resolve_orders_detailed
+    s_after, detail = _resolve_orders_detailed(state, orders_by_player)
+    canon = detail.canon
+
+    # Primitive A: a divergence counts as a breach only if it harmed a
+    # committed party (an ALLY the breacher declared toward / a pact co-signer).
+    # Pro-social redirects (Move -> Support) that harm no committed ally are
+    # dropped here — no BetrayalObservation, no penalty, no reputation hit.
+    broken_intents = _harmful_intent_breaches(
+        broken_intents_raw, state, s_after, detail, locked_press
+    )
+    broken_pact_terms = _harmful_pact_breaches(
+        broken_pact_terms_raw, state, s_after, detail
+    )
+    new_betrayals = _fan_out_betrayals(broken_intents, state)
+    new_pact_breaches = _fan_out_pact_breaches(broken_pact_terms, state)
 
     # Apply stagnation cost deltas using the (post-normalization) canon.
     deltas = _stagnation_cost_deltas(canon, state)
@@ -862,49 +954,17 @@ def finalize_round(state: GameState,
         and p.counterparty not in s_after.eliminated
     ]
 
-    # Bundle 4: update aid_given ledger and aid_tokens balances.
-    # _resolve_orders already applied combat reward, alliance bonus gating,
-    # and aid-strength bonuses to s_after.scores. Here we just propagate the
-    # bookkeeping that lives outside the order-resolution loop.
-    new_aid_given = dict(state.aid_given)
-    new_aid_tokens = dict(state.aid_tokens)
-    survivors_post = [
-        p for p in range(state.config.num_players) if p not in s_after.eliminated
+    # Primitive B: record this turn's ally-Support activity and roll the
+    # reciprocation window forward (trimmed to config.reciprocation_window).
+    gave, received = _reciprocation_round(state, detail, locked_press)
+    window = state.config.reciprocation_window
+    new_support_ledger = state.support_ledger + [
+        SupportRound(turn=state.turn + 1, gave=gave, received=received)
     ]
-
-    # Determine which spends "landed" (reactive: recipient's unit survived).
-    for spender, spends in state.round_aid_pending.items():
-        if spender in s_after.eliminated:
-            # Spender eliminated mid-turn: their spends are still consumed
-            # token-wise but treat as non-landing (no leverage gained).
-            continue
-        balance = new_aid_tokens.get(spender, 0)
-        # Tokens are consumed regardless of landing.
-        new_aid_tokens[spender] = max(0, balance - len(spends))
-        for spend in spends:
-            target_unit = state.units.get(spend.target_unit)
-            if target_unit is None:
-                continue
-            recipient = target_unit.owner
-            if recipient in state.eliminated:
-                continue
-            # Reactive aid: lands iff recipient's unit had any canon order
-            # this turn. Ownership and survival are sufficient.
-            if spend.target_unit not in canon:
-                continue
-            key = (spender, recipient)
-            new_aid_given[key] = min(
-                state.config.aid_given_cap,
-                new_aid_given.get(key, 0) + 1,
-            )
-
-    # Token regeneration: floor(supply_count / divisor), capped.
-    divisor = max(1, state.config.aid_generation_divisor)
-    cap = state.config.aid_token_cap
-    for p in survivors_post:
-        # supply_count uses ownership; s_after has the new ownership.
-        gen = s_after.supply_count(p) // divisor
-        new_aid_tokens[p] = min(cap, new_aid_tokens.get(p, 0) + gen)
+    if window > 0:
+        new_support_ledger = new_support_ledger[-window:]
+    else:
+        new_support_ledger = []
 
     # Archive press and chat (carry forward from `state`, append new round).
     new_press_history = list(state.press_history)
@@ -919,8 +979,7 @@ def finalize_round(state: GameState,
         press_history=new_press_history,
         chat_history=new_chat_history,
         betrayals=merged_betrayals,
-        aid_tokens=new_aid_tokens,
-        aid_given=new_aid_given,
+        support_ledger=new_support_ledger,
         last_turn_score_delta=new_score_delta,
         # F5: carry forward pact state (s_after has empty defaults for these
         # since _resolve_orders builds a fresh GameState). Accepted pacts were
@@ -938,7 +997,6 @@ def finalize_round(state: GameState,
         round_press_pending={},
         round_done=set(),
         chat_done=set(),
-        round_aid_pending={},
         intent_revisions=[],
         done_clears=[],
     )

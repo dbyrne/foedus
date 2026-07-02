@@ -154,32 +154,51 @@ def test_eliminated_player_in_visible_to_excluded_from_betrayal() -> None:
     assert 2 not in obs
 
 
-def test_betrayal_observation_for_support_revision():
-    """Player declares Support(target=X), submits Hold — betrayal observed."""
-    from foedus.core import Hold, Intent, Press, Support
+def test_betrayal_observation_for_harmful_support_revision():
+    """Player declares Support(ally's unit), abandons it, and the ally is
+    dislodged as a result — a harm-typed (H2) betrayal is observed.
+
+    Post-2026-07-02 a Support->Hold revision is only a betrayal when it harms a
+    committed ally: p0 declares ALLY toward p1 and pledges Support of p1's unit
+    u1, then Holds while p2 (2-vs-1) dislodges u1. Had p0 honored, u1 would
+    hold 2-vs-2; abandoning the pledged defense is what lets it fall."""
+    from foedus.core import (
+        GameConfig, GameState, Hold, Intent, Map, Move, NodeType, Press,
+        Stance, Support, Unit,
+    )
     from foedus.press import (
         finalize_round,
         signal_done,
         submit_press_tokens,
     )
-    from tests.helpers import build_state_with_units
 
-    s = build_state_with_units(
-        layout={0: 0, 1: 1},
-        ownership={0: 0, 1: 1},
-        edges={0: {1, 2}, 1: {0, 2}, 2: {0, 1}},
-        num_players=2,
+    # Star: center n1 (p1's defended unit) with spokes n0 (p0 supporter),
+    # n2 (p2 attacker), n3 (p2 supporter), all adjacent to n1.
+    coords = {0: (0, 1), 1: (1, 1), 2: (2, 1), 3: (1, 2)}
+    edges = {0: frozenset({1}), 1: frozenset({0, 2, 3}),
+             2: frozenset({1}), 3: frozenset({1})}
+    node_types = {0: NodeType.PLAIN, 1: NodeType.SUPPLY,
+                  2: NodeType.PLAIN, 3: NodeType.PLAIN}
+    m = Map(coords=coords, edges=edges, node_types=node_types,
+            home_assignments={})
+    units = [Unit(0, 0, 0), Unit(1, 1, 1), Unit(2, 2, 2), Unit(3, 2, 3)]
+    ownership = {0: 0, 1: 1, 2: 2, 3: 2}
+    s = GameState(
+        turn=0, map=m, units={u.id: u for u in units}, ownership=ownership,
+        scores={0: 0.0, 1: 0.0, 2: 0.0}, eliminated=set(), next_unit_id=4,
+        config=GameConfig(num_players=3, max_turns=9, build_period=999,
+                          detente_threshold=0),
     )
-    intent = Intent(
-        unit_id=0,
-        declared_order=Support(target=1),
-        visible_to=frozenset({1}),
-    )
-    s = submit_press_tokens(s, 0, Press(stance={}, intents=[intent]))
+    intent = Intent(unit_id=0, declared_order=Support(target=1),
+                    visible_to=None)
+    s = submit_press_tokens(
+        s, 0, Press(stance={1: Stance.ALLY}, intents=[intent]))
     s = signal_done(s, 0)
     s = signal_done(s, 1)
-    # P0 declared Support(1), submits Hold().
-    orders = {0: {0: Hold()}, 1: {1: Hold()}}
+    s = signal_done(s, 2)
+    # p0 abandons the pledged support; p2 dislodges u1 (2 vs 1).
+    orders = {0: {0: Hold()}, 1: {1: Hold()},
+              2: {2: Move(dest=1), 3: Support(target=2)}}
     s2 = finalize_round(s, orders)
     obs_for_p1 = s2.betrayals.get(1, [])
     assert any(o.betrayer == 0 for o in obs_for_p1)

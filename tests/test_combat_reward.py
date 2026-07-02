@@ -51,37 +51,42 @@ def _diamond() -> Map:
 def test_attacker_gets_combat_reward_on_dislodgement() -> None:
     """Attacker score increases by combat_reward per dislodgement.
 
-    Setup: line_map(3). p0 at 0 (home), p1 at 1 (supply). p0 attacks node 1
-    with leverage bonus +2 to ensure dislodgement.
+    Setup: _diamond(). p0 dislodges p1's unit on the n2 SUPPLY using a
+    SAME-owner support (Move u0->2 backed by u3->u0, strength 2 vs 1) — the
+    aid/leverage strength boost this used to rely on was deleted.
     """
-    m = line_map(3)
-    s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 1)],
+    m = _diamond()
+    # p0: u0@0 (attacker) + u3@... needs a 2nd p0 unit adjacent to n2. n2
+    # borders 0,1,3. Put p0's supporter at n1; p1 target at n2.
+    s = make_state(m, [Unit(0, 0, 0), Unit(3, 0, 1), Unit(1, 1, 2)],
                    num_players=2, max_turns=99)
-    s = replace(s, aid_given={(0, 1): 4})  # leverage_bonus = 2 → str 3 vs 1
     pre_p0 = s.scores[0]
-    s_after = resolve_turn(s, {0: {0: Move(dest=1)}, 1: {1: Hold()}})
-    # Verify dislodgement happened.
-    assert 1 not in s_after.units
-    # Score delta breakdown for p0:
-    #   - supply_count after: home (0) + node 1 (now owned via rule a) = 2
-    #   - combat_reward: +1
+    s_after = resolve_turn(s, {
+        0: {0: Move(dest=2), 3: Support(target=0, require_dest=2)},
+        1: {1: Hold()},
+    })
+    assert 1 not in s_after.units  # dislodged
+    # p0 score delta: home n0 + n1(u3 holds it, its HOME? no — n1 is SUPPLY,
+    # u3 occupies it) + n2 (captured) supply income, plus combat_reward +1.
+    # Assert combat_reward is present via the on-vs-off differential below;
+    # here just assert it dislodged and scored more than a bounce would.
     delta = s_after.scores[0] - pre_p0
-    assert delta == 3.0
+    assert delta >= 3.0  # >=2 supply + 1 combat (same-owner support: no bonus)
 
 
 def test_combat_reward_disabled_with_zero() -> None:
-    """combat_reward=0 disables both attacker and supporter rewards."""
-    m = line_map(3)
-    s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 1)],
-                   num_players=2, max_turns=99)
-    s = replace(s, aid_given={(0, 1): 4},
-                config=replace(s.config, combat_reward=0.0,
-                               supporter_combat_reward=0.0))
-    pre = s.scores[0]
-    s_after = resolve_turn(s, {0: {0: Move(dest=1)}, 1: {1: Hold()}})
-    delta = s_after.scores[0] - pre
-    # supply scoring only: home (0) + node 1 = 2.
-    assert delta == 2.0
+    """combat_reward=0 removes exactly the attacker reward vs the default."""
+    m = _diamond()
+    units = [Unit(0, 0, 0), Unit(3, 0, 1), Unit(1, 1, 2)]
+    orders = {0: {0: Move(dest=2), 3: Support(target=0, require_dest=2)},
+              1: {1: Hold()}}
+    s_on = make_state(m, list(units), num_players=2, max_turns=99)
+    s_off = make_state(m, list(units), num_players=2, max_turns=99)
+    s_off = replace(s_off, config=replace(s_off.config, combat_reward=0.0,
+                                          supporter_combat_reward=0.0))
+    d_on = resolve_turn(s_on, orders).scores[0] - s_on.scores[0]
+    d_off = resolve_turn(s_off, orders).scores[0] - s_off.scores[0]
+    assert d_on - d_off == 1.0  # exactly the combat_reward
 
 
 def test_supporter_reward_for_cross_player_support() -> None:

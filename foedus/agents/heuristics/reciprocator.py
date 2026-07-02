@@ -1,29 +1,27 @@
-"""Cooperator — opportunistically cross-supports allied attacks.
+"""Reciprocator — supports allies every turn it can, to stay in good standing.
 
-EXPERIMENTAL (Bundle-7-followup probe). Tests whether the alliance-bonus
-mechanic (FOEDUS_ALLIANCE_BONUS) reshapes the dominant-strategy
-landscape when at least one heuristic actually attempts to capture
-the bonus.
+Probe for the reciprocity model (Primitive B). Unlike DishonestCooperator (takes
+support, never gives) this heuristic reliably GIVES ally-Support, so its
+reciprocation standing stays high and it keeps earning the mover-side alliance
+bonus. It should thrive under the gate — the positive control against which the
+free-riders (DishonestCooperator, MinimalReciprocator) are measured.
 
 Strategy:
-  Press: ALLY toward all opponents (so other Cooperators reciprocate
-    and so we declare ourselves a cross-supporter).
-  Orders: for each owned unit u, if any other player's declared Intent
-    (read from state.round_press_pending) is a Move-on-supply that u
-    is adjacent to, AND that player's stance toward us is ALLY (or
-    NEUTRAL), emit Support(target=their_unit).
-    Remaining own units fall back to GreedyHold.
+  Press: ALLY toward all + publish truthful GreedyHold-planned Move intents.
+  Orders: for each owned unit, if a mutual-non-hostile ally declared a Move
+    this unit can reach, Support it (broader than Cooperator, which only backs
+    Move-on-supply). Remaining units fall back to GreedyHold.
 """
 
 from __future__ import annotations
 
 from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.core import (
-    GameState, Move, Order, PlayerId, Press, Stance, Support, UnitId,
+    GameState, Intent, Move, Order, PlayerId, Press, Stance, Support, UnitId,
 )
 
 
-class Cooperator:
+class Reciprocator:
     def __init__(self) -> None:
         self._inner = GreedyHold()
 
@@ -37,29 +35,27 @@ class Cooperator:
         for other_pid, press in state.round_press_pending.items():
             if other_pid == player or other_pid in state.eliminated:
                 continue
-            their_stance_toward_me = press.stance.get(player, Stance.NEUTRAL)
-            if their_stance_toward_me == Stance.HOSTILE:
+            if press.stance.get(player, Stance.NEUTRAL) == Stance.HOSTILE:
                 continue
             for intent in press.intents:
                 order = intent.declared_order
                 if not isinstance(order, Move):
                     continue
-                if not m.is_supply(order.dest):
+                target_unit = state.units.get(intent.unit_id)
+                if target_unit is None or target_unit.owner != other_pid:
                     continue
                 for u in my_units:
                     if u.id in used:
                         continue
+                    # Supporter must be adjacent to the ally's destination
+                    # (and not be the destination itself).
                     if not m.is_adjacent(u.location, order.dest):
                         continue
                     if u.location == order.dest:
                         continue
-                    target_unit = state.units.get(intent.unit_id)
-                    if target_unit is None or target_unit.owner != other_pid:
-                        continue
                     orders[u.id] = Support(target=intent.unit_id)
                     used.add(u.id)
                     break
-        # Remaining own units: fall back to GreedyHold.
         fallback = self._inner.choose_orders(state, player)
         for uid in my_unit_ids:
             if uid not in orders:
@@ -67,9 +63,6 @@ class Cooperator:
         return orders
 
     def choose_press(self, state: GameState, player: PlayerId) -> Press:
-        from foedus.core import Intent
-        # Declare ALLY toward all + publish our own GreedyHold-planned
-        # moves as Intents so other Cooperators can support us.
         opponents = {
             p: Stance.ALLY
             for p in range(state.config.num_players)

@@ -71,9 +71,9 @@ PROBES: list[Probe] = [
         description="Sanity floor: GH should beat noise.",
     ),
     Probe(
-        name="aid_asymmetry",
+        name="reciprocation_asymmetry",
         seats=("TrustfulCooperator", "TrustfulCooperator", "Patron", "Patron"),
         subject_index=0,
-        description="Bundle 4: pay-fairly vs subsidize-then-defect.",
+        description="Reciprocating cooperator vs ally-then-defect Patron.",
     ),
 ]

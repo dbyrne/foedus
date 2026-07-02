@@ -35,8 +35,10 @@ def test_sweep_runs_and_produces_jsonl(tmp_path: Path) -> None:
                     "total_turns", "is_terminal", "winners", "final_scores",
                     "supply_counts_per_turn", "score_per_turn",
                     "order_type_counts", "dislodgement_count",
-                    "betrayal_count_per_player", "detente_reached",
-                    "eliminated"):
+                    "betrayal_count_per_player",
+                    "reputation_intent_breaches_per_player",
+                    "reputation_pact_breaches_per_player",
+                    "detente_reached", "eliminated"):
             assert key in record, f"missing key {key!r}"
         # Logical checks.
         assert len(record["agents"]) == 4

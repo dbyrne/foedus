@@ -109,18 +109,19 @@ class ChatMessage:
 
 
 @dataclass(frozen=True)
-class AidSpend:
-    """A token spent on an ally's order this turn.
+class SupportRound:
+    """Primitive B: one turn's ally-support activity, for the rolling
+    reciprocation window.
 
-    `target_unit` is the unit being aided. The aid lands on whatever order
-    the recipient submits (reactive, by symmetry with Support). It yields
-    +1 strength on the recipient's canon order, makes the supporter eligible
-    for the alliance bonus when the recipient's order is a Move that captures
-    a supply, and increments the trust ledger entry (spender, recipient).
-    Tokens are consumed at finalize regardless of whether the recipient's
-    unit survives long enough for the aid to matter.
+    `gave` = players who issued >=1 uncut cross-player Support benefiting a
+    standing ALLY (giver declared ALLY toward the beneficiary) this turn.
+    `received` = players whose unit received >=1 such support. Public
+    (whole-table visible, like `reputation`); the engine keeps only the last
+    `GameConfig.reciprocation_window` rounds.
     """
-    target_unit: UnitId
+    turn: int
+    gave: frozenset[PlayerId]
+    received: frozenset[PlayerId]
 
 
 @dataclass(frozen=True)
@@ -184,8 +185,8 @@ class DoneCleared:
     """Emitted when a player's signal_done flag auto-clears.
 
     Triggered when an ally revises an intent that one of this player's
-    committed plans (Support or AidSpend) referenced. Only direct
-    dependents auto-clear — there is no transitive cascade.
+    committed Support plans referenced. Only direct dependents auto-clear —
+    there is no transitive cascade.
     """
     turn: int
     player: PlayerId         # whose done flag cleared
@@ -363,58 +364,40 @@ class GameConfig:
     archetype: Archetype = Archetype.UNIFORM
     map_radius: int = 3
     seed: int | None = None
-    # --- Bundle 4: trust, aid, and combat incentives ---
-    # Aid-token generation per turn = floor(supply_count / aid_generation_divisor)
-    # capped at aid_token_cap. Tokens persist (no decay) and are spent on AidSpends
-    # to back ally units' orders.
-    aid_generation_divisor: int = 3
-    aid_token_cap: int = 10
-    # Per-pair cap on aid_given[(A, B)] entries. Bounds the long-term
-    # leverage stockpile without capping per-turn aid effects: the +1
-    # strength bonus on the recipient's order, alliance-bonus eligibility,
-    # and token consumption all fire regardless of cap. With default cap=3,
-    # leverage(A,B) is bounded in [-3, +3], producing at most +1 combat
-    # bonus (vs the +2 max when uncapped).
-    #
-    # Set to a large value (e.g., 999) to recover the pre-cap behavior. Set
-    # to 1 to effectively disable the leverage_bonus mechanic.
-    aid_given_cap: int = 3
-    # Permanent directional trust ledger drives a combat bonus on attacks
-    # against the indebted player: +min(leverage_bonus_max, leverage // leverage_ratio)
-    # strength on Moves whose target hex is owned by the indebted player.
-    leverage_bonus_max: int = 2
-    leverage_ratio: int = 2
+    # --- combat incentives ---
     # Direct score reward per dislodgement: combat_reward to the attacker;
     # supporter_combat_reward to each uncut supporter of the dislodging attack.
     combat_reward: float = 1.0
     supporter_combat_reward: float = 1.0
-    # Alliance-capture bonus (env var FOEDUS_ALLIANCE_BONUS, default 3) only
-    # fires when the supporter spent an AidSpend on the moving unit's order.
-    # Set False to revert to v1 cross-player-SupportMove gating.
-    alliance_requires_aid: bool = True
+    # --- Primitive B: reciprocation standing (2026-07-02 reciprocity model) ---
+    # Rolling window (in turns) over which ally-Support given/received is
+    # counted for reciprocation standing. recip(P) = given(P)/max(1,received(P)).
+    reciprocation_window: int = 4
+    # The alliance-capture bonus (resolve.py 8b) is withheld from a MOVER whose
+    # reciprocation standing is below this floor while it has taken ally support
+    # (received>0). A free-rider (given 0, received>0 -> recip 0) is denied; a
+    # mover that never took support (received==0) is not free-riding and keeps
+    # the bonus. Supporters always earn their side. Replaces the deleted
+    # aid-spend gate (`alliance_requires_aid`/`_is_aided`).
+    reciprocation_floor: float = 0.5
     # Détente streak resets on any BetrayalObservation observed this turn.
     # Bug fix for v1's "détente by lying" (a table of all-Sycophant declares
     # ALLY but secretly racing for supplies, closing peaceful collective
     # victory while breaking publicly declared intents).
     betrayal_resets_detente: bool = True
-    # --- Phase 0b (F6): betrayal teeth ---
-    # Score penalty deducted from the BREACHER at finalize for each broken
-    # declared Intent (BetrayalObservation) / broken accepted Pact term
-    # (PactBreach) this turn. Counted once per broken commitment, not once
-    # per observer (a public intent with visible_to=None still fans
-    # BetrayalObservation out to every survivor, but it's one broken
-    # promise). 0 disables that penalty (pre-F6 behavior).
+    # --- betrayal teeth (harm-typed, 2026-07-02 reciprocity model) ---
+    # Score penalty deducted from the BREACHER at finalize for each HARM-TYPED
+    # broken declared Intent / broken accepted Pact term this turn (only fires
+    # when the divergence harmed a committed ally — Primitive A). Counted once
+    # per harmful broken commitment, not once per observer. 0 disables the
+    # penalty (reputation-only for that commitment type).
     #
-    # Defaults justified against the tiered supply-value scale: home/base
-    # supplies yield 1.0/turn, high-value supplies 2.0/turn, and
-    # combat_reward/supporter_combat_reward are 1.0 each. intent_breach_penalty
-    # =1.0 roughly offsets a single opportunistic combat_reward, so a stab is a
-    # real cost, not free money -- but it's not game-ending against a healthy
-    # multi-supply economy. pact_breach_penalty=2.0 is strictly greater
-    # because a ratified two-party Pact is a stronger commitment than a
-    # unilateral declared Intent.
+    # Both default to 1.0. The design (§4) recommends the pact fine "start ≈
+    # 1.0" as a small, revisitable knob; harm-typing removes the pro-social
+    # confound that previously made the flat fine over-penalize cooperators, so
+    # a modest, equal value on each is the natural baseline.
     intent_breach_penalty: float = 1.0
-    pact_breach_penalty: float = 2.0
+    pact_breach_penalty: float = 1.0
     # --- Bundle 5b (C3): variable supply values ---
     # Fraction of non-HOME SUPPLY nodes marked as high-value (worth +2/turn
     # instead of +1). 0.0 reverts to v1 uniform-value scoring. Default 0.20
@@ -493,18 +476,11 @@ class GameState:
     intent_revisions: list["IntentRevised"] = field(default_factory=list)
     done_clears: list["DoneCleared"] = field(default_factory=list)
 
-    # --- Bundle 4: aid resource + permanent leverage ledger ---
-    # Per-player current aid-token balances. Generated each turn from
-    # controlled supplies; spent on AidSpends; never decay.
-    aid_tokens: dict[PlayerId, int] = field(default_factory=dict)
-    # Cumulative directional aid ledger; aid_given[(A, B)] = tokens A has
-    # successfully spent on B over the entire game. Never decays. Public.
-    aid_given: dict[tuple[PlayerId, PlayerId], int] = field(default_factory=dict)
-    # Round-in-progress: aid spends committed by each spender for this turn.
-    # Cleared at finalize_round.
-    round_aid_pending: dict[PlayerId, list["AidSpend"]] = field(
-        default_factory=dict
-    )
+    # --- Primitive B: rolling reciprocation window ---
+    # Last `config.reciprocation_window` rounds of ally-Support activity (see
+    # SupportRound). Public (whole-table visible, like reputation); carried
+    # forward + trimmed by finalize_round. Drives the alliance-bonus re-gate.
+    support_ledger: list["SupportRound"] = field(default_factory=list)
 
     # Phase 0a (F1): per-player score delta from the most recently resolved
     # turn (new cumulative score - old cumulative score), covering tiered
@@ -621,22 +597,26 @@ class GameState:
         """Players paired with their cumulative scores, sorted descending."""
         return sorted(self.scores.items(), key=lambda kv: -kv[1])
 
-    # --- Bundle 4 helpers ---
+    # --- Primitive B: reciprocation standing helpers ---
 
-    def leverage(self, attacker: PlayerId, defender: PlayerId) -> int:
-        """Net unreciprocated aid from attacker toward defender.
+    def reciprocation_given(self, player: PlayerId) -> int:
+        """# turns in the rolling window where `player` gave >=1 uncut
+        cross-player Support to a standing ALLY."""
+        return sum(1 for r in self.support_ledger if player in r.gave)
 
-        Positive when attacker has given more aid than they've received from
-        defender. Drives the combat bonus on attacker's Moves into hexes
-        owned by defender.
-        """
-        g = self.aid_given.get((attacker, defender), 0)
-        r = self.aid_given.get((defender, attacker), 0)
-        return g - r
+    def reciprocation_received(self, player: PlayerId) -> int:
+        """# turns in the rolling window where an ally supported `player`."""
+        return sum(1 for r in self.support_ledger if player in r.received)
 
-    def leverage_bonus(self, attacker: PlayerId, defender: PlayerId) -> int:
-        """Capped combat-strength bonus derived from leverage(attacker, defender)."""
-        lev = self.leverage(attacker, defender)
-        if lev <= 0:
-            return 0
-        return min(self.config.leverage_bonus_max, lev // self.config.leverage_ratio)
+    def reciprocation_standing(self, player: PlayerId) -> float:
+        """given / max(1, received). A free-rider sits near 0; a genuine
+        cooperator near 1."""
+        given = self.reciprocation_given(player)
+        received = self.reciprocation_received(player)
+        return given / max(1, received)
+
+    def freeride_debt(self, player: PlayerId) -> int:
+        """max(0, received - given): a one-glance takes-without-giving score."""
+        return max(
+            0, self.reciprocation_received(player) - self.reciprocation_given(player)
+        )

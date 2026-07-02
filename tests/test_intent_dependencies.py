@@ -1,14 +1,11 @@
 """Unit tests for press.intent_dependencies()."""
-from dataclasses import replace
-
 from foedus.core import (
-    AidSpend,
     Intent,
     Move,
     Press,
     Support,
 )
-from foedus.press import intent_dependencies, submit_aid_spends, submit_press_tokens
+from foedus.press import intent_dependencies, submit_press_tokens
 from tests.helpers import simple_two_player_state
 
 
@@ -35,18 +32,6 @@ def test_support_creates_player_unit_dependency():
     deps = intent_dependencies(s)
     # P0 depends on (P1, p1_unit_id).
     assert deps.get(0) == frozenset({(1, p1_unit_id)})
-
-
-def test_aidspend_creates_dependency():
-    s = simple_two_player_state()
-    p1_units = [u for u in s.units.values() if u.owner == 1]
-    p1_unit_id = p1_units[0].id
-    # Pre-populate aid tokens so the spend can fit the balance.
-    s = replace(s, aid_tokens={0: 1, 1: 1})
-    s = submit_aid_spends(s, 0, [AidSpend(target_unit=p1_unit_id)])
-    assert s.round_aid_pending.get(0), "aid spend should have landed in pending"
-    deps = intent_dependencies(s)
-    assert (1, p1_unit_id) in deps.get(0, frozenset())
 
 
 def test_solo_move_no_dependency():

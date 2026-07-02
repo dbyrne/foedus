@@ -59,6 +59,87 @@ def _pact_terms_p0_p1():
     )
 
 
+# --- harm-typed breach fixture ----------------------------------------------
+#
+# Post-2026-07-02, a pact breach only registers when it HARMS the co-signer
+# (Primitive A). The joint-MOVE pact above is breached by a harmless no-show
+# (the attack merely fizzles), which is no longer a breach. This symmetric
+# non-aggression fixture lets EITHER party breach by actually stabbing the
+# other: each has a stationary "target" unit the other can gang 2-vs-1.
+#
+#   p0: target uT0@10 (+home), attackers uA@21,uB@22 flanking p1's target @20
+#   p1: target uT1@20 (+home), attackers uC@11,uD@12 flanking p0's target @10
+#   p2: isolated observer uP2@99 (sees nothing) — keeps the 3-player fog checks
+
+from foedus.core import GameState, Map, NodeType  # noqa: E402
+
+
+def _pact_harm_map() -> Map:
+    coords = {10: (0, 0), 20: (5, 0), 21: (5, 1), 22: (6, 0),
+              11: (0, 1), 12: (1, 0), 99: (9, 9)}
+    edges = {
+        10: frozenset({11, 12}),
+        20: frozenset({21, 22}),
+        21: frozenset({20}), 22: frozenset({20}),
+        11: frozenset({10}), 12: frozenset({10}),
+        99: frozenset(),
+    }
+    node_types = {10: NodeType.SUPPLY, 20: NodeType.SUPPLY,
+                  21: NodeType.PLAIN, 22: NodeType.PLAIN,
+                  11: NodeType.PLAIN, 12: NodeType.PLAIN,
+                  99: NodeType.HOME}
+    return Map(coords=coords, edges=edges, node_types=node_types,
+               home_assignments={99: 2})
+
+
+def _pact_harm_state() -> GameState:
+    m = _pact_harm_map()
+    units = [
+        Unit(0, 0, 10), Unit(1, 0, 21), Unit(2, 0, 22),   # p0: target + 2 attackers
+        Unit(3, 1, 20), Unit(4, 1, 11), Unit(5, 1, 12),   # p1: target + 2 attackers
+        Unit(6, 2, 99),                                    # p2: isolated observer
+    ]
+    ownership = {n: None for n in m.nodes}
+    ownership[99] = 2
+    for u in units:
+        ownership[u.location] = u.owner
+    cfg = GameConfig(num_players=3, max_turns=50, build_period=999,
+                     detente_threshold=0, high_value_supply_fraction=0.0)
+    return GameState(
+        turn=0, map=m, units={u.id: u for u in units}, ownership=ownership,
+        scores={p: 0.0 for p in range(3)}, eliminated=set(),
+        next_unit_id=7, config=cfg,
+    )
+
+
+# Non-aggression pact: each party's forward attacker promises to Hold.
+def _nonaggression_terms():
+    return (
+        PactTerm(player=0, unit_id=1, declared_order=Hold()),
+        PactTerm(player=1, unit_id=4, declared_order=Hold()),
+    )
+
+
+# p0 stabs p1's target @20 (uA moves in, uB backs); p1 honors.
+_P0_STAB = {
+    0: {0: Hold(), 1: Move(dest=20), 2: Support(target=1)},
+    1: {3: Hold(), 4: Hold(), 5: Hold()},
+    2: {6: Hold()},
+}
+# p1 stabs p0's target @10 (uC moves in, uD backs); p0 honors.
+_P1_STAB = {
+    0: {0: Hold(), 1: Hold(), 2: Hold()},
+    1: {3: Hold(), 4: Move(dest=10), 5: Support(target=4)},
+    2: {6: Hold()},
+}
+# Both stab simultaneously.
+_BOTH_STAB = {
+    0: {0: Hold(), 1: Move(dest=20), 2: Support(target=1)},
+    1: {3: Hold(), 4: Move(dest=10), 5: Support(target=4)},
+    2: {6: Hold()},
+}
+
+
 def _run_finalize(state, orders):
     """Submit empty press + signal done for all survivors, then finalize."""
     for p in range(state.config.num_players):
@@ -277,56 +358,42 @@ def test_honored_pact_emits_no_breach() -> None:
 
 
 def test_breach_by_counterparty_observed_by_proposer() -> None:
-    s = _joint_move_state()
-    s = propose_pact(s, 0, 1, _pact_terms_p0_p1())
+    s = _pact_harm_state()
+    s = propose_pact(s, 0, 1, _nonaggression_terms())
     s = accept_pact(s, 0, 1)
-    # p1 defects: Holds its supporter instead of supporting.
-    orders = {
-        0: {3: Move(dest=2), 0: Hold()},
-        1: {4: Hold(), 1: Hold()},
-        2: {2: Hold()},
-    }
-    s2 = _run_finalize(s, orders)
-    # Proposer p0 observes; breacher p1 does not.
+    # p1 breaches its non-aggression term by STABBING p0's target unit.
+    s2 = _run_finalize(s, _P1_STAB)
+    # Proposer p0 (the harmed party) observes; breacher p1 does not.
     assert set(s2.pact_breaches) == {0}
     breaches = s2.pact_breaches[0]
     assert len(breaches) == 1
     b = breaches[0]
     assert b.breacher == 1
     assert b.pact_id == 0
-    assert b.term == PactTerm(player=1, unit_id=4, declared_order=Support(target=3))
-    assert b.actual_order == Hold()
+    assert b.term == PactTerm(player=1, unit_id=4, declared_order=Hold())
+    assert b.actual_order == Move(dest=10)
     assert b.turn == s.turn + 1
 
 
 def test_breach_by_proposer_observed_by_counterparty() -> None:
-    s = _joint_move_state()
-    s = propose_pact(s, 0, 1, _pact_terms_p0_p1())
+    s = _pact_harm_state()
+    s = propose_pact(s, 0, 1, _nonaggression_terms())
     s = accept_pact(s, 0, 1)
-    # p0 defects on its own move.
-    orders = {
-        0: {3: Hold(), 0: Hold()},
-        1: {4: Support(target=3), 1: Hold()},
-        2: {2: Hold()},
-    }
-    s2 = _run_finalize(s, orders)
+    # p0 breaches by stabbing p1's target unit.
+    s2 = _run_finalize(s, _P0_STAB)
     assert set(s2.pact_breaches) == {1}
     b = s2.pact_breaches[1][0]
     assert b.breacher == 0
-    assert b.term.unit_id == 3
-    assert b.actual_order == Hold()
+    assert b.term.unit_id == 1
+    assert b.actual_order == Move(dest=20)
 
 
 def test_both_parties_breach_each_observes_the_other() -> None:
-    s = _joint_move_state()
-    s = propose_pact(s, 0, 1, _pact_terms_p0_p1())
+    s = _pact_harm_state()
+    s = propose_pact(s, 0, 1, _nonaggression_terms())
     s = accept_pact(s, 0, 1)
-    orders = {
-        0: {3: Hold(), 0: Hold()},
-        1: {4: Hold(), 1: Hold()},
-        2: {2: Hold()},
-    }
-    s2 = _run_finalize(s, orders)
+    # Both stab simultaneously -> both breaches harm the co-signer.
+    s2 = _run_finalize(s, _BOTH_STAB)
     assert set(s2.pact_breaches) == {0, 1}
     assert s2.pact_breaches[0][0].breacher == 1
     assert s2.pact_breaches[1][0].breacher == 0
@@ -398,23 +465,18 @@ def test_unaccepted_proposal_survives_one_round_then_expires() -> None:
 
 
 def test_proposal_accepted_next_round_binds() -> None:
-    s = _joint_move_state()
-    s = propose_pact(s, 0, 1, _pact_terms_p0_p1())
-    hold_orders = {
-        0: {3: Hold(), 0: Hold()},
-        1: {4: Hold(), 1: Hold()},
-        2: {2: Hold()},
+    s = _pact_harm_state()
+    s = propose_pact(s, 0, 1, _nonaggression_terms())
+    all_hold = {
+        0: {0: Hold(), 1: Hold(), 2: Hold()},
+        1: {3: Hold(), 4: Hold(), 5: Hold()},
+        2: {6: Hold()},
     }
-    s1 = _run_finalize(s, hold_orders)   # turn -> 1, pact still PROPOSED
+    s1 = _run_finalize(s, all_hold)   # turn -> 1, pact still PROPOSED
     s1 = accept_pact(s1, 0, 1)
     assert s1.pacts[0].status == PactStatus.ACCEPTED
-    # p1 now breaches at round 1's resolution.
-    orders = {
-        0: {3: Move(dest=2), 0: Hold()},
-        1: {4: Hold(), 1: Hold()},
-        2: {2: Hold()},
-    }
-    s2 = _run_finalize(s1, orders)
+    # p1 now breaches at round 1's resolution by stabbing p0.
+    s2 = _run_finalize(s1, _P1_STAB)
     assert set(s2.pact_breaches) == {0}
     assert s2.pact_breaches[0][0].breacher == 1
     assert s2.pact_breaches[0][0].turn == 2
@@ -443,8 +505,11 @@ def test_honored_pact_resolves_identically_to_no_pact() -> None:
     assert r_pact.ownership == r_none.ownership
     assert r_pact.units == r_none.units
     assert r_pact.eliminated == r_none.eliminated
-    # Reference values from test_score_delta's known-good scenario.
-    assert r_none.scores == {0: 4.0, 1: 3.0, 2: 0.0}
+    # Reference values from test_score_delta's known-good scenario. The
+    # alliance bonus (+3 mover / +3 supporter) now fires on this cross-player
+    # supported capture — the aid-spend gate was deleted and the mover passes
+    # the reciprocation gate (no ally support taken yet).
+    assert r_none.scores == {0: 7.0, 1: 6.0, 2: 0.0}
 
 
 # --- fog visibility ---------------------------------------------------------
@@ -463,15 +528,10 @@ def test_fog_exposes_pact_to_both_parties_only() -> None:
 
 
 def test_fog_exposes_pact_breaches_to_observer_only() -> None:
-    s = _joint_move_state()
-    s = propose_pact(s, 0, 1, _pact_terms_p0_p1())
+    s = _pact_harm_state()
+    s = propose_pact(s, 0, 1, _nonaggression_terms())
     s = accept_pact(s, 0, 1)
-    orders = {
-        0: {3: Move(dest=2), 0: Hold()},
-        1: {4: Hold(), 1: Hold()},   # p1 breaches
-        2: {2: Hold()},
-    }
-    s2 = _run_finalize(s, orders)
+    s2 = _run_finalize(s, _P1_STAB)   # p1 breaches by stabbing p0
     assert len(visible_state_for(s2, 0)["your_pact_breaches"]) == 1
     assert visible_state_for(s2, 1)["your_pact_breaches"] == []
     assert visible_state_for(s2, 2)["your_pact_breaches"] == []
@@ -560,13 +620,44 @@ def test_play_game_honored_pact_records_no_breach() -> None:
     assert final.pact_breaches == {}
 
 
+class _NonAggressionProposer(Agent):
+    """p0: proposes a uA-Hold / uC-Hold non-aggression pact to p1, then honors
+    it (Holds everything)."""
+
+    def choose_orders(self, state, player):
+        return {u.id: Hold() for u in state.units_of(player)}
+
+    def choose_pacts(self, state, player):
+        if state.turn != 0:
+            return []
+        return [PactProposal(counterparty=1, terms=(
+            PactTerm(player=0, unit_id=1, declared_order=Hold()),
+            PactTerm(player=1, unit_id=4, declared_order=Hold()),
+        ))]
+
+
+class _StabbingAccepter(Agent):
+    """p1: accepts inbound proposals, then breaches by stabbing p0's target
+    unit @10 (uC moves in, uD backs it) — a harm-typed pact breach."""
+
+    def choose_orders(self, state, player):
+        return {3: Hold(), 4: Move(dest=10), 5: Support(target=4)}
+
+    def accept_pacts(self, state, player):
+        return [p.pact_id for p in state.pacts
+                if p.counterparty == player and p.status == PactStatus.PROPOSED]
+
+
 def test_play_game_breached_pact_records_breach_via_hooks() -> None:
+    s = replace(_pact_harm_state(), config=replace(
+        _pact_harm_state().config, max_turns=1))
     agents = {
-        0: _ScriptedPactAgent(0, propose_to=1, breach=False),
-        1: _ScriptedPactAgent(1, breach=True),   # accepts, then defects
+        0: _NonAggressionProposer(),
+        1: _StabbingAccepter(),      # accepts, then stabs p0 (harmful breach)
+        2: _NoHookAgent(),
     }
-    final = play_game(agents, state=_one_turn_state())
-    # P0 (proposer) observes P1's breach.
+    final = play_game(agents, state=s)
+    # P0 (the harmed proposer) observes P1's harmful breach.
     assert set(final.pact_breaches) == {0}
     assert final.pact_breaches[0][0].breacher == 1
 

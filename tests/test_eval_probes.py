@@ -23,7 +23,7 @@ def test_canonical_probes_present():
     expected = {
         "freerider_canary", "coalition_pressure", "detente_lying",
         "mutual_coop", "altruism_punished", "pure_expansion",
-        "noise_floor", "aid_asymmetry",
+        "noise_floor", "reciprocation_asymmetry",
     }
     actual = {p.name for p in PROBES}
     missing = expected - actual

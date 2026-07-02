@@ -75,13 +75,11 @@ class PressCommitRequest(BaseModel):
     player: int
     press: dict = Field(default_factory=dict)
     orders: dict[str, dict] = Field(default_factory=dict)
-    aid_spends: list[dict] = Field(default_factory=list)
 
 
 class PressUpdateRequest(BaseModel):
     player: int
     press: dict = Field(default_factory=dict)
-    aid_spends: list[dict] = Field(default_factory=list)
 
 
 def make_app(sessions: dict | None = None) -> FastAPI:
@@ -277,7 +275,6 @@ def make_app(sessions: dict | None = None) -> FastAPI:
             ERR_CHAT_PHASE_NOT_COMPLETE,
         )
         from foedus.remote.wire import (
-            deserialize_aid_spend,
             deserialize_intent,
             deserialize_orders,
         )
@@ -310,21 +307,9 @@ def make_app(sessions: dict | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=400, detail=f"invalid orders: {e}",
             )
-        # Parse aid spends (Bundle 4).
-        aid_spends = []
-        for sp_raw in req.aid_spends or []:
-            try:
-                aid_spends.append(deserialize_aid_spend(sp_raw))
-            except (KeyError, TypeError, ValueError) as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"bad aid spend {sp_raw!r}: {e}",
-                )
         # Submit.
         try:
-            return sess.submit_press_commit(
-                req.player, press, orders, aid_spends or None,
-            )
+            return sess.submit_press_commit(req.player, press, orders)
         except ValueError as e:
             msg = str(e)
             if ERR_CHAT_PHASE_NOT_COMPLETE in msg:
@@ -335,7 +320,7 @@ def make_app(sessions: dict | None = None) -> FastAPI:
 
     @app.post("/games/{game_id}/press-update")
     def press_update(game_id: str, req: PressUpdateRequest) -> dict[str, Any]:
-        """Submit press intents + aid spends WITHOUT signaling done.
+        """Submit press intents WITHOUT signaling done.
 
         Allows revisable submissions during the chat phase. The engine
         emits IntentRevised events on every change and auto-clears
@@ -355,7 +340,7 @@ def make_app(sessions: dict | None = None) -> FastAPI:
                                 detail=f"player {req.player} already committed; "
                                        f"cannot update press after commit")
         try:
-            sess.apply_press_update(req.player, req.press, req.aid_spends)
+            sess.apply_press_update(req.player, req.press)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         return sess.view_for(req.player)

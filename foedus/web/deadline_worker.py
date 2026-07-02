@@ -82,8 +82,7 @@ def _force_advance(session_factory, store: SqliteSessionStore, gid: str,
             continue
         holds = {u.id: Hold() for u in sess.state.units.values()
                  if u.owner == pidx}
-        sess.submit_press_commit(pidx, Press(stance={}, intents=[]),
-                                 holds, None)
+        sess.submit_press_commit(pidx, Press(stance={}, intents=[]), holds)
         # submit_press_commit auto-finalizes the round + calls init_round
         # if everyone is in, so the state may now be a NEW turn.
 

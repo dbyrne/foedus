@@ -58,36 +58,6 @@ def test_opportunist_emits_support_for_reachable_ally():
 
 
 # ---------------------------------------------------------------------------
-# Test 3: skips freeriders via leverage gate
-# ---------------------------------------------------------------------------
-
-def test_opportunist_skips_freeriders_via_leverage_gate():
-    """Unit 0 (player 0) at node 0; Unit 1 (player 1) at node 1; edge 0-1.
-    Player 0 has given 3 tokens to player 1, who has given 0 back.
-    leverage(0, 1) = 3 > 1  →  freerider gate fires, no Support emitted.
-    Expected: fallback Hold/Move order, NOT Support.
-    """
-    state = build_state_with_units(
-        layout={0: 0, 1: 1},
-        ownership={0: 0, 1: 1},
-        edges={0: {1}, 1: {0}},
-        num_players=2,
-    )
-    # Inject a leverage imbalance: player 0 has given 3 tokens to player 1.
-    state = dataclasses.replace(
-        state,
-        aid_given={(0, 1): 3},
-    )
-    assert state.leverage(0, 1) == 3  # sanity
-    agent = Opportunist()
-    orders = agent.choose_orders(state, player=0)
-    assert 0 in orders
-    assert not isinstance(orders[0], Support), (
-        f"expected fallback (Hold/Move), got Support: {orders[0]}"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Test 4: falls back to GreedyHold when no ally is geometrically reachable
 # ---------------------------------------------------------------------------
 
@@ -236,28 +206,3 @@ def test_opportunist_v2_falls_back_to_reactive_without_intent():
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 8 (v3): skip ally with high inverse leverage (Patron-defense gate)
-# ---------------------------------------------------------------------------
-
-def test_opportunist_skips_ally_with_high_inverse_leverage():
-    """Unit 0 (player 0) at node 0; Unit 1 (player 1) at node 1; edge 0-1.
-    Player 1 has given 3 tokens to player 0 (leverage(1,0) = 3 > 2).
-    The Patron-defense gate should fire, causing fallback to Hold/Move.
-    """
-    state = build_state_with_units(
-        layout={0: 0, 1: 1},
-        ownership={0: 0, 1: 1},
-        edges={0: {1}, 1: {0}},
-        num_players=2,
-    )
-    # Player 1 has given us 3 tokens — Patron-buildup signature.
-    state = dataclasses.replace(state, aid_given={(1, 0): 3})
-    assert state.leverage(1, 0) == 3  # sanity
-
-    agent = Opportunist()
-    orders = agent.choose_orders(state, player=0)
-    assert 0 in orders
-    assert not isinstance(orders[0], Support), (
-        f"Patron-defense gate should block Support; got {orders[0]}"
-    )

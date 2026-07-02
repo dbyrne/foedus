@@ -103,6 +103,20 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
     # `scores`.
     public_reputation = dict(state.reputation)
 
+    # Primitive B: public reciprocation standing (rolling window), so LLM
+    # negotiators can read and shun free-riders. Whole-table visible, like
+    # reputation/scores.
+    public_reciprocation = {
+        p: {
+            "given": state.reciprocation_given(p),
+            "received": state.reciprocation_received(p),
+            "standing": state.reciprocation_standing(p),
+            "freeride_debt": state.freeride_debt(p),
+        }
+        for p in range(state.config.num_players)
+        if p not in state.eliminated
+    }
+
     # Round-in-progress data (visible during NEGOTIATION phase).
     your_pending_press = state.round_press_pending.get(player)
     round_chat_so_far = [
@@ -129,6 +143,7 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
         "your_pacts": your_pacts,
         "your_pact_breaches": your_pact_breaches,
         "public_reputation": public_reputation,
+        "public_reciprocation": public_reciprocation,
         "your_pending_press": your_pending_press,
         "round_chat_so_far": round_chat_so_far,
         "current_round_phase": state.phase.value,

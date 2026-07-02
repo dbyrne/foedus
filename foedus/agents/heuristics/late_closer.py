@@ -20,14 +20,12 @@ Strategy (v2):
     (qualifies for +3 alliance bonus) > snag undefended supplies > Greedy
     fallback. require_dest distinguishes LateCloser from Cooperator's unpinned
     Support.
-  Aid: spend on visible ally Moves to supply where mutual-ALLY status holds.
 """
 
 from __future__ import annotations
 
 from foedus.agents.heuristics.greedy import Greedy
 from foedus.core import (
-    AidSpend,
     GameState,
     Intent,
     Move,
@@ -108,9 +106,6 @@ class LateCloser:
             ally_unit = state.units.get(ally_uid)
             if ally_unit is None or ally_unit.owner != ally_pid:
                 continue
-            # Patron-defense gate: skip allies with high inverse leverage.
-            if state.leverage(ally_pid, player) > 1:
-                continue
             # Check that dest is not defended by the ally themselves
             # (they're moving to it, so no defender issue from their side).
             for u in my_units:
@@ -149,62 +144,6 @@ class LateCloser:
                 orders[uid] = fallback.get(uid)
 
         return orders
-
-    # ------------------------------------------------------------------
-    # Aid
-    # ------------------------------------------------------------------
-
-    def choose_aid(self, state: GameState, player: PlayerId) -> list[AidSpend]:
-        balance = state.aid_tokens.get(player, 0)
-        if balance <= 0:
-            return []
-        if not state.press_history:
-            return []
-        last = state.press_history[-1]
-        my_prev = last.get(player)
-        if my_prev is None:
-            return []
-
-        m = state.map
-        spends: list[AidSpend] = []
-
-        for other_pid, press in state.round_press_pending.items():
-            if other_pid == player or other_pid in state.eliminated:
-                continue
-            # Mutual-ALLY gate: both declared ALLY in the prior turn.
-            their_prev = last.get(other_pid)
-            if their_prev is None:
-                continue
-            if my_prev.stance.get(other_pid, Stance.NEUTRAL) != Stance.ALLY:
-                continue
-            if their_prev.stance.get(player, Stance.NEUTRAL) != Stance.ALLY:
-                continue
-            # Patron-defense gate: skip allies with high inverse leverage.
-            if state.leverage(other_pid, player) > 1:
-                continue
-            for intent in press.intents:
-                if (intent.visible_to is not None
-                        and player not in intent.visible_to):
-                    continue
-                order = intent.declared_order
-                if not isinstance(order, Move):
-                    continue
-                if not m.is_supply(order.dest):
-                    continue
-                # Defender check: only aid if dest is undefended or weakly held.
-                defender = state.unit_at(order.dest)
-                if defender is not None and defender.owner == other_pid:
-                    continue  # they're already there
-                ally_unit = state.units.get(intent.unit_id)
-                if ally_unit is None or ally_unit.owner != other_pid:
-                    continue
-                spends.append(AidSpend(target_unit=intent.unit_id))
-                if len(spends) >= balance:
-                    break
-            if len(spends) >= balance:
-                break
-
-        return spends[:balance]
 
     # ------------------------------------------------------------------
     # Chat

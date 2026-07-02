@@ -247,11 +247,10 @@ class GameSession:
 
     def submit_press_commit(self, player: PlayerId,
                             press: "Press",
-                            orders: dict[UnitId, Order],
-                            aid_spends: list | None = None) -> dict:
-        """Submit press tokens + (optional) aid spends + orders + implicit
-        signal_done for `player`. If this commit completes the round, runs
-        finalize_round and re-initializes for the next round.
+                            orders: dict[UnitId, Order]) -> dict:
+        """Submit press tokens + orders + implicit signal_done for `player`.
+        If this commit completes the round, runs finalize_round and
+        re-initializes for the next round.
 
         Returns whether the round was advanced and the resulting turn.
         """
@@ -268,9 +267,6 @@ class GameSession:
                 f"player {player} {ERR_ALREADY_COMMITTED}"
             )
         self.state = submit_press_tokens(self.state, player, press)
-        if aid_spends:
-            from foedus.press import submit_aid_spends
-            self.state = submit_aid_spends(self.state, player, aid_spends)
         self.pending_orders[player] = dict(orders)
         self.state = signal_done(self.state, player)
         round_advanced = False
@@ -291,9 +287,8 @@ class GameSession:
         }
 
     def apply_press_update(self, player: PlayerId,
-                           press_raw: dict,
-                           aid_spends_raw: list) -> None:
-        """Submit press tokens + aid spends WITHOUT signaling done.
+                           press_raw: dict) -> None:
+        """Submit press tokens WITHOUT signaling done.
 
         Allows revisable submissions during the chat phase. The engine emits
         IntentRevised events on every change and auto-clears signal_done for
@@ -302,8 +297,7 @@ class GameSession:
         (409) before calling.
         """
         from foedus.core import Press, Stance
-        from foedus.press import submit_aid_spends
-        from foedus.remote.wire import deserialize_aid_spend, deserialize_intent
+        from foedus.remote.wire import deserialize_intent
 
         # Parse stance.
         stance: dict[int, Stance] = {}
@@ -317,11 +311,6 @@ class GameSession:
 
         press = Press(stance=stance, intents=intents)
         self.state = submit_press_tokens(self.state, player, press)
-
-        # Parse + apply aid spends.
-        if aid_spends_raw:
-            spends = [deserialize_aid_spend(sp) for sp in aid_spends_raw]
-            self.state = submit_aid_spends(self.state, player, spends)
 
     def submit_human_orders(self, player: PlayerId,
                             orders: dict[UnitId, Order]) -> None:
@@ -402,7 +391,6 @@ class GameSession:
     def _build_view(self, state: GameState, player: PlayerId,
                     *, is_replay: bool) -> dict[str, Any]:
         from foedus.remote.wire import (
-            serialize_aid_spend,
             serialize_order,
             serialize_state,
         )
@@ -415,9 +403,7 @@ class GameSession:
                     for o in legal_orders_for_unit(state, u.id)
                 ]
 
-        # Bundle 4: surface the player's own tokens, the public trust ledger,
-        # their committed aid spends this round (for revisability display),
-        # and the betrayal observations they've received this game.
+        # Surface the betrayal observations this player has received this game.
         my_betrayals = [
             {
                 "turn": b.turn,
@@ -459,11 +445,6 @@ class GameSession:
             "turn": state.turn,
             "max_turns": state.config.max_turns,
             "state": serialize_state(state),
-            "your_aid_tokens": state.aid_tokens.get(player, 0),
-            "your_aid_pending": [
-                serialize_aid_spend(s)
-                for s in state.round_aid_pending.get(player, [])
-            ],
             "your_betrayals": my_betrayals,
             "last_press": last_press_serialized,
             "your_units": [

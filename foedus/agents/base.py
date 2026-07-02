@@ -48,9 +48,7 @@ class Agent(Protocol):
         """
         return []
 
-    # Bundle 4: choose_aid is OPTIONAL on the Agent protocol — it would
-    # break backward compat with the runtime_checkable membership check
-    # for existing agents (RandomAgent, RemoteAgent, etc.). Drivers that
-    # support aid spending check `hasattr(agent, "choose_aid")` and call
-    # it only when defined. New press-aware agents implement it directly
-    # by adding `choose_aid(self, state, player) -> list[AidSpend]`.
+    # Pact hooks (choose_pacts / accept_pacts) are OPTIONAL on the Agent
+    # protocol — drivers hasattr-guard them, keeping the required surface
+    # `choose_orders` only so existing agents (RandomAgent, RemoteAgent, ...)
+    # stay valid under the runtime_checkable membership check.
