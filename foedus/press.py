@@ -716,6 +716,168 @@ def _stagnation_cost_deltas(
     return out
 
 
+# --- Primitive A: harm-typed breaches ---------------------------------------
+#
+# A divergence (submitted != declared) is a BREACH only when it harms a
+# COMMITTED party X. For an Intent, X is a player the breacher declared ALLY
+# toward within the intent's audience; for a Pact term, X is the co-signer.
+# Harm is computed from engine state (pre-state vs post-resolution + the
+# resolver's ResolutionDetail), never from self-reported labels. Pro-social
+# redirects (Move -> Support a third party or the ally itself) harm no
+# committed party and are NOT breaches.
+
+
+def _committed_parties_for_intent(
+    sender: PlayerId,
+    intent: Intent,
+    locked_press: dict[PlayerId, Press],
+    survivors: set[PlayerId],
+) -> set[PlayerId]:
+    """Players toward whom `sender`'s current-round stance is ALLY, within the
+    intent's audience (all survivors for a public intent, else visible_to).
+
+    A unilateral Move-intent toward a NEUTRAL/HOSTILE player is information,
+    not a promise — deviating from it can betray no one.
+    """
+    press = locked_press.get(sender)
+    stance = press.stance if press is not None else {}
+    audience = survivors if intent.visible_to is None else intent.visible_to
+    return {
+        x for x in audience
+        if x != sender and x in survivors
+        and stance.get(x, Stance.NEUTRAL) == Stance.ALLY
+    }
+
+
+def _pact_committed_party(pact: Pact, term: PactTerm) -> PlayerId:
+    """The pact's OTHER signer — the party who relied on this term."""
+    return pact.counterparty if term.player == pact.proposer else pact.proposer
+
+
+def _responsible_players(
+    attacker_uid: UnitId,
+    detail: "object",
+    state: GameState,
+) -> set[PlayerId]:
+    """Owners who swung or (uncut) backed the attack led by `attacker_uid`:
+    the attacker's owner plus every player whose uncut Support backed that
+    unit's move this turn."""
+    out: set[PlayerId] = set()
+    atk_unit = state.units.get(attacker_uid)
+    if atk_unit is not None:
+        out.add(atk_unit.owner)
+    atk_order = detail.canon.get(attacker_uid)
+    for uid, order in detail.canon.items():
+        if uid in detail.cut:
+            continue
+        if not isinstance(order, Support) or order.target != attacker_uid:
+            continue
+        if (order.require_dest is not None
+                and isinstance(atk_order, Move)
+                and order.require_dest != atk_order.dest):
+            continue
+        sup = state.units.get(uid)
+        if sup is not None:
+            out.add(sup.owner)
+    return out
+
+
+def _breach_harms_party(
+    breacher: PlayerId,
+    X: PlayerId,
+    unit_id: UnitId,
+    declared_order: Order,
+    state: GameState,
+    s_after: GameState,
+    detail: "object",
+) -> bool:
+    """True iff `breacher`'s divergence harmed committed party X (H1 or H2)."""
+    m = state.map
+    # H1a (capture): a supply/home center X owned is now owned by the breacher.
+    for n, owner in state.ownership.items():
+        if owner == X and m.is_supply(n) and s_after.ownership.get(n) == breacher:
+            return True
+    # H1b (dislodge): an X unit was dislodged by the breacher's own move or a
+    # move the breacher's uncut Support backed.
+    for d_uid, res in detail.outcome.items():
+        if res != "dislodged":
+            continue
+        victim = state.units.get(d_uid)
+        if victim is None or victim.owner != X:
+            continue
+        attacker_uid = detail.dislodged_by.get(d_uid)
+        if attacker_uid is None:
+            continue
+        if breacher in _responsible_players(attacker_uid, detail, state):
+            return True
+    # H2a (abandoned support-defense): declared Support of X's unit, abandoned,
+    # and that unit was dislodged this turn.
+    if isinstance(declared_order, Support):
+        tgt = state.units.get(declared_order.target)
+        if (tgt is not None and tgt.owner == X
+                and detail.outcome.get(tgt.id) == "dislodged"):
+            return True
+    # H2b (abandoned hold-defense): declared Hold adjacent to an X supply/home
+    # center that was captured (flipped away from X) this turn.
+    if isinstance(declared_order, Hold):
+        u = state.units.get(unit_id)
+        if u is not None:
+            for c in m.neighbors(u.location):
+                if not m.is_supply(c):
+                    continue
+                if state.ownership.get(c) != X:
+                    continue
+                new_owner = s_after.ownership.get(c)
+                if new_owner is not None and new_owner != X:
+                    return True
+    return False
+
+
+def _harmful_intent_breaches(
+    broken: list[tuple[PlayerId, Intent, Order]],
+    state: GameState,
+    s_after: GameState,
+    detail: "object",
+    locked_press: dict[PlayerId, Press],
+) -> list[tuple[PlayerId, Intent, Order]]:
+    """Filter raw intent deviations to the harm-typed subset (Primitive A)."""
+    survivors = {
+        p for p in range(state.config.num_players) if p not in state.eliminated
+    }
+    out: list[tuple[PlayerId, Intent, Order]] = []
+    for sender, intent, submitted in broken:
+        parties = _committed_parties_for_intent(
+            sender, intent, locked_press, survivors
+        )
+        if any(
+            _breach_harms_party(
+                sender, X, intent.unit_id, intent.declared_order,
+                state, s_after, detail,
+            )
+            for X in parties
+        ):
+            out.append((sender, intent, submitted))
+    return out
+
+
+def _harmful_pact_breaches(
+    broken: list[tuple[Pact, PactTerm, Order]],
+    state: GameState,
+    s_after: GameState,
+    detail: "object",
+) -> list[tuple[Pact, PactTerm, Order]]:
+    """Filter raw pact-term deviations to the harm-typed subset (Primitive A)."""
+    out: list[tuple[Pact, PactTerm, Order]] = []
+    for pact, term, submitted in broken:
+        X = _pact_committed_party(pact, term)
+        if _breach_harms_party(
+            term.player, X, term.unit_id, term.declared_order,
+            state, s_after, detail,
+        ):
+            out.append((pact, term, submitted))
+    return out
+
+
 def finalize_round(state: GameState,
                    orders_by_player: dict[PlayerId, dict[UnitId, Order]]
                    ) -> GameState:
@@ -738,35 +900,37 @@ def finalize_round(state: GameState,
     for u_id in state.units:
         flat.setdefault(u_id, Hold())
 
-    # Verify intents BEFORE running _resolve_orders so we can compare against
-    # raw input. (The verifier inspects state.round_press_pending.) Computed
-    # once and reused below for both the observer fan-out (new_betrayals) and
-    # F6's breach-penalty/reputation accounting, so neither can drift from
-    # the other and neither recomputes the same scan twice.
-    broken_intents = _broken_intents(flat, state)
-    new_betrayals = _fan_out_betrayals(broken_intents, state)
-
-    # F5: resolve pact obligations against the same raw `flat`. Emits
-    # PactBreach signals (consumed ACCEPTED pacts) and returns the pacts that
-    # survive into the next round (this-round proposals awaiting acceptance).
-    # Same once-computed-reused pattern as broken_intents above.
-    broken_pact_terms = _broken_pact_terms(flat, state)
-    new_pact_breaches = _fan_out_pact_breaches(broken_pact_terms, state)
+    # Compute the RAW per-unit deviations from declared Intents / accepted Pact
+    # terms (submitted != declared). These are harm-typed below via Primitive A
+    # once resolution attribution is available.
+    broken_intents_raw = _broken_intents(flat, state)
+    broken_pact_terms_raw = _broken_pact_terms(flat, state)
     surviving_pacts = [
         pact for pact in state.pacts
         if pact.status != PactStatus.ACCEPTED and pact.proposed_turn == state.turn
     ]
 
-    # Build a parallel canon dict for stagnation cost evaluation.
-    from foedus.resolve import _normalize
-    canon = {u_id: _normalize(state, u_id, o, flat) for u_id, o in flat.items()}
-
     # Compute stance-matrix update against locked press.
     streak_increment = _all_pairs_mutual_ally(state)
 
-    # Run the order resolution.
-    from foedus.resolve import _resolve_orders
-    s_after = _resolve_orders(state, orders_by_player)
+    # Run the order resolution, capturing attribution (outcome + dislodge map)
+    # for harm-typing.
+    from foedus.resolve import _resolve_orders_detailed
+    s_after, detail = _resolve_orders_detailed(state, orders_by_player)
+    canon = detail.canon
+
+    # Primitive A: a divergence counts as a breach only if it harmed a
+    # committed party (an ALLY the breacher declared toward / a pact co-signer).
+    # Pro-social redirects (Move -> Support) that harm no committed ally are
+    # dropped here — no BetrayalObservation, no penalty, no reputation hit.
+    broken_intents = _harmful_intent_breaches(
+        broken_intents_raw, state, s_after, detail, locked_press
+    )
+    broken_pact_terms = _harmful_pact_breaches(
+        broken_pact_terms_raw, state, s_after, detail
+    )
+    new_betrayals = _fan_out_betrayals(broken_intents, state)
+    new_pact_breaches = _fan_out_pact_breaches(broken_pact_terms, state)
 
     # Apply stagnation cost deltas using the (post-normalization) canon.
     deltas = _stagnation_cost_deltas(canon, state)

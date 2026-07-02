@@ -15,7 +15,7 @@ import math
 import os
 import random
 from collections import defaultdict
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 
 from foedus.core import (
     GameConfig,
@@ -32,6 +32,27 @@ from foedus.core import (
     Unit,
     UnitId,
 )
+
+
+@dataclass
+class ResolutionDetail:
+    """Attribution surfaced by order resolution, for harm-typed breach
+    accounting (Primitive A) and the reciprocation ledger (Primitive B).
+
+    - `canon`: post-normalization order per unit (Hold/Move/Support).
+    - `outcome`: per-unit 'success' | 'fail' | 'dislodged'.
+    - `dislodged_by`: dislodged unit_id -> the attacking unit that entered its
+      node (the swinger; supporters are recovered via `canon`/`cut`).
+    - `cut`: unit_ids whose Support was cut this turn.
+
+    Computed exactly by the resolver rather than re-derived from ownership
+    diffs, so harm attribution ("my move / my-backed support dislodged X")
+    is precise, not reconstructed.
+    """
+    canon: dict[UnitId, Order] = field(default_factory=dict)
+    outcome: dict[UnitId, str] = field(default_factory=dict)
+    dislodged_by: dict[UnitId, UnitId] = field(default_factory=dict)
+    cut: set[UnitId] = field(default_factory=set)
 
 
 def _assign_high_value_supplies(m: Map, config: GameConfig) -> Map:
@@ -517,6 +538,18 @@ def _resolve_orders(state: GameState,
     `finalize_round` (in foedus.press) which adds press-specific steps
     around the order resolution.
     """
+    return _resolve_orders_detailed(state, orders_by_player)[0]
+
+
+def _resolve_orders_detailed(
+    state: GameState,
+    orders_by_player: dict[PlayerId, dict[UnitId, Order]],
+) -> tuple[GameState, ResolutionDetail]:
+    """As `_resolve_orders`, but also returns a `ResolutionDetail` carrying the
+    canon orders, per-unit outcome, dislodge attribution, and cut set — the
+    exact information harm-typed breach accounting (`press.finalize_round`)
+    needs without re-deriving it from ownership diffs.
+    """
     log: list[str] = [f"--- turn {state.turn + 1} ---"]
 
     # 1. Flatten + ownership-validate.
@@ -584,6 +617,25 @@ def _resolve_orders(state: GameState,
     # 4. Resolve.
     h2h = _resolve_h2h(canon, move_str, state)
     outcome = _resolve_moves(canon, move_str, hold_str, h2h, state)
+
+    # Attribution: for each dislodged unit, the successful attacker that
+    # entered its node (the swinger). Supporters backing that attacker are
+    # recovered downstream from `canon`/`cut`. Used by harm-typed breach
+    # accounting in press.finalize_round.
+    dislodged_by: dict[UnitId, UnitId] = {}
+    for d_uid, res in outcome.items():
+        if res != "dislodged":
+            continue
+        victim = state.units[d_uid]
+        attacker_id = next(
+            (uid for uid, o in canon.items()
+             if isinstance(o, Move)
+             and o.dest == victim.location
+             and outcome.get(uid) == "success"),
+            None,
+        )
+        if attacker_id is not None:
+            dislodged_by[d_uid] = attacker_id
 
     # 5. Apply: build new units dict, log moves and dislodgements.
     new_units: dict[UnitId, Unit] = {}
@@ -898,7 +950,7 @@ def _resolve_orders(state: GameState,
         for player in range(state.config.num_players)
     }
 
-    return GameState(
+    new_state = GameState(
         turn=new_turn,
         map=state.map,
         units=new_units,
@@ -911,6 +963,13 @@ def _resolve_orders(state: GameState,
         support_lapses=lapses,
         last_turn_score_delta=score_delta,
     )
+    detail = ResolutionDetail(
+        canon=canon,
+        outcome=outcome,
+        dislodged_by=dislodged_by,
+        cut=cut,
+    )
+    return new_state, detail
 
 
 def resolve_turn(state: GameState,
