@@ -72,6 +72,9 @@ def serialize_config(c: GameConfig) -> dict[str, Any]:
         # can label high-value supplies and engines can re-replay maps.
         "high_value_supply_fraction": c.high_value_supply_fraction,
         "high_value_supply_yield": c.high_value_supply_yield,
+        # Retreats change a first-order rule (dislodged units survive vs die),
+        # so it must round-trip for faithful replay/remote resolution.
+        "retreats_enabled": c.retreats_enabled,
     }
 
 

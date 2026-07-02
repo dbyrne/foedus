@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import os
 import random
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field, replace
 
 from foedus.core import (
@@ -492,6 +492,110 @@ def _resolve_moves(canon: dict[UnitId, Order], move_str: dict[UnitId, int],
     return outcome
 
 
+# --- Retreats --------------------------------------------------------------
+
+
+def _nearest_empty_owned_node(
+    m: Map,
+    new_owner: dict[NodeId, PlayerId | None],
+    occupied: set[NodeId],
+    home: NodeId,
+    owner: PlayerId,
+) -> NodeId | None:
+    """BFS from `home` over passable edges; return the nearest node that is
+    owned by `owner`, passable, and unoccupied (excluding `home` itself).
+
+    Tie-break among equidistant candidates is the lowest node id, so the
+    result is deterministic. Returns None when no reachable owned empty node
+    exists (the caller then eliminates the unit).
+    """
+    dist: dict[NodeId, int] = {home: 0}
+    q: deque[NodeId] = deque([home])
+    while q:
+        n = q.popleft()
+        for nbr in sorted(m.neighbors(n)):
+            if nbr in dist or not m.is_passable(nbr):
+                continue
+            dist[nbr] = dist[n] + 1
+            q.append(nbr)
+    candidates = [
+        n for n in dist
+        if n != home
+        and new_owner.get(n) == owner
+        and m.is_passable(n)
+        and n not in occupied
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda n: (dist[n], n))
+
+
+def _resolve_retreats(
+    state: GameState,
+    dislodged_units: list[Unit],
+    new_units: dict[UnitId, Unit],
+    new_owner: dict[NodeId, PlayerId | None],
+    log: list[str],
+) -> None:
+    """Relocate each dislodged unit (retreats-enabled path), or eliminate it.
+
+    Rule ladder (see GameConfig.retreats_enabled):
+      A. home node no longer owned by the player (captured by an enemy)
+         -> eliminate (terminal; no fallback).
+      B. home owned by the player and unoccupied -> retreat there (teleport
+         home; the tempo cost is the lost forward position).
+      C. home owned but occupied (by any unit) -> nearest empty owned passable
+         node; if none, eliminate.
+
+    Mutates `new_units` and `log`. Units are processed in ascending id order,
+    and each placement is immediately visible to later retreats, so two units
+    cannot land on the same node and the outcome is deterministic.
+    """
+    m = state.map
+    # One home per player in practice; sorted iteration keeps the mapping
+    # deterministic if a map ever assigns a player multiple homes.
+    home_of: dict[PlayerId, NodeId] = {}
+    for node in sorted(m.home_assignments):
+        home_of.setdefault(m.home_assignments[node], node)
+
+    for unit in sorted(dislodged_units, key=lambda u: u.id):
+        occupied = {u.location for u in new_units.values()}
+        home = home_of.get(unit.owner)
+        if home is None:
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) eliminated "
+                f"(no home to retreat to)"
+            )
+            continue
+        # A. home captured by an enemy -> eliminate.
+        if new_owner.get(home) != unit.owner:
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) eliminated "
+                f"(home n{home} captured)"
+            )
+            continue
+        # B. home owned and empty -> retreat home.
+        if home not in occupied and m.is_passable(home):
+            new_units[unit.id] = replace(unit, location=home)
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) retreated to home n{home}"
+            )
+            continue
+        # C. home owned but occupied -> nearest empty owned node, else eliminate.
+        dest = _nearest_empty_owned_node(m, new_owner, occupied, home, unit.owner)
+        if dest is not None:
+            new_units[unit.id] = replace(unit, location=dest)
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) retreated to n{dest} "
+                f"(home n{home} blocked)"
+            )
+        else:
+            log.append(
+                f"  u{unit.id} (p{unit.owner}) eliminated "
+                f"(home n{home} blocked, no retreat)"
+            )
+
+
 # --- Top-level turn function ----------------------------------------------
 
 
@@ -597,11 +701,19 @@ def _resolve_orders_detailed(
             dislodged_by[d_uid] = attacker_id
 
     # 5. Apply: build new units dict, log moves and dislodgements.
+    #
+    # A dislodged unit is, by default (retreats disabled), eliminated: it is
+    # simply not carried into new_units. When retreats are enabled it is set
+    # aside and relocated to its home (or a fallback) in step 6.5 below.
+    retreats_on = state.config.retreats_enabled
+    dislodged_units: list[Unit] = []
     new_units: dict[UnitId, Unit] = {}
     for u_id, unit in state.units.items():
         result = outcome.get(u_id)
         if result == "dislodged":
             log.append(f"  u{u_id} (p{unit.owner}) dislodged at n{unit.location}")
+            if retreats_on:
+                dislodged_units.append(unit)
             continue
         order = canon[u_id]
         if isinstance(order, Move) and result == "success":
@@ -677,6 +789,16 @@ def _resolve_orders_detailed(
     for unit in new_units.values():
         if not state.map.is_supply(unit.location):
             new_owner[unit.location] = unit.owner
+
+    # 6.5 Retreats (opt-in): relocate dislodged units to their home node, or a
+    # fallback owned node, else eliminate. Runs AFTER the ownership update (it
+    # reads new_owner to detect a captured home and to find owned fallback
+    # nodes) and BEFORE builds/eliminations (a retreated unit counts toward its
+    # player's supply-need and can save the player from elimination). Retreats
+    # place a unit on an already-owned node, so they never change new_owner or
+    # award score — the only cost is the lost forward position.
+    if retreats_on and dislodged_units:
+        _resolve_retreats(state, dislodged_units, new_units, new_owner, log)
 
     # 7. Build phase (every config.build_period turns).
     next_id = state.next_unit_id
