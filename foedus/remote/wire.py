@@ -116,6 +116,10 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         # round_press_pending) are also omitted from this minimal wire format
         # — they're not needed for `choose_orders`. Add when a client
         # (e.g. foedus-godot) needs them.
+        # Phase 0a: last_turn_score_delta is presentation-only (income ledger
+        # rendering, see foedus.render_common) and likewise not needed for
+        # `choose_orders`; omitted from this minimal wire format for the same
+        # reason as the Press v0 fields above.
         # Task 11: new event lists from the alliance/support/intent redesign.
         "support_lapses": [serialize_support_lapsed(e) for e in state.support_lapses],
         "intent_revisions": [serialize_intent_revised(e) for e in state.intent_revisions],

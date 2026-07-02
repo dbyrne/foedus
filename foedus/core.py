@@ -264,7 +264,10 @@ class GameConfig:
     # incentive. Callers who want the v1 behavior can still pass
     # `stagnation_cost=1.0` explicitly.
     stagnation_cost: float = 0.0
-    chat_char_cap: int = 500  # chat message body length cap
+    # Phase 0a (F3): raised from 500. Playtest finding: a single 500-char
+    # message/round throttled negotiation (one player's whole coordination
+    # message got silently dropped mid-game for exceeding it).
+    chat_char_cap: int = 2000  # chat message body length cap
     round_timer_seconds: float = 60.0  # default for live play; drivers
                                        # override to 0 in training/turn-based modes
     archetype: Archetype = Archetype.UNIFORM
@@ -326,8 +329,16 @@ class GameConfig:
             self.detente_threshold = self.peace_threshold
         elif self.detente_threshold is None:
             # Default: scale with table size so 4-player has more headroom
-            # than 2-player. (Sonnet playtest feedback.)
-            self.detente_threshold = 4 + self.num_players
+            # than 2-player. (Sonnet playtest feedback.) Phase 0a (F3):
+            # clamp below max_turns so the auto-default is always reachable
+            # — a short max_turns (e.g. 7) previously left the scaled
+            # default (e.g. 8) unreachable, silently disabling détente.
+            # Only the auto-default is clamped; an explicit
+            # detente_threshold/peace_threshold is the caller's choice and
+            # is never overridden here.
+            self.detente_threshold = min(
+                4 + self.num_players, max(1, self.max_turns - 1)
+            )
         # Always reflect the resolved value back into peace_threshold for any
         # legacy reader that reads it directly from a GameConfig instance.
         self.peace_threshold = self.detente_threshold
@@ -386,6 +397,14 @@ class GameState:
     round_aid_pending: dict[PlayerId, list["AidSpend"]] = field(
         default_factory=dict
     )
+
+    # Phase 0a (F1): per-player score delta from the most recently resolved
+    # turn (new cumulative score - old cumulative score), covering tiered
+    # supply income, alliance/combat bonuses, and stagnation cost alike.
+    # Empty before any turn resolves. Lets prompt renderers show "you scored
+    # +N last turn" without re-deriving scoring logic that could drift from
+    # resolve.py's actual computation.
+    last_turn_score_delta: dict[PlayerId, float] = field(default_factory=dict)
 
     def units_of(self, player: PlayerId) -> list[Unit]:
         return [u for u in self.units.values() if u.owner == player]

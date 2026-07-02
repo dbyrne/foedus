@@ -883,6 +883,13 @@ def _resolve_orders(state: GameState,
             new_elim.add(player)
             log.append(f"  p{player} eliminated")
 
+    # Phase 0a (F1): record this turn's score delta so prompt renderers can
+    # show "you scored +N last turn" without re-deriving the scoring above.
+    score_delta = {
+        player: new_scores.get(player, 0.0) - state.scores.get(player, 0.0)
+        for player in range(state.config.num_players)
+    }
+
     return GameState(
         turn=new_turn,
         map=state.map,
@@ -894,6 +901,7 @@ def _resolve_orders(state: GameState,
         config=state.config,
         log=state.log + log,
         support_lapses=lapses,
+        last_turn_score_delta=score_delta,
     )
 
 

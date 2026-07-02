@@ -10,12 +10,15 @@ from foedus.resolve import initial_state
 def test_gameconfig_has_new_fields_with_defaults() -> None:
     cfg = GameConfig()
     # detente_threshold default scales with table size: 4 + num_players.
-    # Default num_players=4, so the resolved default is 8. (Sonnet playtest.)
+    # Default num_players=4 and max_turns=25, so the resolved default is
+    # min(8, 24) == 8. (Sonnet playtest.)
     assert cfg.detente_threshold == 8
     # Bundle 2 default change: stagnation_cost defaults to 0.0 (disabled)
     # because the hold-or-dislodge ownership rule made the penalty perverse.
     assert cfg.stagnation_cost == 0.0
-    assert cfg.chat_char_cap == 500
+    # Phase 0a (F3): raised from 500 — the playtest's single 500-char
+    # message/round throttled negotiation (finding 3).
+    assert cfg.chat_char_cap == 2000
     assert cfg.round_timer_seconds == 60.0
 
 
@@ -28,6 +31,29 @@ def test_gameconfig_peace_threshold_aliases_detente_threshold() -> None:
 def test_gameconfig_explicit_detente_threshold_takes_precedence() -> None:
     cfg = GameConfig(detente_threshold=3)
     assert cfg.detente_threshold == 3
+
+
+def test_gameconfig_default_detente_threshold_clamped_below_max_turns() -> None:
+    """Phase 0a (F3): the auto-scaled default (4 + num_players) must never
+    exceed max_turns, or détente becomes unreachable. Playtest config was
+    num_players=4, max_turns=7 -> old default 8 > 7 (unreachable)."""
+    cfg = GameConfig(num_players=4, max_turns=7)
+    assert cfg.detente_threshold < cfg.max_turns
+    assert cfg.detente_threshold == 6
+
+
+def test_gameconfig_default_detente_threshold_unaffected_for_long_games() -> None:
+    """The clamp only bites for short max_turns; normal-length games keep
+    the original 4 + num_players scaling exactly."""
+    cfg = GameConfig(num_players=4, max_turns=25)
+    assert cfg.detente_threshold == 8
+
+
+def test_gameconfig_explicit_detente_threshold_not_clamped() -> None:
+    """An explicit override is the caller's choice — only the auto-default
+    formula gets clamped to stay below max_turns."""
+    cfg = GameConfig(num_players=4, max_turns=5, detente_threshold=99)
+    assert cfg.detente_threshold == 99
 
 
 def test_gamestate_has_new_press_fields_after_initial_state() -> None:
