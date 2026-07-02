@@ -550,6 +550,12 @@ def _resolve_retreats(
     Mutates `new_units` and `log`. Units are processed in ascending id order,
     and each placement is immediately visible to later retreats, so two units
     cannot land on the same node and the outcome is deterministic.
+
+    NOTE: assignment is greedy by unit id, not a global maximum matching. If two
+    units of a player both want the one free home, the lower-id unit takes it and
+    the other falls back (or is eliminated) — a global assignment could
+    occasionally save one more unit. This is deterministic and spec-consistent;
+    the simplicity is intentional (retreats are already an edge path).
     """
     m = state.map
     # One home per player in practice; sorted iteration keeps the mapping
@@ -567,11 +573,14 @@ def _resolve_retreats(
                 f"(no home to retreat to)"
             )
             continue
-        # A. home captured by an enemy -> eliminate.
+        # A. home no longer owned by the player -> eliminate (terminal). This
+        # is "captured by an enemy" in practice; `!= owner` also covers the
+        # (normally unreachable) unowned case, since a home you don't own is
+        # not a valid retreat target either.
         if new_owner.get(home) != unit.owner:
             log.append(
                 f"  u{unit.id} (p{unit.owner}) eliminated "
-                f"(home n{home} captured)"
+                f"(home n{home} lost)"
             )
             continue
         # B. home owned and empty -> retreat home.

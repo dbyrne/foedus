@@ -345,3 +345,14 @@ def test_retreats_enabled_survives_wire_roundtrip() -> None:
     cfg_off = GameConfig(num_players=4, retreats_enabled=False)
     back_off = deserialize_config(serialize_config(cfg_off))
     assert back_off.retreats_enabled is False
+
+
+def test_leader_upkeep_survives_wire_roundtrip() -> None:
+    """The leader-counterweight knobs must round-trip too — the web session
+    store serializes+deserializes config on every save/load."""
+    from foedus.remote.wire import deserialize_config, serialize_config
+
+    cfg = GameConfig(num_players=4, supply_upkeep=0.5, supply_upkeep_free=2)
+    back = deserialize_config(serialize_config(cfg))
+    assert back.supply_upkeep == 0.5
+    assert back.supply_upkeep_free == 2

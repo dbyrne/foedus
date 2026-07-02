@@ -73,13 +73,9 @@ def test_does_not_attack_or_shun_honest_cooperators() -> None:
     press = Shunner().choose_press(s, 0)
     assert press.stance.get(1) == Stance.ALLY
     assert press.stance.get(2) == Stance.ALLY
-    orders = Shunner().choose_orders(s, 0)
-    # Shunner must not target an ally's occupied node as a shunning attack.
-    ally_nodes = {1, 2}
-    for uid, order in orders.items():
-        if isinstance(order, Move):
-            assert order.dest not in ally_nodes or True  # greedy expansion is fine
-    # Stronger: it declared no one hostile, so no shun-attack was scheduled.
+    # Detection is what drives BOTH hostility and shun-attacks; with no
+    # free-riders it must fire on no one, so no shun-attack is ever scheduled.
+    assert Shunner()._freeriders(s, 0) == set()
     assert all(v == Stance.ALLY for v in press.stance.values())
 
 
