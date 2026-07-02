@@ -1,0 +1,337 @@
+"""Robust JSON extraction + order/press/pact parsing for LLM output.
+
+LLM responses are untrusted free text: they may wrap JSON in prose or
+markdown fences, use string ids where ints are expected (or prefix them,
+e.g. "u2" for unit 2), or omit required fields. Every parse function here
+degrades to a safe fallback (Hold orders / empty press) instead of
+raising -- callers get back a `fell_back` flag (and an `n_coerced`
+count) so parse quality is a measured metric, never a silent failure.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass, field
+
+from foedus.core import (
+    GameState,
+    Hold,
+    Intent,
+    Move,
+    Order,
+    PactProposal,
+    PactTerm,
+    PlayerId,
+    Press,
+    Stance,
+    Support,
+    UnitId,
+)
+from foedus.legal import legal_orders_for_unit
+
+_ID_RE = re.compile(r"^[a-zA-Z]?(\d+)$")
+
+
+def coerce_id(raw: object) -> int | None:
+    """Coerce a possibly letter-prefixed id ("u2", "p1", "2", 2) to an int.
+
+    LLMs commonly prefix ids with a letter matching the domain noun
+    (unit "u2", player "p1"). Accepts a bare digit string or a real int
+    too. Returns None if `raw` can't be read as an id (including bools,
+    which are technically `int` in Python but never a valid id here).
+    """
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if not isinstance(raw, str):
+        return None
+    m = _ID_RE.match(raw.strip())
+    return int(m.group(1)) if m else None
+
+
+_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def extract_json(text: str):
+    """Extract and parse the first JSON object found in `text`.
+
+    Tries, in order: the whole text as-is; the first fenced code block;
+    the first balanced top-level `{...}` substring (brace-depth scan
+    that ignores braces inside string literals). Returns None if
+    nothing parses.
+    """
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    m = _FENCE_RE.search(text)
+    if m:
+        try:
+            return json.loads(m.group(1).strip())
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_str = False
+        esc = False
+        for i in range(start, len(text)):
+            c = text[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == "\\":
+                    esc = True
+                elif c == '"':
+                    in_str = False
+                continue
+            if c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start:i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except (json.JSONDecodeError, ValueError):
+                        break
+        start = text.find("{", start + 1)
+    return None
+
+
+def parse_order(d: object, legal: list[Order]) -> tuple[Order, bool]:
+    """Parse one order dict, legality-gated against `legal`.
+
+    Returns (order, was_legal). An unparseable or geometrically illegal
+    order coerces to Hold() with was_legal=False -- the engine already
+    normalizes illegal orders silently, but coercing here lets the
+    caller report it instead of the failure vanishing at finalize time.
+    """
+    if not isinstance(d, dict):
+        return Hold(), False
+    t = d.get("type")
+    order: Order | None = None
+    if t == "Hold":
+        order = Hold()
+    elif t == "Move":
+        dest = coerce_id(d.get("dest"))
+        if dest is not None:
+            order = Move(dest=dest)
+    elif t == "Support":
+        target = coerce_id(d.get("target"))
+        if target is not None:
+            require_dest_raw = d.get("require_dest")
+            if require_dest_raw is None:
+                order = Support(target=target)
+            else:
+                require_dest = coerce_id(require_dest_raw)
+                if require_dest is not None:
+                    order = Support(target=target, require_dest=require_dest)
+    if order is None or order not in legal:
+        return Hold(), False
+    return order, True
+
+
+def parse_stance(d: object) -> dict[PlayerId, Stance]:
+    out: dict[PlayerId, Stance] = {}
+    if not isinstance(d, dict):
+        return out
+    for k, v in d.items():
+        pid = coerce_id(k)
+        if pid is None:
+            continue
+        try:
+            out[pid] = Stance(v)
+        except ValueError:
+            continue
+    return out
+
+
+def parse_intent(d: object, state: GameState, player: PlayerId) -> Intent | None:
+    if not isinstance(d, dict):
+        return None
+    unit_id = coerce_id(d.get("unit_id"))
+    if unit_id is None:
+        return None
+    unit = state.units.get(unit_id)
+    if unit is None or unit.owner != player:
+        return None
+    order, _ = parse_order(
+        d.get("declared_order"), legal_orders_for_unit(state, unit_id)
+    )
+    vt_raw = d.get("visible_to")
+    if vt_raw is None:
+        visible_to: frozenset[PlayerId] | None = None
+    elif isinstance(vt_raw, list):
+        ids = [coerce_id(x) for x in vt_raw]
+        visible_to = frozenset(i for i in ids if i is not None)
+    else:
+        return None
+    return Intent(unit_id=unit_id, declared_order=order, visible_to=visible_to)
+
+
+def parse_pact_term(d: object, state: GameState) -> PactTerm | None:
+    if not isinstance(d, dict):
+        return None
+    player = coerce_id(d.get("player"))
+    unit_id = coerce_id(d.get("unit_id"))
+    if player is None or unit_id is None:
+        return None
+    unit = state.units.get(unit_id)
+    if unit is None or unit.owner != player:
+        return None
+    order, _ = parse_order(
+        d.get("declared_order"), legal_orders_for_unit(state, unit_id)
+    )
+    return PactTerm(player=player, unit_id=unit_id, declared_order=order)
+
+
+@dataclass
+class NegotiationDecision:
+    """Parsed result of one negotiation-phase LLM call.
+
+    Shared by choose_press/choose_pacts/accept_pacts -- they all read
+    the same fogged view at negotiate time, so one call answers all
+    three (see LLMDiplomat._negotiate).
+    """
+    press: Press
+    proposals: list[PactProposal] = field(default_factory=list)
+    accept_ids: list[int] = field(default_factory=list)
+    fell_back: bool = False
+    n_coerced: int = 0
+
+
+def parse_negotiation_response(
+    raw: str, state: GameState, player: PlayerId
+) -> NegotiationDecision:
+    data = extract_json(raw)
+    if not isinstance(data, dict):
+        return NegotiationDecision(Press(stance={}, intents=[]), fell_back=True)
+
+    fell_back = False
+    n_coerced = 0
+
+    press_raw = data.get("press")
+    if press_raw is None:
+        press_raw = {}
+    elif not isinstance(press_raw, dict):
+        press_raw = {}
+        fell_back = True
+        n_coerced += 1
+
+    stance = parse_stance(press_raw.get("stance"))
+    intents: list[Intent] = []
+    for it_raw in (press_raw.get("intents") or []):
+        parsed = parse_intent(it_raw, state, player)
+        if parsed is not None:
+            intents.append(parsed)
+        else:
+            fell_back = True
+            n_coerced += 1
+    press = Press(stance=stance, intents=intents)
+
+    pacts_raw = data.get("pacts")
+    proposals: list[PactProposal] = []
+    accept_ids: list[int] = []
+    if pacts_raw is None:
+        pacts_raw = {}
+    if isinstance(pacts_raw, dict):
+        for prop_raw in (pacts_raw.get("propose") or []):
+            if not isinstance(prop_raw, dict):
+                fell_back = True
+                n_coerced += 1
+                continue
+            counterparty = coerce_id(prop_raw.get("counterparty"))
+            if counterparty is None:
+                fell_back = True
+                n_coerced += 1
+                continue
+            terms: list[PactTerm] = []
+            for t_raw in (prop_raw.get("terms") or []):
+                term = parse_pact_term(t_raw, state)
+                if term is not None:
+                    terms.append(term)
+                else:
+                    fell_back = True
+                    n_coerced += 1
+            if terms:
+                proposals.append(
+                    PactProposal(counterparty=counterparty, terms=tuple(terms))
+                )
+            else:
+                fell_back = True
+                n_coerced += 1
+        for pid_raw in (pacts_raw.get("accept") or []):
+            pid = coerce_id(pid_raw)
+            if pid is not None:
+                accept_ids.append(pid)
+            else:
+                fell_back = True
+                n_coerced += 1
+    else:
+        fell_back = True
+        n_coerced += 1
+
+    return NegotiationDecision(
+        press, proposals, accept_ids, fell_back=fell_back, n_coerced=n_coerced
+    )
+
+
+def parse_orders_response(
+    raw: str, state: GameState, player: PlayerId
+) -> tuple[dict[UnitId, Order], bool, int]:
+    """Returns (orders, fell_back, n_coerced). Any owned unit missing from
+    the response defaults to Hold WITHOUT counting as a fallback -- that's
+    documented client shorthand (see foedus_press_play.py's apply_commit),
+    not a parse failure.
+    """
+    own_units = [u for u in state.units.values() if u.owner == player]
+    data = extract_json(raw)
+    fell_back = False
+    n_coerced = 0
+
+    orders_raw = None
+    if isinstance(data, dict):
+        orders_raw = data.get("orders")
+    else:
+        fell_back = True
+        n_coerced += 1
+
+    if orders_raw is None:
+        orders_raw = {}
+    elif not isinstance(orders_raw, dict):
+        orders_raw = {}
+        fell_back = True
+        n_coerced += 1
+
+    parsed: dict[UnitId, Order] = {}
+    for uid_key, od in orders_raw.items():
+        uid = coerce_id(uid_key)
+        if uid is None:
+            fell_back = True
+            n_coerced += 1
+            continue
+        unit = state.units.get(uid)
+        if unit is None or unit.owner != player:
+            fell_back = True
+            n_coerced += 1
+            continue
+        legal = legal_orders_for_unit(state, uid)
+        order, was_legal = parse_order(od, legal)
+        if not was_legal:
+            fell_back = True
+            n_coerced += 1
+        parsed[uid] = order
+
+    for u in own_units:
+        if u.id not in parsed:
+            parsed[u.id] = Hold()
+
+    return parsed, fell_back, n_coerced
