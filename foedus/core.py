@@ -421,6 +421,15 @@ class GameConfig:
     # Default OFF so v1 tests/behavior are unchanged and the retreats-on/off
     # sweep can A/B cleanly. See docs for the falsifiable-bar rationale.
     retreats_enabled: bool = False
+    # --- leader counterweight (optional; prototyped WITH retreats) ---
+    # Per-turn score upkeep charged to each player for every controlled supply
+    # ABOVE `supply_upkeep_free`: cost = supply_upkeep * max(0, supplies - free).
+    # 0.0 (default) disables it. Fable's "mild leader counterweight" suggestion:
+    # the freerider pass found a supply tax inert ALONE; this toggle exists to
+    # re-test it WITH retreats. Kept default-off (minimal physics) unless the
+    # sweep shows it earns its place.
+    supply_upkeep: float = 0.0
+    supply_upkeep_free: int = 3
     # Deprecated alias for detente_threshold; kept for one minor version.
     peace_threshold: int | None = None
 

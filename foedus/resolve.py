@@ -844,6 +844,29 @@ def _resolve_orders_detailed(
         )
         new_scores[player] = new_scores.get(player, 0.0) + supply_score
 
+    # 8a. Leader counterweight (optional): per-turn upkeep charged on every
+    # controlled supply ABOVE `supply_upkeep_free`. Default off
+    # (supply_upkeep=0.0). Uses the END-of-turn supply COUNT (not value) so it
+    # scales with the current leader's board size, per Fable's suggestion.
+    upkeep = state.config.supply_upkeep
+    if upkeep:
+        free = state.config.supply_upkeep_free
+        for player in range(state.config.num_players):
+            if player in state.eliminated:
+                continue
+            supplies = sum(
+                1 for n, t in state.map.node_types.items()
+                if t in (NodeType.SUPPLY, NodeType.HOME)
+                and new_owner.get(n) == player
+            )
+            taxed = max(0, supplies - free)
+            if taxed:
+                new_scores[player] = new_scores.get(player, 0.0) - upkeep * taxed
+                log.append(
+                    f"  leader upkeep -{upkeep * taxed:g} to p{player} "
+                    f"({supplies} supplies, {taxed} above free {free})"
+                )
+
     # 8b. EXPERIMENTAL: alliance-capture bonus.
     #
     # When a Move successfully captures a supply AND a SupportMove from a
