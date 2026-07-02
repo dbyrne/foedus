@@ -162,3 +162,78 @@ def test_decision_log_flags_fell_back_on_malformed_output() -> None:
     diplomat = LLMDiplomat(client=StubLLMClient(["garbage"]))
     diplomat.choose_press(state, 0)
     assert diplomat.decision_log[0]["fell_back"] is True
+
+
+class _RaisingClient:
+    """Simulates a transport/backend failure (network error, timeout,
+    non-2xx response) rather than a bad-but-present LLM response."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+        self.calls = 0
+
+    def complete(self, system: str, user: str) -> str:
+        self.calls += 1
+        raise self._exc
+
+
+def test_negotiate_transport_error_falls_back_to_neutral_press() -> None:
+    state = simple_two_player_state()
+    diplomat = LLMDiplomat(client=_RaisingClient(ConnectionError("refused")))
+    press = diplomat.choose_press(state, 0)
+    assert press == Press(stance={}, intents=[])
+    assert diplomat.decision_log[0]["fell_back"] is True
+    assert "refused" in diplomat.decision_log[0]["raw_response"]
+
+
+def test_orders_transport_error_falls_back_to_all_hold() -> None:
+    state = simple_two_player_state()
+    diplomat = LLMDiplomat(client=_RaisingClient(TimeoutError("timed out")))
+    orders = diplomat.choose_orders(state, 0)
+    own_unit_ids = {u.id for u in state.units.values() if u.owner == 0}
+    assert set(orders) == own_unit_ids
+    assert all(o == Hold() for o in orders.values())
+    assert diplomat.decision_log[0]["fell_back"] is True
+
+
+def test_transport_error_does_not_prevent_a_later_successful_call() -> None:
+    """A game must survive one bad turn, not just one bad decision."""
+    state = simple_two_player_state()
+    client = _RaisingClient(ConnectionError("refused"))
+    diplomat = LLMDiplomat(client=client)
+    diplomat.choose_press(state, 0)
+    assert diplomat.decision_log[0]["fell_back"] is True
+    assert client.calls == 1
+
+
+def test_caches_are_keyed_by_turn_and_player_not_turn_alone() -> None:
+    """Regression: a single LLMDiplomat instance handed to two seats must
+    not leak one player's negotiate/orders decision to the other."""
+    state = simple_two_player_state()
+    own_unit_p0 = next(u for u in state.units.values() if u.owner == 0)
+    own_unit_p1 = next(u for u in state.units.values() if u.owner == 1)
+
+    p0_negotiate = json.dumps({
+        "press": {"stance": {"1": "hostile"}, "intents": []},
+        "pacts": {"propose": [], "accept": []},
+    })
+    p1_negotiate = json.dumps({
+        "press": {"stance": {"0": "ally"}, "intents": []},
+        "pacts": {"propose": [], "accept": []},
+    })
+    p0_orders = json.dumps({"orders": {str(own_unit_p0.id): {"type": "Hold"}}})
+    p1_orders = json.dumps({"orders": {str(own_unit_p1.id): {"type": "Hold"}}})
+
+    client = StubLLMClient([p0_negotiate, p1_negotiate, p0_orders, p1_orders])
+    diplomat = LLMDiplomat(client=client)
+
+    press0 = diplomat.choose_press(state, 0)
+    press1 = diplomat.choose_press(state, 1)
+    assert press0.stance == {1: Stance.HOSTILE}
+    assert press1.stance == {0: Stance.ALLY}
+
+    orders0 = diplomat.choose_orders(state, 0)
+    orders1 = diplomat.choose_orders(state, 1)
+    assert set(orders0) == {own_unit_p0.id}
+    assert set(orders1) == {own_unit_p1.id}
+    assert len(client.calls) == 4

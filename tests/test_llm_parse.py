@@ -53,6 +53,14 @@ def test_coerce_id_rejects_garbage() -> None:
     assert coerce_id(1.5) is None
 
 
+def test_coerce_id_huge_digit_string_does_not_crash() -> None:
+    """Regression: a repetition-loop id thousands of digits long used to
+    hit CPython's int-string conversion length guard (ValueError) with
+    nothing to catch it."""
+    assert coerce_id("u" + "9" * 5000) is None
+    assert coerce_id("9" * 5000) is None
+
+
 # --- extract_json --------------------------------------------------------
 
 
@@ -326,6 +334,42 @@ def test_parse_negotiation_response_wraps_prose_and_fences() -> None:
     from foedus.core import Stance
     assert decision.press.stance == {1: Stance.HOSTILE}
     assert decision.fell_back is False
+
+
+def test_parse_negotiation_response_non_list_propose_does_not_crash() -> None:
+    """Regression: a non-list truthy value for pacts.propose used to hit
+    `raw or []` and crash iterating a scalar (`for x in 42`)."""
+    state = _two_unit_state()
+    raw = json.dumps({"pacts": {"propose": 42, "accept": []}})
+    decision = parse_negotiation_response(raw, state, player=0)
+    assert decision.proposals == []
+    assert decision.fell_back is True
+
+
+def test_parse_negotiation_response_non_list_accept_does_not_crash() -> None:
+    state = _two_unit_state()
+    raw = json.dumps({"pacts": {"propose": [], "accept": True}})
+    decision = parse_negotiation_response(raw, state, player=0)
+    assert decision.accept_ids == []
+    assert decision.fell_back is True
+
+
+def test_parse_negotiation_response_non_list_terms_does_not_crash() -> None:
+    state = _two_unit_state()
+    raw = json.dumps({
+        "pacts": {"propose": [{"counterparty": 1, "terms": 3.14}], "accept": []},
+    })
+    decision = parse_negotiation_response(raw, state, player=0)
+    assert decision.proposals == []
+    assert decision.fell_back is True
+
+
+def test_parse_negotiation_response_non_list_intents_does_not_crash() -> None:
+    state = _two_unit_state()
+    raw = json.dumps({"press": {"stance": {}, "intents": "not-a-list"}})
+    decision = parse_negotiation_response(raw, state, player=0)
+    assert decision.press.intents == []
+    assert decision.fell_back is True
 
 
 # --- parse_orders_response -----------------------------------------------

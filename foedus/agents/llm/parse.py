@@ -33,6 +33,18 @@ from foedus.legal import legal_orders_for_unit
 _ID_RE = re.compile(r"^[a-zA-Z]?(\d+)$")
 
 
+def _as_list(raw: object) -> list:
+    """Coerce an optional-list JSON field to a Python list.
+
+    An LLM may emit a non-list truthy value ("propose": 42, "accept":
+    true) where a list is expected -- `raw or []` would then try to
+    iterate that scalar and crash. Only a real list (or None/missing,
+    which map to "no entries") is accepted; anything else is treated
+    as absent.
+    """
+    return raw if isinstance(raw, list) else []
+
+
 def coerce_id(raw: object) -> int | None:
     """Coerce a possibly letter-prefixed id ("u2", "p1", "2", 2) to an int.
 
@@ -40,6 +52,9 @@ def coerce_id(raw: object) -> int | None:
     (unit "u2", player "p1"). Accepts a bare digit string or a real int
     too. Returns None if `raw` can't be read as an id (including bools,
     which are technically `int` in Python but never a valid id here).
+    A degenerate model output (e.g. a repetition-loop id thousands of
+    digits long) hits CPython's int-string conversion length guard
+    (ValueError) -- caught here rather than left to crash the caller.
     """
     if isinstance(raw, bool):
         return None
@@ -48,7 +63,12 @@ def coerce_id(raw: object) -> int | None:
     if not isinstance(raw, str):
         return None
     m = _ID_RE.match(raw.strip())
-    return int(m.group(1)) if m else None
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
 
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -227,8 +247,12 @@ def parse_negotiation_response(
         n_coerced += 1
 
     stance = parse_stance(press_raw.get("stance"))
+    intents_raw = press_raw.get("intents")
+    if intents_raw is not None and not isinstance(intents_raw, list):
+        fell_back = True
+        n_coerced += 1
     intents: list[Intent] = []
-    for it_raw in (press_raw.get("intents") or []):
+    for it_raw in _as_list(intents_raw):
         parsed = parse_intent(it_raw, state, player)
         if parsed is not None:
             intents.append(parsed)
@@ -243,7 +267,11 @@ def parse_negotiation_response(
     if pacts_raw is None:
         pacts_raw = {}
     if isinstance(pacts_raw, dict):
-        for prop_raw in (pacts_raw.get("propose") or []):
+        propose_raw = pacts_raw.get("propose")
+        if propose_raw is not None and not isinstance(propose_raw, list):
+            fell_back = True
+            n_coerced += 1
+        for prop_raw in _as_list(propose_raw):
             if not isinstance(prop_raw, dict):
                 fell_back = True
                 n_coerced += 1
@@ -253,8 +281,12 @@ def parse_negotiation_response(
                 fell_back = True
                 n_coerced += 1
                 continue
+            terms_raw = prop_raw.get("terms")
+            if terms_raw is not None and not isinstance(terms_raw, list):
+                fell_back = True
+                n_coerced += 1
             terms: list[PactTerm] = []
-            for t_raw in (prop_raw.get("terms") or []):
+            for t_raw in _as_list(terms_raw):
                 term = parse_pact_term(t_raw, state)
                 if term is not None:
                     terms.append(term)
@@ -268,7 +300,11 @@ def parse_negotiation_response(
             else:
                 fell_back = True
                 n_coerced += 1
-        for pid_raw in (pacts_raw.get("accept") or []):
+        accept_raw = pacts_raw.get("accept")
+        if accept_raw is not None and not isinstance(accept_raw, list):
+            fell_back = True
+            n_coerced += 1
+        for pid_raw in _as_list(accept_raw):
             pid = coerce_id(pid_raw)
             if pid is not None:
                 accept_ids.append(pid)
