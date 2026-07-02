@@ -1,12 +1,14 @@
-"""Verify the sim sweep emits F6 reputation-breach counters and exposes
-CLI flags to override the breach penalties.
+"""Verify the sim sweep emits harm-typed reputation-breach counters and
+exposes CLI flags to override the breach penalties.
 
-Needed for the post-0a/0b arena-fitness sweep (docs/research/2026-07-02
--post-0b-arena-fitness-sweep.md): isolating F6's effect on dishonest vs
-honest cooperators requires a penalties-off arm, and quantifying "did the
-deceptive heuristics actually breach" requires per-player breach counts
-keyed by committer (state.reputation), not just the recipient-keyed
-betrayal_count_per_player field that already existed.
+Post-2026-07-02 the reputation ledger is HARM-TYPED (Primitive A): a breach
+counts only when it harms a committed ally. OpportunisticBetrayer's solo
+stabs bounce (strength 1 vs 1) and so no longer register; a Sycophant
+(declares Hold + ALLY, then Greedy-moves onto a committed cooperator ally's
+supply, capturing it — H1) does reliably harm. Isolating the penalty's score
+effect still needs a penalties-off arm, and quantifying "did the deceptive
+heuristic actually harm a committed party" needs per-committer breach counts
+(state.reputation), not just the recipient-keyed betrayal_count_per_player.
 """
 
 import json
@@ -16,10 +18,12 @@ import sys
 from pathlib import Path
 
 
-# seed=1 with this fixed 4-seat matchup is known (verified by hand) to
-# trigger 8 real intent breaches by seat 0 (OpportunisticBetrayer) within
-# 10 turns on the conflict preset (continental_sweep, map_radius=2).
-SEATS = "OpportunisticBetrayer,Defensive,Defensive,Defensive"
+# seed=1 with this fixed 4-seat matchup reliably produces harm-typed intent
+# breaches by seat 0 (Sycophant captures an allied Cooperator's supply) within
+# 10 turns on the conflict preset (continental_sweep, map_radius=2), while the
+# honest Cooperators — whose only deviations are pro-social Move->Support
+# redirects — commit zero harm-typed breaches.
+SEATS = "Sycophant,Cooperator,Cooperator,Cooperator"
 
 
 def _run_sweep(out_path: Path, extra_args: list[str]) -> list[dict]:

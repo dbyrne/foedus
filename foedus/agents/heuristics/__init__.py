@@ -14,9 +14,11 @@ from foedus.agents.heuristics.dishonest_cooperator import DishonestCooperator
 from foedus.agents.heuristics.greedy import Greedy
 from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.agents.heuristics.late_closer import LateCloser
+from foedus.agents.heuristics.minimal_reciprocator import MinimalReciprocator
 from foedus.agents.heuristics.opportunistic_betrayer import OpportunisticBetrayer
 from foedus.agents.heuristics.patron import Patron
 from foedus.agents.heuristics.random_agent import RandomAgent
+from foedus.agents.heuristics.reciprocator import Reciprocator
 from foedus.agents.heuristics.sycophant import Sycophant
 from foedus.agents.heuristics.tit_for_tat import TitForTat
 from foedus.agents.heuristics.trustful_cooperator import TrustfulCooperator
@@ -25,8 +27,8 @@ from foedus.agents.heuristics.value_greedy import ValueGreedy
 __all__ = [
     "Aggressive", "AntiLeader", "Bandwagon", "CoalitionBuilder",
     "ConservativeBuilder", "Cooperator", "Defensive", "DishonestCooperator",
-    "Greedy", "GreedyHold", "LateCloser", "Opportunist",
-    "OpportunisticBetrayer", "Patron", "RandomAgent",
+    "Greedy", "GreedyHold", "LateCloser", "MinimalReciprocator", "Opportunist",
+    "OpportunisticBetrayer", "Patron", "RandomAgent", "Reciprocator",
     "Sycophant", "TitForTat", "TrustfulCooperator", "ValueGreedy",
 ]
 
@@ -50,4 +52,6 @@ ROSTER = {
     "TrustfulCooperator": TrustfulCooperator,
     "Patron": Patron,
     "ValueGreedy": ValueGreedy,
+    "Reciprocator": Reciprocator,
+    "MinimalReciprocator": MinimalReciprocator,
 }

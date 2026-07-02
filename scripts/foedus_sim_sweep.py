@@ -26,8 +26,7 @@ from foedus.core import (
 )
 from foedus.mapgen import generate_map
 from foedus.press import (
-    finalize_round, signal_chat_done, signal_done,
-    submit_aid_spends, submit_press_tokens,
+    finalize_round, signal_chat_done, signal_done, submit_press_tokens,
 )
 from foedus.resolve import initial_state
 
@@ -46,7 +45,7 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
                  max_turns: int, archetype: Archetype,
                  num_players: int, map_radius: int = 3,
                  peace_threshold: int = 99,
-                 bundle4_overrides: dict | None = None) -> dict:
+                 config_overrides: dict | None = None) -> dict:
     """Run a single game, return the per-game JSONL record.
 
     `peace_threshold` defaults to 99 (effectively disabled) so games
@@ -64,8 +63,8 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
         pass
     else:
         cfg_kwargs["peace_threshold"] = peace_threshold
-    if bundle4_overrides:
-        cfg_kwargs.update(bundle4_overrides)
+    if config_overrides:
+        cfg_kwargs.update(config_overrides)
     cfg = GameConfig(**cfg_kwargs)
     m = generate_map(num_players, seed=seed,
                      archetype=archetype, map_radius=cfg.map_radius)
@@ -82,11 +81,10 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
     score_per_turn: dict[int, list[float]] = {}
     order_counts: Counter = Counter()
     dislodgement_count = 0
-    aid_spends_count = 0
     alliance_bonuses_fired = 0
+    alliance_mover_denied = 0
     combat_rewards_fired = 0
     supporter_rewards_fired = 0
-    leverage_bonuses_fired = 0
     detente_streak_resets = 0
     prev_streak = 0
     log_seen_len = 0
@@ -95,23 +93,13 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
         survivors = [
             p for p in range(num_players) if p not in state.eliminated
         ]
-        # Press round (two passes: press, then aid + done — so aid sees
-        # everyone's declared intents).
+        # Press round.
         for p in survivors:
             press = agents[p].choose_press(state, p)
             state = submit_press_tokens(state, p, press)
         for p in survivors:
-            agent = agents[p]
-            if hasattr(agent, "choose_aid"):
-                aid = agent.choose_aid(state, p)
-                if aid:
-                    state = submit_aid_spends(state, p, aid)
             state = signal_chat_done(state, p)
             state = signal_done(state, p)
-        # Accumulate aid spends submitted this round (Bundle 4; absent on main).
-        round_pending = getattr(state, "round_aid_pending", {})
-        for spends in round_pending.values():
-            aid_spends_count += len(spends)
         # Collect orders.
         orders = {p: agents[p].choose_orders(state, p) for p in survivors}
         # Count order types.
@@ -133,24 +121,23 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
         # NOTE: these counters are derived from substring matches on
         # free-form resolution-log entries. They are brittle to log-message
         # edits in foedus/resolve.py. The phrases below match the strings
-        # emitted on Bundle 4+ (verified post-#19):
-        # - "alliance bonus +N to ..." — gated on AidSpend by default.
-        # - "combat reward +N to pX for dislodging ..." — Bundle 4+ only.
-        # - "supporter reward +N to pX (via uY) for dislodgement ..." — Bundle 4+ only.
-        # - "leverage bonus +N to pX (via uY) vs pZ" — Bundle 4 + PR #19.
-        # On pre-Bundle-4 commits these phrases don't appear; counters stay
-        # 0 (correct).
+        # emitted by the current engine:
+        # - "alliance bonus +N to ..." — fires on any cross-player supported
+        #   supply capture; suffix "[mover denied: reciprocation]" when the
+        #   reciprocation gate withheld the mover-side bonus (Primitive B).
+        # - "combat reward +N to pX for dislodging ..."
+        # - "supporter reward +N to pX (via uY) for dislodgement ..."
         log = getattr(state, "log", None) or []
         new_log = log[log_seen_len:]
         for entry in new_log:
             if "alliance bonus" in entry:
                 alliance_bonuses_fired += 1
+                if "mover denied" in entry:
+                    alliance_mover_denied += 1
             if "combat reward" in entry:
                 combat_rewards_fired += 1
             if "supporter reward" in entry:
                 supporter_rewards_fired += 1
-            if "leverage bonus" in entry:
-                leverage_bonuses_fired += 1
         log_seen_len = len(log)
         cur_streak = getattr(state, "mutual_ally_streak", 0)
         if prev_streak > 0 and cur_streak == 0:
@@ -195,11 +182,10 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
             state.reputation.get(p, ReputationTally()).pact_breaches
             for p in range(num_players)
         ],
-        "aid_spends_count": aid_spends_count,
         "alliance_bonuses_fired": alliance_bonuses_fired,
+        "alliance_mover_denied": alliance_mover_denied,
         "combat_rewards_fired": combat_rewards_fired,
         "supporter_rewards_fired": supporter_rewards_fired,
-        "leverage_bonuses_fired": leverage_bonuses_fired,
         "betrayals_observed": sum(
             len(state.betrayals.get(p, []))
             for p in range(num_players)
@@ -267,46 +253,32 @@ def main():
                              "receive it). Sets FOEDUS_ALLIANCE_BONUS for "
                              "this run only. Engine default is 3; pass 0 "
                              "to revert to v1 scoring.")
-    # --- Bundle 4: trust, aid, and combat incentives ---
-    parser.add_argument("--aid-cap", type=int, default=None,
-                        help="Bundle 4: aid_token_cap (default 10).")
-    parser.add_argument("--aid-divisor", type=int, default=None,
-                        help="Bundle 4: aid_generation_divisor (default 3). "
-                             "Tokens generated/turn = floor(supply/divisor).")
-    parser.add_argument("--aid-given-cap", type=int, default=None,
-                        help="Bundle 4: per-pair cap on aid_given ledger "
-                             "entries (default 3). Bounds the long-term "
-                             "leverage stockpile without affecting per-turn "
-                             "aid effects. Pass 999 to effectively disable.")
-    parser.add_argument("--leverage-bonus-max", type=int, default=None,
-                        help="Bundle 4: max combat-strength bonus from "
-                             "directional leverage (default 2).")
-    parser.add_argument("--leverage-ratio", type=int, default=None,
-                        help="Bundle 4: leverage // ratio = combat bonus "
-                             "(default 2).")
+    # --- combat + reciprocation incentives ---
     parser.add_argument("--combat-reward", type=float, default=None,
-                        help="Bundle 4: score reward per dislodgement to "
-                             "attacker (default 1.0). 0 disables.")
-    parser.add_argument("--supporter-combat-reward", type=float, default=None,
-                        help="Bundle 4: score reward per dislodgement to "
-                             "each uncut cross-player supporter "
+                        help="Score reward per dislodgement to attacker "
                              "(default 1.0). 0 disables.")
-    parser.add_argument("--alliance-requires-aid", type=int, default=None,
-                        help="Bundle 4: 1 (default) gates the alliance "
-                             "capture bonus on AidSpend; 0 reverts to v1 "
-                             "(any cross-player SupportMove triggers).")
+    parser.add_argument("--supporter-combat-reward", type=float, default=None,
+                        help="Score reward per dislodgement to each uncut "
+                             "cross-player supporter (default 1.0). 0 disables.")
+    parser.add_argument("--reciprocation-floor", type=float, default=None,
+                        help="Primitive B: min given/received standing a MOVER "
+                             "needs (when it has taken ally support) to earn "
+                             "the alliance-capture bonus (default 0.5).")
+    parser.add_argument("--reciprocation-window", type=int, default=None,
+                        help="Primitive B: rolling window (turns) over which "
+                             "ally-Support given/received is counted (default 4).")
     parser.add_argument("--betrayal-resets-detente", type=int, default=None,
                         help="Bundle 4: 1 (default) resets the détente "
                              "streak on any observed betrayal (closes the "
                              "détente-by-lying bug); 0 preserves v1 behavior.")
-    # --- Phase 0b (F6): betrayal teeth ---
+    # --- harm-typed betrayal teeth (Primitive A) ---
     parser.add_argument("--intent-breach-penalty", type=float, default=None,
-                        help="F6: score penalty per broken declared Intent "
-                             "(default 1.0). Pass 0 to isolate F6's effect "
-                             "(penalties-off arm).")
+                        help="Score penalty per HARM-TYPED broken declared "
+                             "Intent (default 1.0). Pass 0 to isolate its "
+                             "effect (penalties-off arm).")
     parser.add_argument("--pact-breach-penalty", type=float, default=None,
-                        help="F6: score penalty per broken accepted Pact "
-                             "term (default 2.0). Pass 0 to isolate F6's "
+                        help="Score penalty per HARM-TYPED broken accepted "
+                             "Pact term (default 1.0). Pass 0 to isolate its "
                              "effect (penalties-off arm).")
     # --- Bundle 5b (C3): variable supply values ---
     parser.add_argument("--high-value-fraction", type=float, default=None,
@@ -363,35 +335,27 @@ def main():
     archetype = Archetype(args.archetype)
     if args.alliance_bonus is not None:
         os.environ["FOEDUS_ALLIANCE_BONUS"] = args.alliance_bonus
-    # Build Bundle 4 config overrides (only set fields the user provided,
-    # so engine defaults apply otherwise).
-    bundle4_overrides: dict = {}
-    if args.aid_cap is not None:
-        bundle4_overrides["aid_token_cap"] = args.aid_cap
-    if args.aid_divisor is not None:
-        bundle4_overrides["aid_generation_divisor"] = args.aid_divisor
-    if args.aid_given_cap is not None:
-        bundle4_overrides["aid_given_cap"] = args.aid_given_cap
-    if args.leverage_bonus_max is not None:
-        bundle4_overrides["leverage_bonus_max"] = args.leverage_bonus_max
-    if args.leverage_ratio is not None:
-        bundle4_overrides["leverage_ratio"] = args.leverage_ratio
+    # Build config overrides (only set fields the user provided, so engine
+    # defaults apply otherwise).
+    config_overrides: dict = {}
     if args.combat_reward is not None:
-        bundle4_overrides["combat_reward"] = args.combat_reward
+        config_overrides["combat_reward"] = args.combat_reward
     if args.supporter_combat_reward is not None:
-        bundle4_overrides["supporter_combat_reward"] = args.supporter_combat_reward
-    if args.alliance_requires_aid is not None:
-        bundle4_overrides["alliance_requires_aid"] = bool(args.alliance_requires_aid)
+        config_overrides["supporter_combat_reward"] = args.supporter_combat_reward
+    if args.reciprocation_floor is not None:
+        config_overrides["reciprocation_floor"] = args.reciprocation_floor
+    if args.reciprocation_window is not None:
+        config_overrides["reciprocation_window"] = args.reciprocation_window
     if args.betrayal_resets_detente is not None:
-        bundle4_overrides["betrayal_resets_detente"] = bool(args.betrayal_resets_detente)
+        config_overrides["betrayal_resets_detente"] = bool(args.betrayal_resets_detente)
     if args.intent_breach_penalty is not None:
-        bundle4_overrides["intent_breach_penalty"] = args.intent_breach_penalty
+        config_overrides["intent_breach_penalty"] = args.intent_breach_penalty
     if args.pact_breach_penalty is not None:
-        bundle4_overrides["pact_breach_penalty"] = args.pact_breach_penalty
+        config_overrides["pact_breach_penalty"] = args.pact_breach_penalty
     if args.high_value_fraction is not None:
-        bundle4_overrides["high_value_supply_fraction"] = args.high_value_fraction
+        config_overrides["high_value_supply_fraction"] = args.high_value_fraction
     if args.high_value_yield is not None:
-        bundle4_overrides["high_value_supply_yield"] = args.high_value_yield
+        config_overrides["high_value_supply_yield"] = args.high_value_yield
     fixed_seats: list[str] | None = None
     if args.seats:
         fixed_seats = args.seats.split(",")
@@ -430,7 +394,7 @@ def main():
                            for _ in range(args.num_players)]
         tasks.append((game_id, seed, agent_names, args.max_turns,
                       archetype, args.num_players, args.map_radius,
-                      args.peace_threshold, bundle4_overrides))
+                      args.peace_threshold, config_overrides))
 
     workers = args.workers if args.workers > 0 else (os.cpu_count() or 1)
     t0 = time.time()
