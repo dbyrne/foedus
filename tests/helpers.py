@@ -37,6 +37,32 @@ def line_map(n_nodes: int) -> Map:
                home_assignments=home_assignments)
 
 
+def harm_map() -> Map:
+    """Compact map for harm-typed breach scenarios (Primitive A).
+
+    n0(HOME p0) - n1(SUPPLY) - n2(PLAIN) form a triangle; n3(HOME p1) hangs off
+    n1. p0 can field two units adjacent to n1 (at n0 and n2) to dislodge a unit
+    on n1 with a Move+Support; p1's detached home n3 means losing its n1 unit
+    doesn't eliminate it, so multi-turn scenarios keep both players alive.
+    """
+    coords = {0: (0, 0), 1: (1, 0), 2: (0, 1), 3: (2, 0)}
+    edges = {
+        0: frozenset({1, 2}),
+        1: frozenset({0, 2, 3}),
+        2: frozenset({0, 1}),
+        3: frozenset({1}),
+    }
+    node_types = {
+        0: NodeType.HOME,
+        1: NodeType.SUPPLY,
+        2: NodeType.PLAIN,
+        3: NodeType.HOME,
+    }
+    home_assignments = {0: 0, 3: 1}
+    return Map(coords=coords, edges=edges, node_types=node_types,
+               home_assignments=home_assignments)
+
+
 def triangle_map() -> Map:
     """3-node fully-connected triangle. Each node a HOME for one player."""
     coords = {0: (0, 0), 1: (1, 0), 2: (0, 1)}
