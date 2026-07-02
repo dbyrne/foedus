@@ -153,3 +153,79 @@ def test_apply_chat_within_cap_still_succeeds(
     assert "player 0 chat" in out
     state = pp.load()
     assert any(m.body == "hi" for m in state.round_chat)
+
+
+# --- F5: pacts in the orchestrator ------------------------------------------
+
+
+def test_prompt_commit_shows_pact_sections(monkeypatch, tmp_path, capsys) -> None:
+    _init_state(monkeypatch, tmp_path)
+    pp.cmd_prompt_commit(0)
+    out = capsys.readouterr().out
+    assert "ACTIVE PACTS" in out
+    assert "PACT BREACH LEDGER" in out
+
+
+def test_prompt_commit_documents_pact_schema(monkeypatch, tmp_path, capsys) -> None:
+    _init_state(monkeypatch, tmp_path)
+    pp.cmd_prompt_commit(0)
+    out = capsys.readouterr().out
+    assert '"pacts"' in out
+    assert '"propose"' in out
+    assert '"accept"' in out
+
+
+def _pact_commit_json(player, counterparty, u_self, u_other):
+    return {
+        "press": {},
+        "pacts": {
+            "propose": [{
+                "counterparty": counterparty,
+                "terms": [
+                    {"player": player, "unit_id": u_self,
+                     "declared_order": {"type": "Hold"}},
+                    {"player": counterparty, "unit_id": u_other,
+                     "declared_order": {"type": "Hold"}},
+                ],
+            }],
+        },
+        "orders": {str(u_self): {"type": "Hold"}},
+    }
+
+
+def test_apply_commit_proposes_pact(monkeypatch, tmp_path, capsys) -> None:
+    state = _init_state(monkeypatch, tmp_path)
+    monkeypatch.setattr(pp, "ORDERS_PICKLE",
+                        lambda p: tmp_path / f"orders_p{p}.pickle")
+    u0 = state.units_of(0)[0].id
+    u1 = state.units_of(1)[0].id
+    path = tmp_path / "commit0.json"
+    path.write_text(json.dumps(_pact_commit_json(0, 1, u0, u1)))
+
+    pp.cmd_apply_commit(0, str(path))
+    s = pp.load()
+    assert len(s.pacts) == 1
+    assert s.pacts[0].proposer == 0
+    assert s.pacts[0].counterparty == 1
+
+
+def test_apply_commit_accepts_pact(monkeypatch, tmp_path, capsys) -> None:
+    state = _init_state(monkeypatch, tmp_path)
+    monkeypatch.setattr(pp, "ORDERS_PICKLE",
+                        lambda p: tmp_path / f"orders_p{p}.pickle")
+    u0 = state.units_of(0)[0].id
+    u1 = state.units_of(1)[0].id
+
+    p0 = tmp_path / "commit0.json"
+    p0.write_text(json.dumps(_pact_commit_json(0, 1, u0, u1)))
+    pp.cmd_apply_commit(0, str(p0))
+
+    p1 = tmp_path / "commit1.json"
+    p1.write_text(json.dumps({
+        "pacts": {"accept": [0]},
+        "orders": {str(u1): {"type": "Hold"}},
+    }))
+    pp.cmd_apply_commit(1, str(p1))
+
+    s = pp.load()
+    assert s.pacts[0].status.value == "accepted"

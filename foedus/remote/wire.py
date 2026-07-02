@@ -120,6 +120,13 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         # rendering, see foedus.render_common) and likewise not needed for
         # `choose_orders`; omitted from this minimal wire format for the same
         # reason as the Press v0 fields above.
+        # Phase 0b (F5): pacts / next_pact_id / pact_breaches are press-layer
+        # social state (proposed/ratified joint commitments and their breach
+        # ledger). Like the Press v0 fields, they are NOT needed for the remote
+        # `choose_orders` decision — the Cicero-style split keeps the strategic
+        # agent blind to the negotiation layer — so they are deliberately
+        # omitted here. deserialize_state defaults them empty; states round-trip
+        # cleanly (a remote agent never sees or acts on pacts).
         # Task 11: new event lists from the alliance/support/intent redesign.
         "support_lapses": [serialize_support_lapsed(e) for e in state.support_lapses],
         "intent_revisions": [serialize_intent_revised(e) for e in state.intent_revisions],

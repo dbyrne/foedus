@@ -88,6 +88,15 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
 
     your_betrayals = list(state.betrayals.get(player, []))
 
+    # F5: pacts (proposed + accepted) where this player is a party, and the
+    # pact breaches this player has observed. A pact is bilateral, so both
+    # parties see it; third parties never do.
+    your_pacts = [
+        p for p in state.pacts
+        if player == p.proposer or player == p.counterparty
+    ]
+    your_pact_breaches = list(state.pact_breaches.get(player, []))
+
     # Round-in-progress data (visible during NEGOTIATION phase).
     your_pending_press = state.round_press_pending.get(player)
     round_chat_so_far = [
@@ -111,6 +120,8 @@ def visible_state_for(state: GameState, player: PlayerId) -> dict[str, Any]:
         "your_inbound_intents": your_inbound_intents,
         "your_chat": your_chat,
         "your_betrayals": your_betrayals,
+        "your_pacts": your_pacts,
+        "your_pact_breaches": your_pact_breaches,
         "your_pending_press": your_pending_press,
         "round_chat_so_far": round_chat_so_far,
         "current_round_phase": state.phase.value,

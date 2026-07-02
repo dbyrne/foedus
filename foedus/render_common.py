@@ -26,6 +26,7 @@ from foedus.core import (
     NodeId,
     NodeType,
     Order,
+    PactStatus,
     PlayerId,
     Support,
 )
@@ -218,6 +219,63 @@ def render_betrayal_ledger(state: GameState, player: PlayerId) -> str:
         lines.append(
             f"  turn {b.turn}: p{b.betrayer} declared "
             f"u{b.intent.unit_id} -> {order_to_str(b.intent.declared_order, state)}, "
+            f"actually issued {order_to_str(b.actual_order, state)}"
+        )
+    return "\n".join(lines)
+
+
+def render_active_pacts(state: GameState, player: PlayerId) -> str:
+    """F5: an "ACTIVE PACTS" block listing the live pacts `player` is a party
+    to (proposed + accepted), so binding joint commitments are on the record
+    rather than held in the agent's head.
+
+    A pact is bilateral — only its two parties see it (matches fog's
+    `your_pacts`). Each term shows the obligated player, unit, and the
+    value-annotated order via `order_to_str`.
+    """
+    mine = [
+        p for p in state.pacts
+        if player == p.proposer or player == p.counterparty
+    ]
+    if not mine:
+        return "ACTIVE PACTS: none."
+    lines = ["ACTIVE PACTS (binding joint commitments):"]
+    for p in mine:
+        head = (
+            f"  pact #{p.pact_id} [{p.status.value}] "
+            f"between p{p.proposer} and p{p.counterparty}"
+        )
+        if p.status == PactStatus.PROPOSED:
+            head += f" — awaiting p{p.counterparty} acceptance"
+        lines.append(head)
+        for t in p.terms:
+            lines.append(
+                f"    - p{t.player} u{t.unit_id} -> "
+                f"{order_to_str(t.declared_order, state)}"
+            )
+    return "\n".join(lines)
+
+
+def render_pact_breach_ledger(state: GameState, player: PlayerId) -> str:
+    """F5: standing pact-breach ledger for `player` (breaches they observed),
+    rendered alongside the betrayal ledger. Cumulative counts by breacher plus
+    the most recent entries."""
+    breaches = state.pact_breaches.get(player, [])
+    if not breaches:
+        return "PACT BREACH LEDGER: none observed yet."
+    counts: dict[PlayerId, int] = {}
+    for b in breaches:
+        counts[b.breacher] = counts.get(b.breacher, 0) + 1
+    counts_s = ", ".join(f"p{p}={c}" for p, c in sorted(counts.items()))
+    lines = [
+        f"PACT BREACH LEDGER (cumulative, {len(breaches)} total; "
+        f"by player: {counts_s}):"
+    ]
+    for b in breaches[-5:]:
+        lines.append(
+            f"  turn {b.turn}: p{b.breacher} broke pact #{b.pact_id} — "
+            f"pledged u{b.term.unit_id} -> "
+            f"{order_to_str(b.term.declared_order, state)}, "
             f"actually issued {order_to_str(b.actual_order, state)}"
         )
     return "\n".join(lines)

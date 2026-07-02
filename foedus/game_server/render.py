@@ -20,10 +20,12 @@ from foedus.legal import legal_orders_for_unit
 from foedus.render_common import (
     CAPTURE_RULE_TEXT,
     order_to_str,
+    render_active_pacts,
     render_adjacency_table,
     render_betrayal_ledger,
     render_income_ledger,
     render_map,
+    render_pact_breach_ledger,
     render_turn_calendar,
 )
 
@@ -76,6 +78,8 @@ def render_chat_prompt(state: GameState, player: PlayerId) -> str:
         out.write("\n")
 
     out.write(render_betrayal_ledger(state, player) + "\n\n")
+    out.write(render_active_pacts(state, player) + "\n\n")
+    out.write(render_pact_breach_ledger(state, player) + "\n\n")
 
     if view["round_chat_so_far"]:
         out.write(
@@ -146,6 +150,8 @@ def render_commit_prompt(state: GameState, player: PlayerId) -> str:
     out.write(render_income_ledger(state, player) + "\n\n")
     out.write(render_adjacency_table(state, view["visible_nodes"]) + "\n\n")
     out.write(render_betrayal_ledger(state, player) + "\n\n")
+    out.write(render_active_pacts(state, player) + "\n\n")
+    out.write(render_pact_breach_ledger(state, player) + "\n\n")
 
     out.write("VISIBLE UNITS:\n")
     for u in view["visible_units"]:

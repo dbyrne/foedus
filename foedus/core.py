@@ -193,6 +193,78 @@ class DoneCleared:
     source_unit: UnitId      # which unit's intent the dependency referenced
 
 
+# --- Phase 0b (F5): binding joint intents ("Pacts") ---
+
+
+class PactStatus(Enum):
+    PROPOSED = "proposed"   # awaiting counterparty acceptance
+    ACCEPTED = "accepted"   # ratified; binding for the upcoming resolution
+
+
+@dataclass(frozen=True)
+class PactTerm:
+    """One obligated (player, unit, order) entry within a Pact.
+
+    `player` is the obligated party (always the pact's proposer or
+    counterparty); `unit_id` is one of that player's units; `declared_order`
+    is the order that player commits to issue for it this resolution.
+    """
+    player: PlayerId
+    unit_id: UnitId
+    declared_order: Order
+
+
+@dataclass(frozen=True)
+class Pact:
+    """A proposed-or-ratified joint commitment between exactly two players
+    describing coordinated orders for the upcoming resolution.
+
+    `terms` spans BOTH parties (e.g. P0's u1 -> Move(8) AND P2's u5 ->
+    Support(u1)). `proposer` proposes; `counterparty` accepts. Once ACCEPTED
+    the pact is binding for the next resolution and any party's divergence
+    from its term is a PactBreach (a strong signal the other party observes).
+
+    `proposed_turn` is `state.turn` at proposal time and drives expiry: a
+    PROPOSED pact must be accepted the same or the next round (see
+    `foedus.press.finalize_round`).
+    """
+    pact_id: int
+    proposer: PlayerId
+    counterparty: PlayerId
+    terms: tuple[PactTerm, ...]
+    status: PactStatus
+    proposed_turn: int
+
+
+@dataclass(frozen=True)
+class PactProposal:
+    """What an agent emits to propose a Pact. Engine fills in pact_id,
+    proposer, status, and proposed_turn.
+
+    Mirrors how `ChatDraft` carries the agent-supplied parts of a
+    `ChatMessage`. `terms` should span both the proposing player and
+    `counterparty` to form a genuine joint commitment.
+    """
+    counterparty: PlayerId
+    terms: tuple[PactTerm, ...]
+
+
+@dataclass(frozen=True)
+class PactBreach:
+    """End-of-turn signal that a party broke one of its obligations under an
+    ACCEPTED pact.
+
+    Recorded in `state.pact_breaches[observer]` where `observer` is the
+    non-breaching party of the pact — the one who relied on the commitment.
+    F6 will attach a mechanical penalty to this signal; F5 only emits it.
+    """
+    turn: int
+    pact_id: int
+    breacher: PlayerId
+    term: PactTerm
+    actual_order: Order
+
+
 @dataclass(frozen=True)
 class Unit:
     id: UnitId
@@ -405,6 +477,20 @@ class GameState:
     # +N last turn" without re-deriving scoring logic that could drift from
     # resolve.py's actual computation.
     last_turn_score_delta: dict[PlayerId, float] = field(default_factory=dict)
+
+    # --- Phase 0b (F5): binding joint intents ("Pacts") ---
+    # Live pacts (PROPOSED + ACCEPTED). NOT round scratch: they persist across
+    # rounds under the lifecycle in press.finalize_round (accepted pacts are
+    # checked + consumed each resolution; un-accepted proposals expire after
+    # one round). Both parties see their own via fog.
+    pacts: list["Pact"] = field(default_factory=list)
+    # Monotonic id source for pacts (deterministic; no RNG/clock).
+    next_pact_id: int = 0
+    # Cumulative pact-breach ledger keyed by the OBSERVING (non-breaching)
+    # party, mirroring `betrayals`. Never decays; public to the two parties.
+    pact_breaches: dict[PlayerId, list["PactBreach"]] = field(
+        default_factory=dict
+    )
 
     def units_of(self, player: PlayerId) -> list[Unit]:
         return [u for u in self.units.values() if u.owner == player]

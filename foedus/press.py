@@ -22,6 +22,10 @@ from foedus.core import (
     IntentRevised,
     Move,
     Order,
+    Pact,
+    PactBreach,
+    PactStatus,
+    PactTerm,
     Phase,
     PlayerId,
     Press,
@@ -296,6 +300,100 @@ def signal_done(state: GameState, player: PlayerId) -> GameState:
     return replace(state, round_done=new_done)
 
 
+def propose_pact(state: GameState, proposer: PlayerId,
+                 counterparty: PlayerId,
+                 terms: tuple[PactTerm, ...] | list[PactTerm]) -> GameState:
+    """Propose a binding joint commitment (F5) between `proposer` and
+    `counterparty` for the upcoming resolution.
+
+    Terms are filtered silently (matching the order-normalization invariant —
+    degenerate submissions vanish, never raise):
+    - a term whose `player` is neither proposer nor counterparty is dropped
+    - a term whose `unit_id` is not owned by `term.player` right now is dropped
+
+    A Pact is created only if, after filtering, at least one term remains for
+    EACH party — a genuine two-sided commitment. Otherwise the proposal is
+    dropped (state returned unchanged).
+
+    Returns state unchanged if:
+    - phase is not NEGOTIATION
+    - proposer or counterparty is eliminated
+    - proposer == counterparty
+    - proposer has already signaled done this round
+    """
+    if state.phase != Phase.NEGOTIATION:
+        return state
+    if proposer in state.eliminated or counterparty in state.eliminated:
+        return state
+    if proposer == counterparty:
+        return state
+    if proposer in state.round_done:
+        return state
+
+    parties = {proposer, counterparty}
+    cleaned: list[PactTerm] = []
+    for term in terms:
+        if term.player not in parties:
+            continue
+        unit = state.units.get(term.unit_id)
+        if unit is None or unit.owner != term.player:
+            continue
+        cleaned.append(term)
+
+    if not any(t.player == proposer for t in cleaned):
+        return state
+    if not any(t.player == counterparty for t in cleaned):
+        return state
+
+    pact = Pact(
+        pact_id=state.next_pact_id,
+        proposer=proposer,
+        counterparty=counterparty,
+        terms=tuple(cleaned),
+        status=PactStatus.PROPOSED,
+        proposed_turn=state.turn,
+    )
+    return replace(
+        state,
+        pacts=state.pacts + [pact],
+        next_pact_id=state.next_pact_id + 1,
+    )
+
+
+def accept_pact(state: GameState, pact_id: int,
+                accepter: PlayerId) -> GameState:
+    """Ratify a PROPOSED pact. Only the pact's `counterparty` may accept.
+
+    Once ACCEPTED the pact is binding for the next resolution. Idempotent
+    (accepting an already-ACCEPTED pact is a no-op).
+
+    Returns state unchanged if:
+    - phase is not NEGOTIATION
+    - accepter is eliminated or has signaled done this round
+    - no PROPOSED pact with `pact_id` exists whose counterparty is `accepter`
+    """
+    if state.phase != Phase.NEGOTIATION:
+        return state
+    if accepter in state.eliminated:
+        return state
+    if accepter in state.round_done:
+        return state
+
+    new_pacts: list[Pact] = []
+    changed = False
+    for pact in state.pacts:
+        if (pact.pact_id == pact_id
+                and pact.status == PactStatus.PROPOSED
+                and pact.counterparty == accepter):
+            new_pacts.append(replace(pact, status=PactStatus.ACCEPTED))
+            changed = True
+        else:
+            new_pacts.append(pact)
+    if not changed:
+        return state
+    return replace(state, pacts=new_pacts)
+
+
 def signal_chat_done(state: GameState, player: PlayerId) -> GameState:
     """Mark a player as done with the chat phase. Idempotent.
 
@@ -430,6 +528,55 @@ def _verify_intents(
     return dict(out)
 
 
+def _verify_pacts(
+    flat: dict[UnitId, Order],
+    state: GameState,
+) -> tuple[dict[PlayerId, list[PactBreach]], list[Pact]]:
+    """Resolve pact obligations at finalize.
+
+    Returns `(breaches_by_observer, surviving_pacts)`:
+
+    - For every ACCEPTED pact, each term is checked against the RAW submitted
+      order for its unit (`flat`), exactly as `_verify_intents` compares
+      intents. A term is VOID (no breach) if its unit is gone or no longer
+      owned by `term.player`. Otherwise a breach fires iff the submitted order
+      differs from the declared order; the resulting `PactBreach` is delivered
+      to the OTHER party of the pact (the one who relied on the commitment).
+      ACCEPTED pacts are consumed (never survive).
+    - PROPOSED pacts proposed THIS round survive (one more round to be
+      accepted); older un-accepted proposals expire.
+    """
+    breaches: dict[PlayerId, list[PactBreach]] = defaultdict(list)
+    surviving: list[Pact] = []
+    for pact in state.pacts:
+        if pact.status == PactStatus.ACCEPTED:
+            for term in pact.terms:
+                unit = state.units.get(term.unit_id)
+                if unit is None or unit.owner != term.player:
+                    continue  # void: party can't be bound by a lost unit
+                submitted = flat.get(term.unit_id, Hold())
+                if submitted == term.declared_order:
+                    continue  # honored
+                observer = (
+                    pact.counterparty if term.player == pact.proposer
+                    else pact.proposer
+                )
+                if observer in state.eliminated:
+                    continue
+                breaches[observer].append(PactBreach(
+                    turn=state.turn + 1,
+                    pact_id=pact.pact_id,
+                    breacher=term.player,
+                    term=term,
+                    actual_order=submitted,
+                ))
+            # ACCEPTED pacts are consumed regardless of honor/breach.
+        elif pact.proposed_turn == state.turn:
+            surviving.append(pact)  # proposed this round -> keep one more round
+        # else: PROPOSED but stale -> expire (drop)
+    return dict(breaches), surviving
+
+
 def _stagnation_cost_deltas(
     canon: dict[UnitId, Order],
     state: GameState,
@@ -508,6 +655,11 @@ def finalize_round(state: GameState,
     # raw input. (The verifier inspects state.round_press_pending.)
     new_betrayals = _verify_intents(flat, state)
 
+    # F5: resolve pact obligations against the same raw `flat`. Emits
+    # PactBreach signals (consumed ACCEPTED pacts) and returns the pacts that
+    # survive into the next round (this-round proposals awaiting acceptance).
+    new_pact_breaches, surviving_pacts = _verify_pacts(flat, state)
+
     # Build a parallel canon dict for stagnation cost evaluation.
     from foedus.resolve import _normalize
     canon = {u_id: _normalize(state, u_id, o, flat) for u_id, o in flat.items()}
@@ -550,6 +702,12 @@ def finalize_round(state: GameState,
     merged_betrayals = {p: list(v) for p, v in state.betrayals.items()}
     for p, obs_list in new_betrayals.items():
         merged_betrayals.setdefault(p, []).extend(obs_list)
+
+    # F5: merge pact breaches into the persistent ledger (same carry-forward
+    # rationale as betrayals — _resolve_orders drops press-layer fields).
+    merged_pact_breaches = {p: list(v) for p, v in state.pact_breaches.items()}
+    for p, obs_list in new_pact_breaches.items():
+        merged_pact_breaches.setdefault(p, []).extend(obs_list)
 
     # Bundle 4: update aid_given ledger and aid_tokens balances.
     # _resolve_orders already applied combat reward, alliance bonus gating,
@@ -611,6 +769,12 @@ def finalize_round(state: GameState,
         aid_tokens=new_aid_tokens,
         aid_given=new_aid_given,
         last_turn_score_delta=new_score_delta,
+        # F5: carry forward pact state (s_after has empty defaults for these
+        # since _resolve_orders builds a fresh GameState). Accepted pacts were
+        # consumed; only this-round proposals survive.
+        pacts=surviving_pacts,
+        next_pact_id=state.next_pact_id,
+        pact_breaches=merged_pact_breaches,
         # Reset round scratch fields for next turn.
         phase=Phase.NEGOTIATION,
         round_chat=[],
