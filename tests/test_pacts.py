@@ -123,6 +123,41 @@ def test_propose_pact_drops_terms_for_unowned_units() -> None:
     assert kept == {(0, 3), (1, 4)}
 
 
+def test_propose_pact_dedupes_conflicting_terms_on_same_unit() -> None:
+    """Review I1: a proposer must not be able to stack two obligations on one
+    unit. Duplicate unit_ids keep the first term; later ones are dropped."""
+    s = _joint_move_state()
+    terms = (
+        PactTerm(player=0, unit_id=3, declared_order=Move(dest=2)),
+        PactTerm(player=1, unit_id=4, declared_order=Support(target=3)),
+        PactTerm(player=1, unit_id=4, declared_order=Hold()),  # conflicts
+    )
+    s2 = propose_pact(s, 0, 1, terms)
+    u4_terms = [t for t in s2.pacts[0].terms if t.unit_id == 4]
+    assert len(u4_terms) == 1
+    assert u4_terms[0].declared_order == Support(target=3)
+
+
+def test_conflicting_terms_cannot_manufacture_false_breach() -> None:
+    """Review I1: with conflicting terms deduped, a fully-complying
+    counterparty must never be reported as a breacher."""
+    s = _joint_move_state()
+    terms = (
+        PactTerm(player=0, unit_id=3, declared_order=Move(dest=2)),
+        PactTerm(player=1, unit_id=4, declared_order=Support(target=3)),
+        PactTerm(player=1, unit_id=4, declared_order=Hold()),
+    )
+    s = propose_pact(s, 0, 1, terms)
+    s = accept_pact(s, 0, 1)
+    orders = {
+        0: {3: Move(dest=2), 0: Hold()},
+        1: {4: Support(target=3), 1: Hold()},  # complies with the one term
+        2: {2: Hold()},
+    }
+    s2 = _run_finalize(s, orders)
+    assert s2.pact_breaches == {}
+
+
 def test_propose_pact_dropped_when_a_party_has_no_valid_term() -> None:
     """A genuine joint commitment needs >=1 term from EACH party."""
     s = _joint_move_state()
@@ -188,6 +223,32 @@ def test_accept_pact_noop_when_accepter_done() -> None:
     s = signal_done(s, 1)
     s2 = accept_pact(s, pact_id=0, accepter=1)
     assert s2.pacts[0].status == PactStatus.PROPOSED
+
+
+def test_accept_pact_noop_when_proposer_eliminated() -> None:
+    """Review (minor): you can't ratify a commitment with a party who no
+    longer exists."""
+    s = _joint_move_state()
+    s = propose_pact(s, 0, 1, _pact_terms_p0_p1())
+    s.eliminated.add(0)
+    s2 = accept_pact(s, pact_id=0, accepter=1)
+    assert s2.pacts[0].status == PactStatus.PROPOSED
+
+
+def test_proposal_with_eliminated_party_not_carried_forward() -> None:
+    """Review (minor): a dangling proposal whose counterparty was eliminated
+    this round must not linger (it would render 'awaiting p<dead>' next
+    round). It's dropped at finalize rather than surviving."""
+    s = _joint_move_state()
+    s = propose_pact(s, 0, 1, _pact_terms_p0_p1())
+    # p1 eliminated before this round resolves (units + a lost home).
+    s.eliminated.add(1)
+    del s.units[1]
+    del s.units[4]
+    orders = {0: {3: Hold(), 0: Hold()}, 2: {2: Hold()}}
+    s2 = _run_finalize(s, orders)
+    assert 1 in s2.eliminated
+    assert s2.pacts == []
 
 
 def test_accept_pact_idempotent() -> None:

@@ -310,6 +310,11 @@ def propose_pact(state: GameState, proposer: PlayerId,
     degenerate submissions vanish, never raise):
     - a term whose `player` is neither proposer nor counterparty is dropped
     - a term whose `unit_id` is not owned by `term.player` right now is dropped
+    - a unit may carry at most ONE obligation: for a repeated `unit_id` the
+      first term wins and later ones are dropped. This is load-bearing — it
+      stops a proposer from stacking two conflicting obligations on a unit
+      (which would guarantee a mismatch at finalize and manufacture a false
+      breach against a fully-complying party).
 
     A Pact is created only if, after filtering, at least one term remains for
     EACH party — a genuine two-sided commitment. Otherwise the proposal is
@@ -332,12 +337,16 @@ def propose_pact(state: GameState, proposer: PlayerId,
 
     parties = {proposer, counterparty}
     cleaned: list[PactTerm] = []
+    seen_units: set[UnitId] = set()
     for term in terms:
         if term.player not in parties:
             continue
         unit = state.units.get(term.unit_id)
         if unit is None or unit.owner != term.player:
             continue
+        if term.unit_id in seen_units:
+            continue  # one obligation per unit; first wins (see docstring)
+        seen_units.add(term.unit_id)
         cleaned.append(term)
 
     if not any(t.player == proposer for t in cleaned):
@@ -371,6 +380,8 @@ def accept_pact(state: GameState, pact_id: int,
     - phase is not NEGOTIATION
     - accepter is eliminated or has signaled done this round
     - no PROPOSED pact with `pact_id` exists whose counterparty is `accepter`
+    - the pact's proposer has since been eliminated (can't ratify a
+      commitment with a party who no longer exists)
     """
     if state.phase != Phase.NEGOTIATION:
         return state
@@ -384,7 +395,8 @@ def accept_pact(state: GameState, pact_id: int,
     for pact in state.pacts:
         if (pact.pact_id == pact_id
                 and pact.status == PactStatus.PROPOSED
-                and pact.counterparty == accepter):
+                and pact.counterparty == accepter
+                and pact.proposer not in state.eliminated):
             new_pacts.append(replace(pact, status=PactStatus.ACCEPTED))
             changed = True
         else:
@@ -708,6 +720,16 @@ def finalize_round(state: GameState,
     merged_pact_breaches = {p: list(v) for p, v in state.pact_breaches.items()}
     for p, obs_list in new_pact_breaches.items():
         merged_pact_breaches.setdefault(p, []).extend(obs_list)
+
+    # F5: drop any surviving PROPOSED pact whose party was eliminated in this
+    # round's resolution — a commitment with a dead party can never be honored
+    # and would otherwise render "awaiting p<dead>" next round. (_verify_pacts
+    # runs pre-resolution, so it can't see this round's eliminations.)
+    surviving_pacts = [
+        p for p in surviving_pacts
+        if p.proposer not in s_after.eliminated
+        and p.counterparty not in s_after.eliminated
+    ]
 
     # Bundle 4: update aid_given ledger and aid_tokens balances.
     # _resolve_orders already applied combat reward, alliance bonus gating,
