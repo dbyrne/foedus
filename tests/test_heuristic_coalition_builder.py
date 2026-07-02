@@ -8,7 +8,6 @@ import pytest
 
 from foedus.agents.heuristics.coalition_builder import CoalitionBuilder
 from foedus.core import (
-    AidSpend,
     Hold,
     Move,
     Press,
@@ -185,29 +184,6 @@ def test_coalition_builder_skips_non_bloc_ally():
     assert not (isinstance(order, Support) and order.target == 2)
 
 
-def test_coalition_builder_aid_targets_bloc_only():
-    """Aid spends should only target units owned by bloc partners."""
-    state = _four_player_state()
-    # Give player 0 some aid tokens and archive mutual ALLY among all 4 players.
-    state = dataclasses.replace(state, aid_tokens={0: 4})
-    state = _archive_mutual_ally(state, [0, 1, 2, 3])
-
-    agent = CoalitionBuilder()
-    bloc = agent._bloc_partners(state, player=0)
-    assert len(bloc) == 2
-    assert 0 not in bloc
-
-    spends = agent.choose_aid(state, player=0)
-    assert len(spends) == 4  # all tokens spent
-
-    # All target units must belong to bloc partners
-    bloc_unit_ids = {u.id for u in state.units.values() if u.owner in bloc}
-    for spend in spends:
-        assert spend.target_unit in bloc_unit_ids, (
-            f"Aid targeting unit {spend.target_unit} outside bloc {bloc}"
-        )
-
-
 # ---------------------------------------------------------------------------
 # Press tests
 # ---------------------------------------------------------------------------
@@ -232,39 +208,3 @@ def test_coalition_builder_press_stance_allies_bloc_neutrals_others():
     assert 0 not in press.stance
 
 
-# ---------------------------------------------------------------------------
-# Test: skip bloc partner with high inverse leverage (Patron-defense gate)
-# ---------------------------------------------------------------------------
-
-def test_coalition_builder_skips_bloc_partner_with_high_inverse_leverage():
-    """P0 at 0, P1 at 1 (adjacent, in bloc). P1 has given P0 three tokens
-    (leverage(1,0) = 3 > 2 — Patron-buildup). The gate should fire:
-    choose_orders should NOT emit Support targeting P1's unit,
-    and choose_aid should emit no AidSpend for P1.
-    """
-    state = _three_player_close_far_state()
-
-    # P1 has built up 3 tokens of leverage against us.
-    state = dataclasses.replace(state, aid_given={(1, 0): 3})
-    assert state.leverage(1, 0) == 3  # sanity
-
-    # Give P0 aid tokens for the aid test.
-    state = dataclasses.replace(state, aid_tokens={0: 2})
-    # Archive mutual-ALLY so the mutual-ALLY gate doesn't block unrelated to our gate.
-    state = _archive_mutual_ally(state, [0, 1, 2])
-
-    agent = CoalitionBuilder()
-    orders = agent.choose_orders(state, player=0)
-    spends = agent.choose_aid(state, player=0)
-
-    # P1's unit is unit 1; should NOT be a support target.
-    assert 0 in orders
-    assert not (isinstance(orders[0], Support) and orders[0].target == 1), (
-        f"Patron-defense gate should block Support of P1; got {orders[0]}"
-    )
-
-    # No aid should go to P1's unit (unit 1).
-    for spend in spends:
-        assert spend.target_unit != 1, (
-            f"Patron-defense gate should block AidSpend for P1's unit; got {spend}"
-        )

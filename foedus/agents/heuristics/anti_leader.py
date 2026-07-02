@@ -2,23 +2,20 @@
 
 Strategy:
   Identify leader = opponent with most supplies (tie -> lowest pid).
-  Press: HOSTILE toward leader, ALLY toward each non-leader survivor
-    so coalition cross-supports can fire alliance bonus + leverage.
-    Publishes Move-on-leader-territory intents so other AntiLeaders
-    can Support our attacks.
+  Press: HOSTILE toward leader, ALLY toward each non-leader survivor so
+    coalition cross-supports can fire the alliance bonus. Publishes
+    Move-on-leader-territory intents so other AntiLeaders can Support our
+    attacks.
   Orders:
     Phase 1: For each owned unit, check if any *other non-leader* player
       has declared a Move-on-leader-territory intent we can geographically
       support. If yes, Support it (cross-support coordinated attack).
     Phase 2: Remaining units walk/Move toward leader's territory (the
       original AntiLeader behavior).
-  Aid: spend tokens on each cross-support we plan to make so the
-    alliance bonus + leverage accumulate on the supports.
 
-Bundle 4 turns the previously-toothless AntiLeader into a real coalition
-mechanism: combat reward + supporter reward make every successful
-dislodgement of the leader directly score-positive for all uncut
-cross-player supporters of the attack.
+Combat reward + supporter reward make every successful dislodgement of the
+leader directly score-positive for all uncut cross-player supporters of the
+attack — and the shared supports build the coalition's reciprocation standing.
 """
 
 from __future__ import annotations
@@ -27,7 +24,7 @@ from collections import deque
 
 from foedus.agents.heuristics._tiebreak import shuffled_neighbors
 from foedus.core import (
-    AidSpend, Hold, Intent, Move, Order, Press, Stance, Support, UnitId,
+    Hold, Intent, Move, Order, Press, Stance, Support, UnitId,
 )
 
 
@@ -188,69 +185,6 @@ class AntiLeader:
                     visible_to=None,
                 ))
         return Press(stance=stance, intents=intents)
-
-    def choose_aid(self, state, player):
-        """Bundle 4: back each cross-support we plan against the leader."""
-        balance = state.aid_tokens.get(player, 0)
-        if balance <= 0:
-            return []
-        if not state.press_history:
-            return []
-        last = state.press_history[-1]
-        my_prev = last.get(player)
-        if my_prev is None:
-            return []
-        leader = self._find_leader(state, player)
-        if leader is None:
-            return []
-        leader_supplies = {
-            n for n, o in state.ownership.items() if o == leader
-            and state.map.is_supply(n)
-        }
-        m = state.map
-        my_units = [u for u in state.units.values() if u.owner == player]
-        used: set = set()
-        spends: list = []
-        for other_pid, press in state.round_press_pending.items():
-            if other_pid == player or other_pid == leader:
-                continue
-            if other_pid in state.eliminated:
-                continue
-            their_prev = last.get(other_pid)
-            if their_prev is None:
-                continue
-            if my_prev.stance.get(other_pid, Stance.NEUTRAL) != Stance.ALLY:
-                continue
-            if their_prev.stance.get(player, Stance.NEUTRAL) != Stance.ALLY:
-                continue
-            for intent in press.intents:
-                ord_ = intent.declared_order
-                if not isinstance(ord_, Move):
-                    continue
-                if ord_.dest not in leader_supplies:
-                    continue
-                target_unit = state.units.get(intent.unit_id)
-                if target_unit is None or target_unit.owner != other_pid:
-                    continue
-                # Need one of our units adjacent to the dest (so we'd
-                # actually back this with a Support in choose_orders).
-                for u in my_units:
-                    if u.id in used:
-                        continue
-                    if not m.is_adjacent(u.location, ord_.dest):
-                        continue
-                    if u.location == ord_.dest:
-                        continue
-                    spends.append(AidSpend(
-                        target_unit=intent.unit_id,
-                    ))
-                    used.add(u.id)
-                    break
-                if len(spends) >= balance:
-                    break
-            if len(spends) >= balance:
-                break
-        return spends[:balance]
 
     def chat_drafts(self, state, player):
         return []

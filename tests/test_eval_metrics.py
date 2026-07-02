@@ -14,11 +14,10 @@ def _make_record(agents, scores, **engagement):
         "agents": list(agents),
         "final_scores": list(scores),
         "dislodgement_count": 0,
-        "aid_spends_count": 0,
         "alliance_bonuses_fired": 0,
+        "alliance_mover_denied": 0,
         "combat_rewards_fired": 0,
         "supporter_rewards_fired": 0,
-        "leverage_bonuses_fired": 0,
         "betrayals_observed": 0,
         "detente_streak_resets": 0,
         "order_type_counts": {},
@@ -42,13 +41,13 @@ def test_rankings_simple_two_games():
 def test_engagement_means():
     recs = [
         _make_record(["A","B","C","D"], [1,1,1,1],
-                     dislodgement_count=2, aid_spends_count=4),
+                     dislodgement_count=2, alliance_bonuses_fired=4),
         _make_record(["A","B","C","D"], [1,1,1,1],
-                     dislodgement_count=0, aid_spends_count=10),
+                     dislodgement_count=0, alliance_bonuses_fired=10),
     ]
     e = engagement_from_records(recs)
     assert e["dislodgements_per_game"] == pytest.approx(1.0)
-    assert e["aid_spends_per_game"] == pytest.approx(7.0)
+    assert e["alliance_bonuses_per_game"] == pytest.approx(7.0)
 
 
 def test_pairwise_winrate_score_rank():

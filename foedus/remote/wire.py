@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import Any
 
 from foedus.core import (
-    AidSpend,
     DoneCleared,
     GameConfig,
     GameState,
@@ -102,15 +101,6 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         "mutual_ally_streak": state.mutual_ally_streak,
         "chat_done": sorted(state.chat_done),
         "round_done": sorted(state.round_done),
-        # Bundle 4: aid resource + permanent leverage ledger.
-        "aid_tokens": {str(p): n for p, n in state.aid_tokens.items()},
-        # aid_given keys are (PlayerId, PlayerId) tuples; flatten to "A,B" strings.
-        "aid_given": {f"{a},{b}": n
-                      for (a, b), n in state.aid_given.items()},
-        "round_aid_pending": {
-            str(p): [serialize_aid_spend(s) for s in spends]
-            for p, spends in state.round_aid_pending.items()
-        },
         # `log` deliberately omitted (grows unbounded; not strategic).
         # Press v0 fields (press_history, chat_history, betrayals, phase, and
         # round_press_pending) are also omitted from this minimal wire format
@@ -130,6 +120,9 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         # Phase 0b (F6): `reputation` is the same kind of press-layer social
         # state (a cumulative breach tally) and is omitted for the same
         # reason; deserialize_state defaults it empty.
+        # Reciprocity model (2026-07-02): `support_ledger` (Primitive B) is the
+        # same kind of press-layer social state and is omitted for the same
+        # reason; deserialize_state defaults it empty.
         # Task 11: new event lists from the alliance/support/intent redesign.
         "support_lapses": [serialize_support_lapsed(e) for e in state.support_lapses],
         "intent_revisions": [serialize_intent_revised(e) for e in state.intent_revisions],
@@ -142,17 +135,6 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
     # Accept either canonical "mutual_ally_streak" or legacy "peace_streak"
     # for forward-compat with older serialized blobs.
     streak = data.get("mutual_ally_streak", data.get("peace_streak", 0))
-    aid_given_raw = data.get("aid_given", {}) or {}
-    aid_given: dict[tuple[int, int], int] = {}
-    for k, v in aid_given_raw.items():
-        a_str, b_str = k.split(",", 1)
-        aid_given[(int(a_str), int(b_str))] = int(v)
-    aid_tokens = {int(p): int(n)
-                  for p, n in (data.get("aid_tokens") or {}).items()}
-    round_aid_pending = {
-        int(p): [deserialize_aid_spend(s) for s in (spends or [])]
-        for p, spends in (data.get("round_aid_pending") or {}).items()
-    }
     return GameState(
         turn=data["turn"],
         map=deserialize_map(data["map"]),
@@ -168,9 +150,6 @@ def deserialize_state(data: dict[str, Any]) -> GameState:
         mutual_ally_streak=streak,
         chat_done=set(data.get("chat_done", [])),
         round_done=set(data.get("round_done", [])),
-        aid_tokens=aid_tokens,
-        aid_given=aid_given,
-        round_aid_pending=round_aid_pending,
         log=[],
         support_lapses=[
             deserialize_support_lapsed(e)
@@ -224,19 +203,6 @@ def serialize_orders(orders: dict) -> dict[str, dict[str, Any]]:
 
 def deserialize_orders(data: dict[str, dict[str, Any]]) -> dict:
     return {int(uid): deserialize_order(od) for uid, od in data.items()}
-
-
-def serialize_aid_spend(s: AidSpend) -> dict[str, Any]:
-    """Bundle 4: encode an AidSpend (target_unit) as JSON."""
-    return {
-        "target_unit": s.target_unit,
-    }
-
-
-def deserialize_aid_spend(data: dict[str, Any]) -> AidSpend:
-    return AidSpend(
-        target_unit=int(data["target_unit"]),
-    )
 
 
 def serialize_intent(intent: Intent) -> dict[str, Any]:

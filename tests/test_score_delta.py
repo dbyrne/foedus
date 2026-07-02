@@ -80,14 +80,16 @@ def test_finalize_round_score_delta_matches_actual_delta_with_dislodgement_and_s
     immediately (Mechanic A rule (a), no Hold-through-next-turn needed).
 
     Expected per-player totals (all nodes value 1, default combat_reward=
-    supporter_combat_reward=1.0, alliance bonus doesn't fire since no
-    AidSpend backs the support):
-      p0: owns {n0 home, n1 (retained after leaving), n2 (fresh combat
-          capture)} = 3 tiered, + combat_reward 1.0 = 4.0
-      p1: owns {n4 home, n3 (supporter's unit, held there since turn 0)}
-          = 2 tiered, + supporter_combat_reward 1.0 = 3.0
-      p2: dislodged, owns nothing = 0.0 (and is eliminated for future
-          turns, but this turn's own delta must still be well-defined)
+    supporter_combat_reward=1.0, FOEDUS_ALLIANCE_BONUS=3). The alliance bonus
+    now fires on any cross-player support of a supply capture (the aid-spend
+    gate was deleted), and the MOVER passes the reciprocation gate here
+    because it has taken no ally support in the window (received==0):
+      p0: {n0 home, n1 retained, n2 fresh capture} = 3 tiered + combat 1.0
+          + alliance-mover 3.0 = 7.0
+      p1: {n4 home, n3 supporter's unit} = 2 tiered + supporter 1.0
+          + alliance-supporter 3.0 = 6.0
+      p2: dislodged, owns nothing = 0.0 (eliminated for future turns, but
+          this turn's own delta is still well-defined)
     """
     m = line_map(5)
     u0 = Unit(0, 0, 0)   # p0 home
@@ -107,8 +109,8 @@ def test_finalize_round_score_delta_matches_actual_delta_with_dislodgement_and_s
     }
     s2 = finalize_round(s, orders)
 
-    assert s2.scores == {0: 4.0, 1: 3.0, 2: 0.0}
-    assert s2.last_turn_score_delta == {0: 4.0, 1: 3.0, 2: 0.0}
+    assert s2.scores == {0: 7.0, 1: 6.0, 2: 0.0}
+    assert s2.last_turn_score_delta == {0: 7.0, 1: 6.0, 2: 0.0}
     for p in range(3):
         assert s2.last_turn_score_delta[p] == s2.scores.get(p, 0.0) - before.get(p, 0.0)
 

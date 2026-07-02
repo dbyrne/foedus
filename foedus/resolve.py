@@ -279,76 +279,34 @@ def _compute_cuts(canon: dict[UnitId, Order], state: GameState) -> set[UnitId]:
 # --- Strengths -------------------------------------------------------------
 
 
-def _compute_aid_per_unit(state: GameState,
-                          canon: dict[UnitId, Order]) -> dict[UnitId, int]:
-    """Bundle 4 (reactive aid): count AidSpends that landed on each unit.
+def _passes_reciprocation_gate(state: GameState, mover_pid: PlayerId) -> bool:
+    """Primitive B alliance-bonus gate for a mover.
 
-    A spend lands iff the target unit still exists (i.e., its owner is not
-    eliminated and it appears in canon). Multiple spenders aiding the same
-    unit stack additively. No target_order match required.
+    Passes iff the mover has not taken ally support in the rolling window
+    (received==0 -> not free-riding) OR its reciprocation standing meets the
+    floor. A free-rider (received>0, given=0 -> recip 0) fails.
     """
-    out: dict[UnitId, int] = defaultdict(int)
-    for spender, spends in state.round_aid_pending.items():
-        if spender in state.eliminated:
-            continue
-        for spend in spends:
-            target_unit = state.units.get(spend.target_unit)
-            if target_unit is None:
-                continue
-            if target_unit.owner == spender:
-                continue  # safeguard
-            if spend.target_unit not in canon:
-                continue
-            out[spend.target_unit] += 1
-    return dict(out)
+    received = state.reciprocation_received(mover_pid)
+    if received == 0:
+        return True
+    given = state.reciprocation_given(mover_pid)
+    return (given / received) >= state.config.reciprocation_floor
 
 
 def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
                        state: GameState,
-                       aid_per_unit: dict[UnitId, int]
-                       ) -> tuple[
-                           dict[UnitId, int],
-                           dict[UnitId, int],
-                           list[tuple[UnitId, PlayerId, PlayerId, int]],
-                       ]:
-    """Return (move_strength, hold_strength, leverage_events) per unit_id.
+                       ) -> tuple[dict[UnitId, int], dict[UnitId, int]]:
+    """Return (move_strength, hold_strength) per unit_id.
 
-    `leverage_events` is a list of (u_id, attacker_pid, target_pid, bonus)
-    tuples — one per Move whose leverage bonus is non-zero. The caller
-    logs these for instrumentation; the return value of the strengths is
-    unaffected.
-
-    Bundle 4 additions:
-    - +`aid_per_unit[u]` to a unit's own strength (its move or its hold).
-    - +`aid_per_unit[v]` to a support's contribution (so aided SupportMove
-      contributes 2 to the supported unit's strength rather than 1).
-    - Leverage bonus on Moves: when A's Move targets a hex owned by player B
-      (or containing B's unit), add `state.leverage_bonus(A, B)` to A's
-      move strength.
+    Strength is 1 for the unit itself plus 1 for each uncut Support backing
+    its order. (The aid/leverage economy that used to boost these was deleted
+    in the 2026-07-02 reciprocity model — combat is now base + supports only.)
     """
     move_str: dict[UnitId, int] = {}
     hold_str: dict[UnitId, int] = {}
-    leverage_events: list[tuple[UnitId, PlayerId, PlayerId, int]] = []
     for u_id, order in canon.items():
-        unit = state.units[u_id]
         if isinstance(order, Move):
-            s = 1 + aid_per_unit.get(u_id, 0)
-            # Leverage bonus: pick the most-relevant defender at dest.
-            target_pid: PlayerId | None = None
-            occupant = state.unit_at(order.dest)
-            if occupant is not None and occupant.owner != unit.owner:
-                target_pid = occupant.owner
-            else:
-                ow = state.ownership.get(order.dest)
-                if ow is not None and ow != unit.owner:
-                    target_pid = ow
-            if target_pid is not None:
-                lev = state.leverage_bonus(unit.owner, target_pid)
-                s += lev
-                if lev > 0:
-                    leverage_events.append(
-                        (u_id, unit.owner, target_pid, lev)
-                    )
+            s = 1
             for v_id, v_order in canon.items():
                 if v_id == u_id or v_id in cut:
                     continue
@@ -360,18 +318,18 @@ def _compute_strengths(canon: dict[UnitId, Order], cut: set[UnitId],
                             continue
                     # Geometry already validated in _normalize; if v_order
                     # made it into canon as a non-Hold, it lands.
-                    s += 1 + aid_per_unit.get(v_id, 0)
+                    s += 1
             move_str[u_id] = s
         else:
-            s = 1 + aid_per_unit.get(u_id, 0)
+            s = 1
             for v_id, v_order in canon.items():
                 if v_id == u_id or v_id in cut:
                     continue
                 if isinstance(v_order, Support) and v_order.target == u_id:
                     # Reactive support backing this hold (target is holding).
-                    s += 1 + aid_per_unit.get(v_id, 0)
+                    s += 1
             hold_str[u_id] = s
-    return move_str, hold_str, leverage_events
+    return move_str, hold_str
 
 
 # --- Conflict resolution ---------------------------------------------------
@@ -604,15 +562,7 @@ def _resolve_orders_detailed(
                 f"  u{supporter_id} (p{supporter.owner}) support cut "
                 f"by attack from {cutter_s}"
             )
-    aid_per_unit = _compute_aid_per_unit(state, canon)
-    move_str, hold_str, leverage_events = _compute_strengths(
-        canon, cut, state, aid_per_unit
-    )
-    for u_id, attacker_pid, target_pid, lev in leverage_events:
-        log.append(
-            f"  leverage bonus +{lev} to p{attacker_pid} (via u{u_id}) "
-            f"vs p{target_pid}"
-        )
+    move_str, hold_str = _compute_strengths(canon, cut, state)
 
     # 4. Resolve.
     h2h = _resolve_h2h(canon, move_str, state)
@@ -782,43 +732,18 @@ def _resolve_orders_detailed(
     #
     # Set FOEDUS_ALLIANCE_BONUS=0 to revert to v1 scoring (no bonus).
     #
-    # KNOWN EXPLOIT: a freerider that publishes Move-on-supply Intents
-    # (so genuine cooperators support its attacks) but never reciprocates
-    # outscores cooperators dramatically in fixed-seat tests (DC +10.7 vs
-    # 3 Coop at bonus=0; +12.0 at bonus=3). The exploit is invisible in
-    # random-pool sweeps because dishonest agents are diluted out of
-    # cooperator-rich neighborhoods. Bundle 4's full design needs paired
-    # Intent-break consequences before this stops being abusable.
-    # Until then, this is a soft-ship: real but not yet hardened.
-    #
-    # Phase 0b (F6) adds a score penalty + public reputation hit for a
-    # BROKEN declared Intent, but does NOT by itself close this exploit: the
-    # freerider here honors its own Move Intents (no betrayal fires for
-    # them) and simply never DECLARES a reciprocal support commitment in
-    # the first place. F6 punishes promise-breaking, not free-riding on
-    # others' unreciprocated cooperation -- those are different failure
-    # modes and this one is still open.
+    # 2026-07-02 reciprocity model: the mover-side bonus is now GATED on the
+    # mover's rolling reciprocation standing (Primitive B), replacing the
+    # deleted aid-spend gate. A free-rider — one that takes ally support but
+    # never gives it (received>0, given=0 -> recip 0 < floor) — is denied the
+    # mover-side reward it used to parasitize (the project's old KNOWN
+    # EXPLOIT). The SUPPORTER always earns its side (we reward the giver).
+    # A mover that never took ally support (received==0) is not free-riding
+    # and keeps the bonus.
     bonus = float(os.environ.get("FOEDUS_ALLIANCE_BONUS", "3") or 0)
     if bonus:
-        # Bundle 4: alliance bonus is gated on aid-spend (when
-        # config.alliance_requires_aid is True). A SupportMove without an
-        # AidSpend backing the mover's order contributes combat support but
-        # does NOT trigger the alliance bonus. This collapses two mechanics
-        # (alliance bonus + aid resource) into one: aid is the alliance
-        # currency, naked SupportMove is tactical-only.
-        require_aid = state.config.alliance_requires_aid
-
-        def _is_aided(supporter_pid: PlayerId, mover_unit: UnitId,
-                     mover_dest: NodeId) -> bool:
-            if not require_aid:
-                return True
-            spends = state.round_aid_pending.get(supporter_pid, [])
-            for sp in spends:
-                if sp.target_unit == mover_unit:
-                    return True
-            return False
-
-        # Build a quick lookup: (target_unit_id, target_dest) -> [supporter pids]
+        # Any uncut cross-player Support backing a supply-capturing Move
+        # counts (no aid required). Build (target_unit, dest) -> [supporter pid].
         support_index: dict[tuple[UnitId, NodeId], list[PlayerId]] = defaultdict(list)
         for sup_id, s_order in canon.items():
             if not isinstance(s_order, Support):
@@ -829,16 +754,11 @@ def _resolve_orders_detailed(
             mover = state.units.get(s_order.target)
             if mover is None or mover.owner == sup_unit.owner:
                 continue
-            # Determine the supported destination.
-            # Reactive Support: use target's canon move-dest if any.
             tgt_order = canon.get(s_order.target)
             if not isinstance(tgt_order, Move):
                 continue
             supported_dest = tgt_order.dest
             if s_order.require_dest is not None and s_order.require_dest != supported_dest:
-                continue
-            # Bundle 4: gate on aid-spend.
-            if not _is_aided(sup_unit.owner, s_order.target, supported_dest):
                 continue
             support_index[(s_order.target, supported_dest)].append(
                 sup_unit.owner
@@ -857,18 +777,23 @@ def _resolve_orders_detailed(
                           if s != mover.owner]  # alliance = different player
             if not supporters:
                 continue
-            # Both mover and each cross-player supporter get the bonus.
-            new_scores[mover.owner] = (
-                new_scores.get(mover.owner, 0.0) + bonus
-            )
+            # Supporters always earn their side.
             for sup_pid in supporters:
                 new_scores[sup_pid] = (
                     new_scores.get(sup_pid, 0.0) + bonus
                 )
+            # Mover earns its side only in good reciprocation standing.
+            mover_gated = _passes_reciprocation_gate(state, mover.owner)
+            if mover_gated:
+                new_scores[mover.owner] = (
+                    new_scores.get(mover.owner, 0.0) + bonus
+                )
             log.append(
-                f"  alliance bonus +{bonus:g} to p{mover.owner} (mover) "
-                f"and p{','.join(str(s) for s in supporters)} (supporter) "
+                f"  alliance bonus +{bonus:g} to "
+                f"{'p' + str(mover.owner) + ' (mover) and ' if mover_gated else ''}"
+                f"p{','.join(str(s) for s in supporters)} (supporter) "
                 f"for capture at n{order.dest}"
+                f"{'' if mover_gated else ' [mover denied: reciprocation]'}"
             )
 
     # 8c. Bundle 4: combat reward.

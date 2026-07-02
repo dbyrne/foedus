@@ -22,7 +22,6 @@ v2 two-tier targeting in choose_orders:
   Tier 3 — GreedyHold fallback.
     No reachable ally → GreedyHold.
 
-Leverage gate applies in both Tier 1 and Tier 2 (don't subsidise freeriders).
 HOSTILE-toward-us allies are skipped in both tiers.
 """
 
@@ -48,20 +47,6 @@ class Opportunist:
         if press is None:
             return Stance.NEUTRAL
         return press.stance.get(player, Stance.NEUTRAL)
-
-    def _is_freerider(self, state: GameState,
-                       player: PlayerId, other: PlayerId) -> bool:
-        return state.leverage(player, other) > 1
-
-    def _is_patron_suspect(self, state: GameState,
-                            player: PlayerId, other: PlayerId) -> bool:
-        """Patron-defense gate: other has accumulated high leverage against us.
-
-        leverage(other, player) > 1 means other has given us asymmetrically more
-        aid than we've reciprocated — the Patron-buildup signature that precedes
-        a weaponized late-game attack using leverage_bonus.
-        """
-        return state.leverage(other, player) > 1
 
     # ------------------------------------------------------------------
     # choose_orders — two-tier support logic
@@ -93,12 +78,6 @@ class Opportunist:
                 # Stance filter: skip HOSTILE allies.
                 stance = self._ally_stance_toward_me(state, player, ally_pid)
                 if stance == Stance.HOSTILE:
-                    continue
-                # Leverage gate.
-                if self._is_freerider(state, player, ally_pid):
-                    continue
-                # Patron-defense gate.
-                if self._is_patron_suspect(state, player, ally_pid):
                     continue
                 for intent in press.intents:
                     if not isinstance(intent.declared_order, Move):
@@ -137,10 +116,6 @@ class Opportunist:
             # -----------------------------------------------------------
             tier2_candidates: list = []
             for v in ally_units:
-                if self._is_freerider(state, player, v.owner):
-                    continue
-                if self._is_patron_suspect(state, player, v.owner):
-                    continue
                 stance = self._ally_stance_toward_me(state, player, v.owner)
                 if stance == Stance.HOSTILE:
                     continue
@@ -188,68 +163,6 @@ class Opportunist:
             if isinstance(order, Move)
         ]
         return Press(stance=opponents, intents=intents)
-
-    # ------------------------------------------------------------------
-    # choose_aid — tightened to concentrate on Tier 1 (pinned) targets
-    # ------------------------------------------------------------------
-
-    def choose_aid(self, state: GameState, player: PlayerId):
-        """Spend tokens on ally units we are pinned-supporting this turn.
-
-        Tier 1 pinned targets take priority; falls back to all supported units
-        if no Tier 1 targets present. Leverage gate applied (no freeriders).
-        """
-        from foedus.core import AidSpend
-        balance = state.aid_tokens.get(player, 0)
-        if balance <= 0:
-            return []
-
-        my_orders = self.choose_orders(state, player)
-
-        # Separate pinned (require_dest set) vs reactive supports.
-        pinned_unit_ids: set[UnitId] = {
-            order.target
-            for order in my_orders.values()
-            if isinstance(order, Support) and order.require_dest is not None
-        }
-        reactive_unit_ids: set[UnitId] = {
-            order.target
-            for order in my_orders.values()
-            if isinstance(order, Support) and order.require_dest is None
-        }
-
-        # Prefer pinned targets; fall back to reactive.
-        priority_unit_ids = pinned_unit_ids if pinned_unit_ids else reactive_unit_ids
-        if not priority_unit_ids:
-            return []
-
-        # Build partner priority: highest leverage-against-us first.
-        partner_priority: list[tuple[int, PlayerId]] = []
-        for other_pid in range(state.config.num_players):
-            if other_pid == player or other_pid in state.eliminated:
-                continue
-            if self._is_freerider(state, player, other_pid):
-                continue
-            if self._is_patron_suspect(state, player, other_pid):
-                continue
-            lev_against_us = state.leverage(other_pid, player)
-            partner_priority.append((lev_against_us, other_pid))
-        partner_priority.sort(key=lambda x: -x[0])
-
-        spends: list = []
-        for _, other_pid in partner_priority:
-            if len(spends) >= balance:
-                break
-            their_units = [
-                u for u in state.units.values()
-                if u.owner == other_pid and u.id in priority_unit_ids
-            ]
-            for u in their_units:
-                if len(spends) >= balance:
-                    break
-                spends.append(AidSpend(target_unit=u.id))
-
-        return spends[:balance]
 
     def chat_drafts(self, state, player):
         return []

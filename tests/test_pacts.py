@@ -505,8 +505,11 @@ def test_honored_pact_resolves_identically_to_no_pact() -> None:
     assert r_pact.ownership == r_none.ownership
     assert r_pact.units == r_none.units
     assert r_pact.eliminated == r_none.eliminated
-    # Reference values from test_score_delta's known-good scenario.
-    assert r_none.scores == {0: 4.0, 1: 3.0, 2: 0.0}
+    # Reference values from test_score_delta's known-good scenario. The
+    # alliance bonus (+3 mover / +3 supporter) now fires on this cross-player
+    # supported capture — the aid-spend gate was deleted and the mover passes
+    # the reciprocation gate (no ally support taken yet).
+    assert r_none.scores == {0: 7.0, 1: 6.0, 2: 0.0}
 
 
 # --- fog visibility ---------------------------------------------------------

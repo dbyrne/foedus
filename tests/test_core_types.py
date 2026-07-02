@@ -1,6 +1,5 @@
 """Smoke tests for the redesigned core types."""
 from foedus.core import (
-    AidSpend,
     DoneCleared,
     Hold,
     Intent,
@@ -8,6 +7,7 @@ from foedus.core import (
     Move,
     Support,
     SupportLapsed,
+    SupportRound,
 )
 
 
@@ -22,11 +22,11 @@ def test_support_with_pin():
     assert s.require_dest == 42
 
 
-def test_aidspend_no_target_order():
-    a = AidSpend(target_unit=3)
-    assert a.target_unit == 3
-    # Should not have a target_order attribute anymore
-    assert not hasattr(a, "target_order")
+def test_support_round_construction():
+    r = SupportRound(turn=3, gave=frozenset({0}), received=frozenset({1}))
+    assert r.turn == 3
+    assert r.gave == frozenset({0})
+    assert r.received == frozenset({1})
 
 
 def test_intent_revised_construction():

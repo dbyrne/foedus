@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 
 from foedus.core import (
-    AidSpend,
     DoneCleared,
     GameConfig,
     Hold,
@@ -19,7 +18,6 @@ from foedus.core import (
 from foedus.mapgen import generate_map
 from foedus.remote.wire import (
     WIRE_PROTOCOL_VERSION,
-    deserialize_aid_spend,
     deserialize_done_cleared,
     deserialize_intent,
     deserialize_intent_revised,
@@ -28,7 +26,6 @@ from foedus.remote.wire import (
     deserialize_orders,
     deserialize_state,
     deserialize_support_lapsed,
-    serialize_aid_spend,
     serialize_done_cleared,
     serialize_intent,
     serialize_intent_revised,
@@ -143,49 +140,21 @@ def test_deserialize_state_without_chat_done_defaults_empty() -> None:
     assert s2.chat_done == set()
 
 
-def test_aid_spend_roundtrip() -> None:
-    """AidSpend serialize/deserialize preserves target_unit."""
-    spend = AidSpend(target_unit=7)
-    blob = serialize_aid_spend(spend)
-    out = deserialize_aid_spend(blob)
-    assert out == spend
+def test_support_ledger_omitted_from_wire_defaults_empty() -> None:
+    """Primitive B's support_ledger is press-layer social state, omitted from
+    the minimal wire format (like reputation/pacts); it round-trips empty."""
+    from foedus.core import SupportRound
 
-
-def test_state_roundtrip_with_bundle4_fields() -> None:
-    """aid_tokens, aid_given, round_aid_pending all round-trip."""
     cfg = GameConfig(num_players=3, seed=42, max_turns=20)
     m = generate_map(3, seed=42)
     s = initial_state(cfg, m)
-    s = replace(
-        s,
-        aid_tokens={0: 4, 1: 2, 2: 0},
-        aid_given={(0, 1): 5, (1, 0): 2, (2, 0): 1},
-        round_aid_pending={
-            0: [AidSpend(target_unit=1)],
-        },
-    )
+    s = replace(s, support_ledger=[
+        SupportRound(turn=1, gave=frozenset({0}), received=frozenset({1}))
+    ])
     blob = serialize_state(s)
+    assert "support_ledger" not in blob
     s2 = deserialize_state(blob)
-    assert s2.aid_tokens == s.aid_tokens
-    assert s2.aid_given == s.aid_given
-    assert s2.round_aid_pending == s.round_aid_pending
-
-
-def test_deserialize_state_without_bundle4_fields_defaults_empty() -> None:
-    """Backward-compat: pre-Bundle-4 blobs deserialize cleanly with
-    empty aid_tokens / aid_given / round_aid_pending.
-    """
-    cfg = GameConfig(num_players=2, seed=1, max_turns=5)
-    m = generate_map(2, seed=1)
-    s = initial_state(cfg, m)
-    blob = serialize_state(s)
-    blob.pop("aid_tokens", None)
-    blob.pop("aid_given", None)
-    blob.pop("round_aid_pending", None)
-    s2 = deserialize_state(blob)
-    assert s2.aid_tokens == {}
-    assert s2.aid_given == {}
-    assert s2.round_aid_pending == {}
+    assert s2.support_ledger == []
 
 
 def test_map_roundtrip_with_supply_values() -> None:

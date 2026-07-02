@@ -23,7 +23,6 @@ from __future__ import annotations
 
 from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.core import (
-    AidSpend,
     GameState,
     Intent,
     Move,
@@ -91,49 +90,6 @@ class TrustfulCooperator:
             if isinstance(order, Move)
         ]
         return Press(stance=opponents, intents=intents)
-
-    def choose_aid(self, state: GameState,
-                   player: PlayerId) -> list[AidSpend]:
-        """Spend tokens on mutual-ALLY partners' declared Move intents.
-
-        Reciprocity heuristic: prefer aiding partners who have given us
-        more aid than we've given them (reduces our owed leverage).
-        """
-        balance = state.aid_tokens.get(player, 0)
-        if balance <= 0:
-            return []
-        # Need a previous-turn locked press for the mutual-ALLY gate.
-        if not state.press_history:
-            return []
-        last = state.press_history[-1]
-        my_prev = last.get(player)
-        if my_prev is None:
-            return []
-        candidates: list[tuple[float, AidSpend]] = []
-        for other_pid, press in state.round_press_pending.items():
-            if other_pid == player or other_pid in state.eliminated:
-                continue
-            # Mutual ALLY in last archived press?
-            their_prev = last.get(other_pid)
-            if their_prev is None:
-                continue
-            if my_prev.stance.get(other_pid, Stance.NEUTRAL) != Stance.ALLY:
-                continue
-            if their_prev.stance.get(player, Stance.NEUTRAL) != Stance.ALLY:
-                continue
-            # Prefer partners we owe (they aided us more than vice-versa).
-            owed = state.leverage(other_pid, player)  # >0 if they aided us more
-            for intent in press.intents:
-                if not isinstance(intent.declared_order, Move):
-                    continue
-                # Higher owed score → higher priority for reciprocation.
-                priority = float(owed)
-                candidates.append((priority, AidSpend(
-                    target_unit=intent.unit_id,
-                )))
-        # Sort by descending priority, take up to balance.
-        candidates.sort(key=lambda c: -c[0])
-        return [spend for _, spend in candidates[:balance]]
 
     def chat_drafts(self, state, player):
         return []

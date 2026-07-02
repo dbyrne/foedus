@@ -17,7 +17,6 @@ from foedus.mapgen import generate_map
 from foedus.remote.wire import (
     serialize_state,
     deserialize_intent,
-    deserialize_aid_spend,
     deserialize_orders,
 )
 from foedus.web.models import User, Game, GameSeat, ChatMessage
@@ -120,8 +119,7 @@ def handle_commit(session_factory, store, game_id: str, pidx: int,
     """Final commit: press + orders + implicit signal_done. Auto-advances
     the round if all seats are in. Body schema:
       {"press": {"stance": {idx: "ally|enemy|neutral"}, "intents": [...]},
-       "orders": {unit_id: {...}},
-       "aid_spends": [...]}
+       "orders": {unit_id: {...}}}
     """
     sess = store[game_id]
     press_raw = body.get("press") or {}
@@ -134,11 +132,8 @@ def handle_commit(session_factory, store, game_id: str, pidx: int,
     press = Press(stance=stance, intents=intents)
 
     orders = deserialize_orders(body.get("orders") or {})
-    aid_spends_raw = body.get("aid_spends") or []
-    aid_spends = [deserialize_aid_spend(x) for x in aid_spends_raw]
 
-    result = sess.submit_press_commit(pidx, press, orders,
-                                       aid_spends or None)
+    result = sess.submit_press_commit(pidx, press, orders)
     store.save(sess)
     if result.get("round_advanced") and notifier is not None:
         with session_factory() as s:
