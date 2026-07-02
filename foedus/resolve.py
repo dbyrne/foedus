@@ -738,6 +738,14 @@ def _resolve_orders(state: GameState,
     # cooperator-rich neighborhoods. Bundle 4's full design needs paired
     # Intent-break consequences before this stops being abusable.
     # Until then, this is a soft-ship: real but not yet hardened.
+    #
+    # Phase 0b (F6) adds a score penalty + public reputation hit for a
+    # BROKEN declared Intent, but does NOT by itself close this exploit: the
+    # freerider here honors its own Move Intents (no betrayal fires for
+    # them) and simply never DECLARES a reciprocal support commitment in
+    # the first place. F6 punishes promise-breaking, not free-riding on
+    # others' unreciprocated cooperation -- those are different failure
+    # modes and this one is still open.
     bonus = float(os.environ.get("FOEDUS_ALLIANCE_BONUS", "3") or 0)
     if bonus:
         # Bundle 4: alliance bonus is gated on aid-spend (when

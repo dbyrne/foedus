@@ -210,6 +210,27 @@ def test_public_intent_breach_counted_once_not_per_observer() -> None:
     assert s2.reputation[0].intent_breaches == 1  # not 2
 
 
+def test_intent_breach_still_penalized_when_sole_observer_is_eliminated() -> None:
+    """Code review finding: penalty/reputation must track true behavior, not
+    just delivered observations -- otherwise a player could dodge the cost
+    of a betrayal by timing it against an ally who won't survive to be
+    notified. Bypasses submit_press_tokens (which would normally strip an
+    eliminated recipient from visible_to at submission time) to exercise
+    finalize_round's accounting directly against a hand-built
+    round_press_pending, mirroring how a direct/untrusted state-constructing
+    driver could reach this shape."""
+    s = _home_income_state()
+    s.eliminated.add(1)
+    intent = Intent(unit_id=0, declared_order=Move(dest=1), visible_to=frozenset({1}))
+    s.round_press_pending[0] = Press(stance={}, intents=[intent])
+    s2 = finalize_round(s, {0: {0: Hold()}})
+    # No BetrayalObservation delivered -- the sole named observer is dead.
+    assert s2.betrayals == {}
+    # ...but the breacher is still penalized and reputation-tracked.
+    assert s2.reputation[0].intent_breaches == 1
+    assert s2.scores[0] == 1.0 - s.config.intent_breach_penalty
+
+
 # --- pact breach: larger penalty, hits the breacher -------------------------
 
 
@@ -224,6 +245,33 @@ def test_pact_breach_deducts_larger_penalty_from_breacher() -> None:
     assert s2.scores == {0: 1.0 - penalty, 1: 1.0}
     assert set(s2.pact_breaches) == {1}
     assert s2.pact_breaches[1][0].breacher == 0
+
+
+def test_pact_breach_still_penalized_when_observer_is_eliminated() -> None:
+    """Pact-side analog of test_intent_breach_still_penalized_when_sole_-
+    observer_is_eliminated. An ACCEPTED pact can't reach finalize with an
+    eliminated counterparty via the normal propose_pact/accept_pact API
+    (both reject eliminated parties) or via mid-round elimination timing
+    (eliminations only happen inside finalize_round itself, strictly AFTER
+    this accounting runs) -- so this constructs the pact directly to prove
+    finalize_round doesn't silently waive the penalty/reputation cost for a
+    breach whose observer happens to be dead, matching the intent side."""
+    from foedus.core import Pact, PactStatus
+
+    s = _pact_hold_state()
+    pact = Pact(
+        pact_id=0, proposer=0, counterparty=1,
+        terms=_pact_hold_terms(), status=PactStatus.ACCEPTED,
+        proposed_turn=0,
+    )
+    s = replace(s, pacts=[pact])
+    s.eliminated.add(1)
+    s2 = finalize_round(s, {0: {0: Move(dest=1)}})
+    # No PactBreach delivered to the observer's private ledger -- they're dead.
+    assert s2.pact_breaches == {}
+    # ...but the breacher is still penalized and reputation-tracked.
+    assert s2.reputation[0].pact_breaches == 1
+    assert s2.scores[0] == 1.0 - s.config.pact_breach_penalty
 
 
 def test_pact_breach_penalty_disabled_at_zero() -> None:
@@ -247,6 +295,37 @@ def test_score_can_go_negative_from_penalty() -> None:
     s2 = _finalize_with_press(s, {}, {0: {0: Move(dest=1)}, 1: {1: Hold()}})
     assert s2.scores[0] == 1.0 - 5.0
     assert s2.scores[0] < 0
+
+
+def test_mixed_intent_and_pact_breach_same_turn_sums_both_penalties() -> None:
+    """A player who breaks both a declared Intent (on one unit) AND an
+    accepted Pact term (on a different unit) in the same turn pays both
+    penalties and accrues both reputation counters -- the two commitment
+    types are independent, not deduplicated against each other."""
+    m = line_map(5)
+    s = make_state(
+        m,
+        [Unit(0, 0, 0), Unit(1, 1, 4), Unit(2, 0, 3)],  # u2: p0's 2nd unit, at n3
+        num_players=2,
+    )
+    s = propose_pact(s, 0, 1, (
+        PactTerm(player=0, unit_id=0, declared_order=Hold()),
+        PactTerm(player=1, unit_id=1, declared_order=Hold()),
+    ))
+    s = accept_pact(s, 0, 1)
+    intent = Intent(unit_id=2, declared_order=Move(dest=2), visible_to=frozenset({1}))
+    s2 = _finalize_with_press(
+        s, {0: Press(stance={}, intents=[intent])},
+        # p0 breaches BOTH: moves its home unit (breaks the pact's Hold
+        # term) and holds its second unit instead of the declared Move
+        # (breaks the intent).
+        {0: {0: Move(dest=1), 2: Hold()}, 1: {1: Hold()}},
+    )
+    base = 2.0  # p0: n0 home (retained despite vacating) + n3 supply (retained)
+    total_penalty = s.config.intent_breach_penalty + s.config.pact_breach_penalty
+    assert s2.scores[0] == base - total_penalty
+    assert s2.reputation[0] == ReputationTally(intent_breaches=1, pact_breaches=1)
+    assert s2.scores[1] == 1.0  # p1 unaffected
 
 
 # --- public reputation tally -------------------------------------------------

@@ -526,20 +526,22 @@ def _broken_intents(
     return out
 
 
-def _verify_intents(
-    flat: dict[UnitId, Order],
+def _fan_out_betrayals(
+    broken: list[tuple[PlayerId, Intent, Order]],
     state: GameState,
 ) -> dict[PlayerId, list[BetrayalObservation]]:
-    """For each (sender, intent) tuple in the locked round press, check whether
-    sender's RAW submitted order for the intent's unit matches the declared
-    order. Mismatches emit BetrayalObservation to each player in the intent's
+    """Deliver each broken intent in `broken` to every player in its
     visible_to set (or all surviving non-senders if visible_to is None).
+
+    Split out from `_verify_intents` so `finalize_round` can compute
+    `_broken_intents` once and reuse it for both this fan-out AND the F6
+    breach-penalty/reputation accounting, instead of recomputing it twice.
     """
     out: dict[PlayerId, list[BetrayalObservation]] = defaultdict(list)
     survivors = {
         p for p in range(state.config.num_players) if p not in state.eliminated
     }
-    for sender, intent, submitted in _broken_intents(flat, state):
+    for sender, intent, submitted in broken:
         # Determine who observes the betrayal.
         if intent.visible_to is None:
             recipients = {p for p in survivors if p != sender}
@@ -556,6 +558,82 @@ def _verify_intents(
                 actual_order=submitted,
             ))
     return dict(out)
+
+
+def _verify_intents(
+    flat: dict[UnitId, Order],
+    state: GameState,
+) -> dict[PlayerId, list[BetrayalObservation]]:
+    """For each (sender, intent) tuple in the locked round press, check whether
+    sender's RAW submitted order for the intent's unit matches the declared
+    order. Mismatches emit BetrayalObservation to each player in the intent's
+    visible_to set (or all surviving non-senders if visible_to is None).
+    """
+    return _fan_out_betrayals(_broken_intents(flat, state), state)
+
+
+def _broken_pact_terms(
+    flat: dict[UnitId, Order],
+    state: GameState,
+) -> list[tuple[Pact, PactTerm, Order]]:
+    """Return (pact, term, actual_order) for every ACCEPTED pact term whose
+    party's RAW submitted order doesn't match, regardless of whether the
+    pact's other party (the observer) is still alive.
+
+    Mirrors `_broken_intents`: shared by `_fan_out_pact_breaches` (which
+    additionally gates delivery to the observer's private pact_breaches
+    ledger on the observer being alive — a dead player can't act on a
+    breach notification) and F6's breach-penalty/reputation accounting,
+    which must count every broken commitment as true behavior independent
+    of whether anyone survived to witness it. Code review finding: deriving
+    the penalty/reputation count from the observer-gated dict instead of
+    from this unfiltered list would let a player dodge the cost of a
+    broken pact by timing the betrayal against an ally who happens to be
+    eliminated the same turn -- an asymmetry `_broken_intents` never had
+    (it was already observer-blind).
+    """
+    out: list[tuple[Pact, PactTerm, Order]] = []
+    for pact in state.pacts:
+        if pact.status != PactStatus.ACCEPTED:
+            continue
+        for term in pact.terms:
+            unit = state.units.get(term.unit_id)
+            if unit is None or unit.owner != term.player:
+                continue  # void: party can't be bound by a lost unit
+            submitted = flat.get(term.unit_id, Hold())
+            if submitted != term.declared_order:
+                out.append((pact, term, submitted))
+    return out
+
+
+def _fan_out_pact_breaches(
+    broken: list[tuple[Pact, PactTerm, Order]],
+    state: GameState,
+) -> dict[PlayerId, list[PactBreach]]:
+    """Deliver each broken pact term in `broken` to the OTHER party of its
+    pact (the one who relied on the commitment) — unless that observer is
+    eliminated, in which case there's no one left to notify.
+
+    Split out from `_verify_pacts` so `finalize_round` can compute
+    `_broken_pact_terms` once and reuse it for both this fan-out AND the F6
+    breach-penalty/reputation accounting, mirroring `_fan_out_betrayals`.
+    """
+    breaches: dict[PlayerId, list[PactBreach]] = defaultdict(list)
+    for pact, term, submitted in broken:
+        observer = (
+            pact.counterparty if term.player == pact.proposer
+            else pact.proposer
+        )
+        if observer in state.eliminated:
+            continue
+        breaches[observer].append(PactBreach(
+            turn=state.turn + 1,
+            pact_id=pact.pact_id,
+            breacher=term.player,
+            term=term,
+            actual_order=submitted,
+        ))
+    return dict(breaches)
 
 
 def _verify_pacts(
@@ -576,35 +654,14 @@ def _verify_pacts(
     - PROPOSED pacts proposed THIS round survive (one more round to be
       accepted); older un-accepted proposals expire.
     """
-    breaches: dict[PlayerId, list[PactBreach]] = defaultdict(list)
-    surviving: list[Pact] = []
-    for pact in state.pacts:
-        if pact.status == PactStatus.ACCEPTED:
-            for term in pact.terms:
-                unit = state.units.get(term.unit_id)
-                if unit is None or unit.owner != term.player:
-                    continue  # void: party can't be bound by a lost unit
-                submitted = flat.get(term.unit_id, Hold())
-                if submitted == term.declared_order:
-                    continue  # honored
-                observer = (
-                    pact.counterparty if term.player == pact.proposer
-                    else pact.proposer
-                )
-                if observer in state.eliminated:
-                    continue
-                breaches[observer].append(PactBreach(
-                    turn=state.turn + 1,
-                    pact_id=pact.pact_id,
-                    breacher=term.player,
-                    term=term,
-                    actual_order=submitted,
-                ))
-            # ACCEPTED pacts are consumed regardless of honor/breach.
-        elif pact.proposed_turn == state.turn:
-            surviving.append(pact)  # proposed this round -> keep one more round
-        # else: PROPOSED but stale -> expire (drop)
-    return dict(breaches), surviving
+    breaches = _fan_out_pact_breaches(_broken_pact_terms(flat, state), state)
+    surviving: list[Pact] = [
+        pact for pact in state.pacts
+        if pact.status != PactStatus.ACCEPTED and pact.proposed_turn == state.turn
+        # PROPOSED this round -> keep one more round. ACCEPTED pacts are
+        # consumed regardless of honor/breach; older PROPOSED pacts expire.
+    ]
+    return breaches, surviving
 
 
 def _stagnation_cost_deltas(
@@ -682,13 +739,23 @@ def finalize_round(state: GameState,
         flat.setdefault(u_id, Hold())
 
     # Verify intents BEFORE running _resolve_orders so we can compare against
-    # raw input. (The verifier inspects state.round_press_pending.)
-    new_betrayals = _verify_intents(flat, state)
+    # raw input. (The verifier inspects state.round_press_pending.) Computed
+    # once and reused below for both the observer fan-out (new_betrayals) and
+    # F6's breach-penalty/reputation accounting, so neither can drift from
+    # the other and neither recomputes the same scan twice.
+    broken_intents = _broken_intents(flat, state)
+    new_betrayals = _fan_out_betrayals(broken_intents, state)
 
     # F5: resolve pact obligations against the same raw `flat`. Emits
     # PactBreach signals (consumed ACCEPTED pacts) and returns the pacts that
     # survive into the next round (this-round proposals awaiting acceptance).
-    new_pact_breaches, surviving_pacts = _verify_pacts(flat, state)
+    # Same once-computed-reused pattern as broken_intents above.
+    broken_pact_terms = _broken_pact_terms(flat, state)
+    new_pact_breaches = _fan_out_pact_breaches(broken_pact_terms, state)
+    surviving_pacts = [
+        pact for pact in state.pacts
+        if pact.status != PactStatus.ACCEPTED and pact.proposed_turn == state.turn
+    ]
 
     # Build a parallel canon dict for stagnation cost evaluation.
     from foedus.resolve import _normalize
@@ -718,19 +785,22 @@ def finalize_round(state: GameState,
     # BREACHER for each broken declared Intent or broken accepted Pact term
     # this turn, and increment their PUBLIC reputation tally regardless of
     # penalty config (reputation tracks true behavior, not the mechanical
-    # cost). `broken_intents` is computed once and reused for both signals —
-    # see `_broken_intents`' docstring on why a public (visible_to=None)
-    # intent breach must count as ONE broken commitment even though
-    # `_verify_intents` fans it out to every observer. Pact breaches don't
-    # have that fan-out problem: `_verify_pacts` delivers each breach to
-    # exactly one observer (the pact's other party), so flattening
-    # `new_pact_breaches.values()` double-counts nothing.
+    # cost). Both counts are derived from `broken_intents`/`broken_pact_terms`
+    # (computed above, BEFORE the observer-eliminated filtering that
+    # `_fan_out_betrayals`/`_fan_out_pact_breaches` apply) rather than from
+    # `new_betrayals`/`new_pact_breaches` -- deliberately, on two counts:
+    #   1. A public (visible_to=None) intent breach fans out to every
+    #      observer, but must still count as ONE broken commitment.
+    #   2. Code review finding: deriving the penalty/reputation count from
+    #      the observer-gated dicts would let a player dodge the cost of a
+    #      breach by timing it against an ally who happens to be eliminated
+    #      the same turn -- a real commitment was still broken even if no
+    #      one survived to be individually notified.
     #
     # Clamping: like stagnation_cost, this can push a raw score negative.
     # scoring.py's payout functions already clamp with max(0, ...) at
     # consumption time, so raw scores are left unclamped here as the true
     # record of what happened this turn.
-    broken_intents = _broken_intents(flat, state)
     intent_penalty = state.config.intent_breach_penalty
     pact_penalty = state.config.pact_breach_penalty
 
@@ -739,9 +809,8 @@ def finalize_round(state: GameState,
         for breacher, _, _ in broken_intents:
             breach_penalty[breacher] += intent_penalty
     if pact_penalty:
-        for breach_list in new_pact_breaches.values():
-            for b in breach_list:
-                breach_penalty[b.breacher] += pact_penalty
+        for _, term, _ in broken_pact_terms:
+            breach_penalty[term.player] += pact_penalty
     for p, penalty in breach_penalty.items():
         new_scores[p] = new_scores.get(p, 0.0) - penalty
         new_score_delta[p] = new_score_delta.get(p, 0.0) - penalty
@@ -752,12 +821,11 @@ def finalize_round(state: GameState,
         new_reputation[breacher] = replace(
             prev, intent_breaches=prev.intent_breaches + 1
         )
-    for breach_list in new_pact_breaches.values():
-        for b in breach_list:
-            prev = new_reputation.get(b.breacher, ReputationTally())
-            new_reputation[b.breacher] = replace(
-                prev, pact_breaches=prev.pact_breaches + 1
-            )
+    for _, term, _ in broken_pact_terms:
+        prev = new_reputation.get(term.player, ReputationTally())
+        new_reputation[term.player] = replace(
+            prev, pact_breaches=prev.pact_breaches + 1
+        )
 
     # Update mutual_ally_streak. Bundle 4: any observed betrayal this turn
     # resets the streak to 0 (subject to config.betrayal_resets_detente).
