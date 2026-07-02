@@ -46,6 +46,15 @@ from foedus.press import (
     signal_done,
     submit_press_tokens,
 )
+from foedus.render_common import (
+    CAPTURE_RULE_TEXT,
+    order_to_str,
+    render_adjacency_table,
+    render_betrayal_ledger,
+    render_income_ledger,
+    render_map,
+    render_turn_calendar,
+)
 from foedus.resolve import initial_state
 
 STATE_FILE = Path("/tmp/foedus_press_state.pickle")
@@ -67,16 +76,24 @@ def load():
         return pickle.load(f)
 
 
-def cmd_init() -> None:
-    cfg = GameConfig(
-        num_players=4,
-        max_turns=7,
-        seed=42,
-        archetype=Archetype.CONTINENTAL_SWEEP,
-        # stagnation_cost left at its new default (0.0) — see core.py for
-        # rationale. Bundle 2's hold-or-dislodge rule already incentivizes
-        # commitment-to-hold; charging extra for it was a perverse penalty.
-    )
+def cmd_init(preset: str = "default") -> None:
+    """`preset`: "default" (the original playtest config, max_turns=7) or
+    "conflict" (Phase 0a F3's conflict_forcing_config — longer, tighter map,
+    for the arena-legibility exit-gate re-test)."""
+    if preset == "conflict":
+        from foedus.presets import conflict_forcing_config
+        cfg = conflict_forcing_config(num_players=4, seed=42)
+    else:
+        cfg = GameConfig(
+            num_players=4,
+            max_turns=7,
+            seed=42,
+            archetype=Archetype.CONTINENTAL_SWEEP,
+            # stagnation_cost left at its new default (0.0) — see core.py
+            # for rationale. Bundle 2's hold-or-dislodge rule already
+            # incentivizes commitment-to-hold; charging extra for it was a
+            # perverse penalty.
+        )
     m = generate_map(cfg.num_players, seed=cfg.seed,
                      archetype=cfg.archetype, map_radius=cfg.map_radius)
     state = initial_state(cfg, m)
@@ -86,62 +103,11 @@ def cmd_init() -> None:
         for fn in (CHAT_FILE(p), COMMIT_FILE(p), ORDERS_PICKLE(p)):
             if fn.exists():
                 fn.unlink()
-    print(f"initialized: {len(m.coords)} hexes, "
+    print(f"initialized ({preset} preset): {len(m.coords)} hexes, "
           f"{cfg.num_players} players (LLM: {sorted(LLM_SEATS)}, "
           f"Heuristic: {sorted(HEURISTIC_SEATS)}), "
           f"max_turns={cfg.max_turns}, "
           f"detente_threshold={cfg.detente_threshold}")
-
-
-def render_map(state) -> str:
-    """ASCII hex map with owner + node-type marks."""
-    coords = state.map.coords
-    qs = [c[0] for c in coords.values()]
-    rs = [c[1] for c in coords.values()]
-    qmin, qmax = min(qs), max(qs)
-    rmin, rmax = min(rs), max(rs)
-    by_qr = {coords[n]: n for n in coords}
-    occupant = {u.location: u for u in state.units.values()}
-    lines = []
-    for r in range(rmin, rmax + 1):
-        indent = " " * (3 * (r - rmin))
-        row = indent
-        for q in range(qmin, qmax + 1):
-            n = by_qr.get((q, r))
-            if n is None:
-                row += "      "
-                continue
-            t = state.map.node_types[n]
-            from foedus.core import NodeType
-            if t == NodeType.HOME:
-                mark = "H"
-            elif t == NodeType.SUPPLY:
-                mark = "$"
-            elif t == NodeType.MOUNTAIN:
-                mark = "^"
-            elif t == NodeType.WATER:
-                mark = "~"
-            else:
-                mark = "."
-            owner = state.ownership.get(n)
-            owner_s = str(owner) if owner is not None else "-"
-            unit = occupant.get(n)
-            unit_s = f"u{unit.id}p{unit.owner}" if unit else "    "
-            row += f"[{n:>2}{mark}{owner_s}]"
-        lines.append(row)
-    return "\n".join(lines)
-
-
-def order_to_str(o: Order) -> str:
-    if isinstance(o, Hold):
-        return "Hold"
-    if isinstance(o, Move):
-        return f"Move(dest={o.dest})"
-    if isinstance(o, Support):
-        if o.require_dest is None:
-            return f"Support(target=u{o.target})"
-        return f"Support(target=u{o.target}, require_dest={o.require_dest})"
-    return str(o)
 
 
 def parse_order(d: dict) -> Order:
@@ -221,6 +187,11 @@ def cmd_prompt_chat(player: int) -> None:
     print(f"Scores: {view['scores']}")
     print(f"Mutual-ally streak: {state.mutual_ally_streak}/"
           f"{state.config.detente_threshold} (détente fires at threshold)")
+    print(render_turn_calendar(state))
+    print()
+    print(CAPTURE_RULE_TEXT)
+    print()
+    print(render_income_ledger(state, player))
     print()
 
     # Public stance matrix from last round.
@@ -239,18 +210,12 @@ def cmd_prompt_chat(player: int) -> None:
         for sender, intents in view["your_inbound_intents"].items():
             for it in intents:
                 print(f"  p{sender} declared u{it.unit_id} -> "
-                      f"{order_to_str(it.declared_order)} "
+                      f"{order_to_str(it.declared_order, state)} "
                       f"(visible_to={'public' if it.visible_to is None else sorted(it.visible_to)})")
         print()
 
-    # Betrayals against you.
-    if view["your_betrayals"]:
-        print(f"BETRAYALS observed (cumulative, {len(view['your_betrayals'])}):")
-        for b in view["your_betrayals"][-5:]:
-            print(f"  turn {b.turn}: p{b.betrayer} declared "
-                  f"u{b.intent.unit_id} -> {order_to_str(b.intent.declared_order)}, "
-                  f"actually issued {order_to_str(b.actual_order)}")
-        print()
+    print(render_betrayal_ledger(state, player))
+    print()
 
     # Round chat so far (other players' chat earlier in this round).
     if view["round_chat_so_far"]:
@@ -298,13 +263,23 @@ def cmd_apply_chat(player: int, path: str) -> None:
             return
     draft = ChatDraft(recipients=recipients, body=str(raw["body"]))
     state = load()
+    cap = state.config.chat_char_cap
+    if len(draft.body) > cap:
+        # Phase 0a (F3): give a specific, actionable error for the most
+        # common drop cause instead of a generic post-hoc WARN — the
+        # playtest lost a whole coordination message to a silent over-cap
+        # drop with no indication of why.
+        print(f"ERROR: message length {len(draft.body)} exceeds the "
+              f"{cap}-character cap; NOT sent. Shorten and resend.")
+        return
     new_state = record_chat_message(state, player, draft)
     if new_state is state or len(new_state.round_chat) == len(state.round_chat):
-        # Engine silently dropped (e.g. exceeded char cap, eliminated player).
-        # Surface this to the orchestrator so the caller sees something happened.
+        # Engine silently dropped for some other reason (e.g. eliminated
+        # player, wrong phase). Surface this to the orchestrator so the
+        # caller sees something happened.
         print(f"WARN: engine dropped chat from p{player} "
-              f"(len={len(draft.body)}, cap={state.config.chat_char_cap}); "
-              f"check eliminations, char cap, or phase")
+              f"(len={len(draft.body)}, cap={cap}); "
+              f"check eliminations or phase")
         return
     save(new_state)
     recip_s = ("public" if recipients is None else f"to {sorted(recipients)}")
@@ -333,9 +308,12 @@ def cmd_prompt_commit(player: int) -> None:
     else:
         print("(no chat this round)\n")
 
+    print(CAPTURE_RULE_TEXT)
+    print()
+
     # Map.
-    print("MAP (^ = mountain, ~ = water, $ = supply, H = home, "
-          "[node-type-owner], u<id>p<player> = unit):")
+    print("MAP (^ = mountain, ~ = water, $<value> = supply, H = home, "
+          "[node-mark:owner]):")
     print(render_map(state))
     print()
     print(f"Your visible nodes: {view['visible_nodes']}")
@@ -343,6 +321,13 @@ def cmd_prompt_commit(player: int) -> None:
     print(f"Scores: {view['scores']}")
     print(f"Mutual-ally streak: {state.mutual_ally_streak}/"
           f"{state.config.detente_threshold}")
+    print(render_turn_calendar(state))
+    print()
+    print(render_income_ledger(state, player))
+    print()
+    print(render_adjacency_table(state, view["visible_nodes"]))
+    print()
+    print(render_betrayal_ledger(state, player))
     print()
 
     # Visible units.
@@ -361,7 +346,7 @@ def cmd_prompt_commit(player: int) -> None:
         print(f"  u{u.id} at node {u.location} (adj: "
               f"{sorted(state.map.neighbors(u.location))})")
         for i, o in enumerate(legal):
-            print(f"    [{i}] {order_to_str(o)}")
+            print(f"    [{i}] {order_to_str(o, state)}")
     print()
 
     print("=== RESPONSE FORMAT ===")
@@ -476,7 +461,7 @@ def cmd_apply_commit(player: int, path: str) -> None:
     stance_s = ", ".join(f"p{p}={s.value}" for p, s in stance.items()) or "(empty)"
     intents_s = f"{len(intents)} intent(s)" if intents else "no intents"
     orders_s = ", ".join(
-        f"u{uid}={order_to_str(o)}"
+        f"u{uid}={order_to_str(o, state)}"
         for uid, o in sorted(parsed_orders.items())
     )
     print(f"player {player} press: stance={{{stance_s}}}, {intents_s}")
@@ -564,7 +549,7 @@ def cmd_advance() -> None:
 
 
 COMMANDS = {
-    "init": cmd_init,
+    "init": lambda: cmd_init(sys.argv[2] if len(sys.argv) > 2 else "default"),
     "prompt_chat": lambda: cmd_prompt_chat(int(sys.argv[2])),
     "apply_chat": lambda: cmd_apply_chat(int(sys.argv[2]), sys.argv[3]),
     "prompt_commit": lambda: cmd_prompt_commit(int(sys.argv[2])),
@@ -577,8 +562,8 @@ COMMANDS = {
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
-        print(f"usage: {sys.argv[0]} {{init|prompt_chat P|apply_chat P FILE|"
-              f"prompt_commit P|apply_commit P FILE|advance|status|"
-              f"feedback P|log}}")
+        print(f"usage: {sys.argv[0]} {{init [default|conflict]|prompt_chat P|"
+              f"apply_chat P FILE|prompt_commit P|apply_commit P FILE|"
+              f"advance|status|feedback P|log}}")
         sys.exit(1)
     COMMANDS[sys.argv[1]]()
