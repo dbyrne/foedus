@@ -1,7 +1,9 @@
 """Simultaneous-order resolution and state transitions.
 
 v1 simplifications vs. full DATC Diplomacy:
-- Dislodged units are eliminated (no retreat/disband phase).
+- Dislodged units are eliminated (no retreat/disband phase) UNLESS
+  GameConfig.retreats_enabled, in which case a dislodged unit retreats to its
+  home node (see `_resolve_retreats`).
 - No convoys (armies cannot cross water/non-adjacent).
 - Head-to-head resolved by direct move-strength comparison.
 - N-unit cycles (A->B->C->A) detected and resolved as all-success.
@@ -605,6 +607,17 @@ def _resolve_retreats(
             )
 
 
+def _owned_supply_nodes(
+    m: Map, owner_map: dict[NodeId, PlayerId | None], player: PlayerId
+) -> list[NodeId]:
+    """Supply/home nodes owned by `player` under `owner_map`. Shared by the
+    per-turn income and leader-upkeep loops so the two never drift."""
+    return [
+        n for n, t in m.node_types.items()
+        if t in (NodeType.SUPPLY, NodeType.HOME) and owner_map.get(n) == player
+    ]
+
+
 # --- Top-level turn function ----------------------------------------------
 
 
@@ -847,9 +860,7 @@ def _resolve_orders_detailed(
             continue
         supply_score = sum(
             state.map.supply_value(n)
-            for n, t in state.map.node_types.items()
-            if t in (NodeType.SUPPLY, NodeType.HOME)
-            and new_owner.get(n) == player
+            for n in _owned_supply_nodes(state.map, new_owner, player)
         )
         new_scores[player] = new_scores.get(player, 0.0) + supply_score
 
@@ -863,11 +874,7 @@ def _resolve_orders_detailed(
         for player in range(state.config.num_players):
             if player in state.eliminated:
                 continue
-            supplies = sum(
-                1 for n, t in state.map.node_types.items()
-                if t in (NodeType.SUPPLY, NodeType.HOME)
-                and new_owner.get(n) == player
-            )
+            supplies = len(_owned_supply_nodes(state.map, new_owner, player))
             taxed = max(0, supplies - free)
             if taxed:
                 new_scores[player] = new_scores.get(player, 0.0) - upkeep * taxed

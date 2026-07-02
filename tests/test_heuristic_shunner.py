@@ -14,7 +14,8 @@ misfire on honest cooperators (who reciprocate and thus keep standing high).
 from __future__ import annotations
 
 from foedus.agents.heuristics.shunner import Shunner
-from foedus.core import Move, Stance, SupportRound, Unit
+from foedus.core import Hold, Map, Move, NodeType, Stance, SupportRound, Unit
+from foedus.resolve import resolve_turn
 
 from tests.helpers import make_state, triangle_map
 
@@ -77,6 +78,36 @@ def test_does_not_attack_or_shun_honest_cooperators() -> None:
     # free-riders it must fire on no one, so no shun-attack is ever scheduled.
     assert Shunner()._freeriders(s, 0) == set()
     assert all(v == Stance.ALLY for v in press.stance.values())
+
+
+def test_punish_phase_actually_dislodges_freerider_through_resolution() -> None:
+    """End-to-end: Shunner's coordinated 2-unit attack (Move + Support = str 2)
+    dislodges a free-rider holding a supply (hold str 1), run through the real
+    resolver — not just asserted on choose_orders output."""
+    # n1(SUPPLY) is flanked by two Shunner nodes (n0 home, n2) and the
+    # free-rider's home n3.
+    m = Map(
+        coords={0: (0, 0), 1: (1, 0), 2: (2, 0), 3: (1, 1)},
+        edges={0: frozenset({1}), 1: frozenset({0, 2, 3}),
+               2: frozenset({1}), 3: frozenset({1})},
+        node_types={0: NodeType.HOME, 1: NodeType.SUPPLY,
+                    2: NodeType.PLAIN, 3: NodeType.HOME},
+        home_assignments={0: 0, 3: 1},
+    )
+    s = make_state(
+        m,
+        [Unit(0, 0, 0), Unit(1, 0, 2),   # Shunner units flanking n1
+         Unit(5, 1, 1)],                 # free-rider unit on the supply n1
+        num_players=2,
+    )
+    s.support_ledger = [
+        SupportRound(turn=0, gave=frozenset(), received=frozenset({1})),
+        SupportRound(turn=1, gave=frozenset(), received=frozenset({1})),
+    ]
+    assert s.reciprocation_standing(1) < s.config.reciprocation_floor
+    shunner_orders = Shunner().choose_orders(s, 0)
+    out = resolve_turn(s, {0: shunner_orders, 1: {5: Hold()}})
+    assert 5 not in out.units, "free-rider dislodged by the coordinated attack"
 
 
 def test_empty_ledger_no_misfire() -> None:

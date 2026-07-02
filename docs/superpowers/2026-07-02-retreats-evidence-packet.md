@@ -140,6 +140,30 @@ retreats would "make dislodging cheaper/repeatable," but retreats-to-home make t
 *victim survive*, not attacking *cheaper or more frequent* — and frequency is the
 variable that's actually pinned low here.
 
+## 5a. Caveat — a pre-existing resolver bug (found in review, NOT from this diff)
+
+Code review surfaced a **pre-existing** correctness bug in `_resolve_moves`'
+cycle-detection fallback (`foedus/resolve.py`, unchanged by this diff): a Move
+chain that closes a cycle can overwrite an already-decided `"dislodged"` outcome
+with `"success"`, leaving **two units on one node**. It reproduces on **pure v1**
+config (retreats OFF, no Shunner). Measured duplicate-occupancy rate over 2,000
+seeded games at this pass's sweep params (15 turns):
+
+| arm | retreats OFF | retreats ON |
+|---|---|---|
+| Arm A (radius 2) | 1.20% | 1.25% |
+| Arm C (radius 3) | 0.40% | 0.40% |
+
+**Impact on this pass's conclusion: negligible.** The corruption rate is (a)
+small, (b) essentially **identical** OFF vs ON at 15 turns (retreats add ~0 extra
+at this length — the "retreats increase exposure" effect only appears in longer
+25-turn games), so it is **symmetric across the control and test arms and cancels
+in the A/B comparison**, and (c) strategy-agnostic (a resolution edge case, not
+tied to any archetype). The qualitative finding — retreats do not move the
+ranking; DC/MR stay top-3 — is robust to it. The bug is **flagged separately to
+David** for its own TDD fix; it should be closed before any *future* balance
+sweep is treated as bit-clean, retreats or otherwise.
+
 ## 6. Recommendation
 
 - **Ship retreats, default OFF.** It is a correct, well-tested, opt-in mechanic
