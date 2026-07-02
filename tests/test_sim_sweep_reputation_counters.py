@@ -39,7 +39,7 @@ def _run_sweep(out_path: Path, extra_args: list[str]) -> list[dict]:
             "--out", str(out_path),
             *extra_args,
         ],
-        cwd=repo_root, env=env, capture_output=True, text=True,
+        cwd=repo_root, env=env, capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, \
         f"sweep exited {result.returncode}: stderr={result.stderr}"

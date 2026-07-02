@@ -195,11 +195,25 @@ outcome, not sampling noise. So: yes, more gradient than before, but it's
 concentrated at the extremes (one dominant freerider, one heavily-punished
 liar) rather than a smooth ranking across the middle.
 
+(Note: this rank table and §e's raw-mean-score table below use different
+statistics and needn't agree mid-pack — e.g. §e Arm A shows Cooperator's
+raw mean, 42.04, above TrustfulCooperator's, 40.06, while this table's
+OpenSkill conservative rating ranks TrustfulCooperator #3 above Cooperator's
+#8. OpenSkill rewards *consistent* placement across opponents, not just
+average score, so the two orderings diverging mid-pack is expected, not a
+contradiction.)
+
 ## e. F6 effect: did penalizing intent-breaches rebalance dishonest vs honest cooperators?
 
 **No — and it may be actively counterproductive.** Mean final score,
 identical seeds/matchups (Arm A vs Arm B, so the delta is the isolated
-causal effect of the penalty; 95% CIs shown):
+causal effect of the penalty; 95% CIs shown). This isn't just seed-matched
+sampling — it's an exact identity: no heuristic in the roster reads
+`state.scores`, `state.reputation`, or the penalty config, and none of
+elimination/détente/`is_terminal` depend on score, so arms A and B produce
+bit-identical game trajectories that differ *only* in score bookkeeping.
+Every row's Δ below equals `breaches/game × 1.0` (from §b) exactly, to the
+third decimal:
 
 | Heuristic | Penalties ON | Penalties OFF | Δ (OFF−ON) |
 |---|---|---|---|

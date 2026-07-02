@@ -22,7 +22,7 @@ from pathlib import Path
 
 from foedus.agents.heuristics import ROSTER
 from foedus.core import (
-    Archetype, GameConfig, Hold, Move, Support,
+    Archetype, GameConfig, Hold, Move, ReputationTally, Support,
 )
 from foedus.mapgen import generate_map
 from foedus.press import (
@@ -188,11 +188,11 @@ def run_one_game(game_id: int, seed: int, agent_names: list[str],
         # heuristics (DishonestCooperator, OpportunisticBetrayer, Sycophant)
         # actually breach, independent of who they breached against.
         "reputation_intent_breaches_per_player": [
-            state.reputation[p].intent_breaches if p in state.reputation else 0
+            state.reputation.get(p, ReputationTally()).intent_breaches
             for p in range(num_players)
         ],
         "reputation_pact_breaches_per_player": [
-            state.reputation[p].pact_breaches if p in state.reputation else 0
+            state.reputation.get(p, ReputationTally()).pact_breaches
             for p in range(num_players)
         ],
         "aid_spends_count": aid_spends_count,
@@ -312,7 +312,7 @@ def main():
     parser.add_argument("--high-value-fraction", type=float, default=None,
                         help="Bundle 5b (C3): fraction of non-HOME SUPPLY "
                              "nodes marked as high-value (yielding +N score "
-                             "per turn instead of +1). Default 0.05; pass 0 "
+                             "per turn instead of +1). Default 0.20; pass 0 "
                              "to disable.")
     parser.add_argument("--high-value-yield", type=int, default=None,
                         help="Bundle 5b (C3): score yield for high-value "
