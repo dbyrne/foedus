@@ -211,6 +211,13 @@ class LLMDiplomat:
             return ""
         return _clean_self_note(raw)
 
+    def campaign_records(self) -> list[GameRecord]:
+        """All cross-game records recorded so far (empty when campaign mode is
+        off). The harness serializes these per game for audit."""
+        if self._campaign_memory is None:
+            return []
+        return self._campaign_memory.all()
+
     # --- internals ------------------------------------------------------
 
     def _negotiate(self, state: GameState, player: PlayerId) -> NegotiationDecision:
