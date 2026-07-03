@@ -118,7 +118,13 @@ class LLMDiplomat:
             self._log("orders", state, player, system, user, raw, orders,
                       fell_back, n_coerced)
         if self._memory is not None:
-            unit_owner = {uid: u.owner for uid, u in state.units.items()}
+            # Ownership must come from the seat's OWN fogged view, not the
+            # omniscient state: a Support can be legal against a unit outside
+            # fog (2-hop move-support), and crediting its true owner would leak
+            # information the seat never observed. An out-of-fog target maps to
+            # owner=None and is simply not attributed (fog-legal by
+            # construction; matches memory_metrics.parse_visible_owners).
+            unit_owner = {u["id"]: u["owner"] for u in view["visible_units"]}
             self._memory.observe_orders(orders, unit_owner, player, state.turn)
         self._orders_cache[key] = orders
         return orders

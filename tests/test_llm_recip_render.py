@@ -67,7 +67,8 @@ def test_ledger_on_appends_section_with_counts() -> None:
     mem = _populated_memory()
     _, user = render_negotiation_prompt(state, view, 0, recip_memory=mem)
     assert "RECIPROCATION RECORD" in user
-    assert "declared ALLY toward you on 3 of 3" in user
+    # all three stance counts are surfaced (symmetric, no single-lens emphasis).
+    assert "ally 3, neutral 0, hostile 0" in user
     assert "you gave Support to their units on 0 turns" in user
 
 

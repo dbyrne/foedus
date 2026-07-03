@@ -71,17 +71,20 @@ def render_reciprocation_record(
         return ["RECIPROCATION RECORD: none observed yet."]
     lines = [
         "RECIPROCATION RECORD (your own observations across prior turns; "
-        "declared stance you received vs. Support you have given — from your "
+        "declared stances you received and Support you have given — from your "
         "fogged views only):"
     ]
     for p in opponents:
         rec = memory.record(p)
         prior = ", ".join(rec.my_prior_stances) or "none"
+        # All three stance counts are surfaced symmetrically (no single-lens
+        # emphasis) — factual bookkeeping only, per the neutrality requirement.
         lines.append(
-            f"  p{p}: declared ALLY toward you on {rec.ally_toward_me} of "
-            f"{rec.turns_observed} prior turns; you gave Support to their units "
-            f"on {rec.turns_i_supported_them} turns; your prior stances toward "
-            f"them: {prior}."
+            f"  p{p}: declared toward you across {rec.turns_observed} observed "
+            f"turns — ally {rec.ally_toward_me}, neutral {rec.neutral_toward_me}, "
+            f"hostile {rec.hostile_toward_me}; you gave Support to their units on "
+            f"{rec.turns_i_supported_them} turns; your prior stances toward them: "
+            f"{prior}."
         )
     return lines
 

@@ -12,14 +12,16 @@ from __future__ import annotations
 
 import json
 
+from foedus.agents.heuristics.greedy_hold import GreedyHold
 from foedus.agents.llm.client import StubLLMClient
 from foedus.agents.llm.diplomat import LLMDiplomat
-from foedus.core import GameConfig
+from foedus.core import GameConfig, Unit
+from foedus.legal import legal_orders_for_unit
 from foedus.loop import play_game
 from foedus.mapgen import generate_map
 from foedus.resolve import initial_state
 
-from tests.helpers import simple_two_player_state
+from tests.helpers import line_map, make_state, simple_two_player_state
 
 
 def _negotiate_json(**overrides) -> str:
@@ -110,10 +112,43 @@ def test_accumulated_counts_appear_in_later_turn_prompt(monkeypatch) -> None:
     user = turn1_neg["prompt"]["user"]
     assert "RECIPROCATION RECORD" in user
     # observed turn-0's ally declaration from p1 toward me:
-    assert "declared ALLY toward you on 1 of 1" in user
+    assert "ally 1, neutral 0, hostile 0" in user
     # own prior-stance recall: I declared hostile toward p1 on turn 0:
     assert "prior stances toward them" in user
     assert "hostile" in user
+
+
+def test_support_of_out_of_fog_unit_is_not_credited(monkeypatch) -> None:
+    """Fog-legality: a seat may legally Support a unit it cannot see (the 2-hop
+    move-support geometry reaches a node outside fog_radius). The memory must
+    only ever credit support to an owner the seat could actually observe — so
+    supporting an out-of-fog unit records nothing (its owner is unknown to us).
+
+    Line map 0-1-2, fog_radius 1: p0's unit at node 0 can legally Support p1's
+    unit at node 2 (adjacent to node 1, a neighbour of node 2), yet node 2 is
+    outside p0's visible set {0, 1}.
+    """
+    monkeypatch.delenv("FOEDUS_LLM_RECIP_LEDGER", raising=False)
+    m = line_map(3)
+    units = [Unit(0, 0, 0), Unit(1, 1, 2)]
+    state = make_state(m, units, num_players=2, max_turns=1, fog_radius=1)
+
+    # Ground truth: the support IS legal (else the test would pass vacuously).
+    assert any(
+        getattr(o, "target", None) == 1 for o in legal_orders_for_unit(state, 0)
+    ), "fixture must offer a legal Support(target=1) from the out-of-fog unit"
+
+    p0 = LLMDiplomat(
+        client=StubLLMClient([
+            _negotiate_json(),
+            _orders_json({"0": {"type": "Support", "target": 1}}),
+        ]),
+        recip_ledger=True,
+    )
+    play_game({0: p0, 1: GreedyHold()}, state=state)
+
+    # p1's unit at node 2 was never in p0's fog, so no support is attributed.
+    assert p0._memory.record(1).turns_i_supported_them == 0
 
 
 def test_off_arm_prompt_has_no_section_across_the_game(monkeypatch) -> None:

@@ -85,13 +85,19 @@ leading language — asserted by a denylist test (`exploit`, `beware`, `punish`,
 The stance words `ally/neutral/hostile` are the game's own vocabulary, not
 judgment.
 
-Sample (freerider = p3):
+Sample (freerider = p3). All three stance counts are surfaced symmetrically
+(no single-lens emphasis):
 ```
-RECIPROCATION RECORD (your own observations across prior turns — declared stance
-you received vs. Support you have given; from your fogged views only):
-  p1: declared ALLY toward you on 6 of 7 prior turns; you gave Support to their units on 0 turns; your prior stances toward them: neutral, ally, ally...
-  p3: declared ALLY toward you on 7 of 7 prior turns; you gave Support to their units on 3 turns; your prior stances toward them: hostile, neutral, ally...
+RECIPROCATION RECORD (your own observations across prior turns; declared stances
+you received and Support you have given — from your fogged views only):
+  p1: declared toward you across 7 observed turns — ally 7, neutral 0, hostile 0; you gave Support to their units on 2 turns; your prior stances toward them: neutral, ...
+  p3: declared toward you across 7 observed turns — ally 7, neutral 0, hostile 0; you gave Support to their units on 7 turns; your prior stances toward them: hostile, hostile, neutral, ally, ally, ...
 ```
+
+**Ownership for the "you gave Support" count comes from the seat's own fogged
+`visible_units`** (not omniscient state), so a legal Support of a unit outside
+fog (2-hop move-support geometry) is never attributed to any owner — the seat
+only credits support to units it could actually see.
 
 ### 3. Toggle
 
