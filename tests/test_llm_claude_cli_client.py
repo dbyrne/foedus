@@ -111,6 +111,11 @@ def test_argv_is_headless_text_pinned_and_toolless(monkeypatch) -> None:
     # .nexus-mcp.json out of scope entirely.
     assert "--safe-mode" in argv
 
+    # No on-disk session transcript per call: a many-call harness run would
+    # otherwise accumulate unbounded ~/.claude/projects/*.jsonl files.
+    # (--no-session-persistence only works together with -p, which we use.)
+    assert "--no-session-persistence" in argv
+
     assert out == "ok"
 
 
@@ -169,16 +174,23 @@ def test_strips_anthropic_api_key_so_subscription_auth_is_used(
 ) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-credit-less-dummy")
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "bearer-dummy")
+    # Provider-routing overrides would send the seat off the first-party
+    # subscription entirely; they must not survive into the subprocess.
+    monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+    monkeypatch.setenv("CLAUDE_CODE_USE_VERTEX", "1")
     captured: dict = {}
     _patch_run(monkeypatch, captured, _completed(stdout="ok"))
 
     ClaudeCLIClient().complete("s", "u")
 
     env = captured["kwargs"]["env"]
-    # The API-key auth overrides are removed → the CLI falls back to the
-    # machine's claude.ai subscription OAuth (~/.claude/.credentials.json).
+    # The API-key / provider-routing overrides are removed → the CLI falls
+    # back to the machine's claude.ai subscription OAuth
+    # (~/.claude/.credentials.json).
     assert "ANTHROPIC_API_KEY" not in env
     assert "ANTHROPIC_AUTH_TOKEN" not in env
+    assert "CLAUDE_CODE_USE_BEDROCK" not in env
+    assert "CLAUDE_CODE_USE_VERTEX" not in env
     # ...but the rest of the environment is preserved (PATH, HOME, etc.).
     assert "PATH" in env
 

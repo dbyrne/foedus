@@ -6,7 +6,8 @@ opt-in "ceiling" backend, costs tokens), or "claude-cli" (the Claude Code
 CLI in headless print mode, using the machine's claude.ai SUBSCRIPTION
 auth -- zero API dollars). `FOEDUS_LLM_MODEL` overrides the model id for
 any of them. `OLLAMA_HOST` / `ANTHROPIC_API_KEY` are the usual
-per-backend env vars; the claude-cli backend needs neither.
+per-backend env vars; the claude-cli backend needs neither, and takes an
+optional `FOEDUS_CLAUDE_CLI_BIN` override for the `claude` executable path.
 """
 
 from __future__ import annotations
@@ -181,28 +182,41 @@ class ClaudeCLIClient:
             "--safe-mode",
             "--tools",
             "",
+            # Don't persist a session transcript per call: with -p this seat
+            # is stateless, and a many-call harness run would otherwise
+            # accumulate unbounded ~/.claude/projects/*.jsonl files.
+            "--no-session-persistence",
             "--system-prompt",
             system,
         ]
 
     def _subprocess_env(self) -> dict[str, str]:
         env = dict(os.environ)
-        # Force the subscription (claude.ai OAuth) path: never let a
-        # (credit-less) API key or bearer token shadow it.
-        env.pop("ANTHROPIC_API_KEY", None)
-        env.pop("ANTHROPIC_AUTH_TOKEN", None)
+        # Force the first-party subscription (claude.ai OAuth) path: never
+        # let a (credit-less) API key / bearer token shadow it, nor a
+        # provider-routing override send the seat to Bedrock/Vertex.
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX",
+        ):
+            env.pop(var, None)
         return env
 
     def _log_invocation_once(self, cwd: str) -> None:
         if self._argv_logged:
             return
         self._argv_logged = True
-        # Log the invocation *shape* once (not per call) for reproducibility;
-        # the long, per-call system/user text is redacted.
+        # Log the invocation *shape* once per client (not per call) for
+        # reproducibility; the long, per-call system/user text is redacted.
+        # A multi-seat run has one client per seat, so it emits one line per
+        # seat -- still "not per call", and it labels each seat's invocation.
         template = self._build_argv("<SYSTEM_PROMPT>")
         print(
             f"[ClaudeCLIClient] argv={template!r} cwd={cwd!r} timeout={self.timeout}s "
-            f"(user prompt via stdin; ANTHROPIC_API_KEY stripped -> subscription auth)",
+            f"(user prompt via stdin; API-key/provider-routing env stripped "
+            f"-> subscription auth)",
             file=sys.stderr,
             flush=True,
         )
