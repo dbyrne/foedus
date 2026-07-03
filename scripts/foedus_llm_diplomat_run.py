@@ -2,10 +2,13 @@
 seat against a chosen heuristic roster, single-process.
 
 For each game emits a sweep-compatible JSONL record (feeds
-`foedus_compute_ratings.py` unchanged) and a telemetry sidecar record
+`foedus_compute_ratings.py` unchanged), a telemetry sidecar record
 (betrayals, pact breaches, public reputation, decision-log parse-fail
-count). Optionally renders one or more games to a human-readable
-markdown transcript.
+count), and a per-decision JSONL log (turn/phase/prompt/raw_response/
+parsed/fell_back/n_coerced for every LLM call -- see
+LLMDiplomat._log) so a parse regression is diagnosable from a specific
+prompt+response, not just an aggregate count. Optionally renders one or
+more games to a human-readable markdown transcript.
 
 Usage:
     PYTHONPATH=. python3 scripts/foedus_llm_diplomat_run.py \
@@ -289,6 +292,10 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
             telemetry_f.write(json.dumps(telemetry) + "\n")
             total_decisions += telemetry["n_decisions"]
             total_fell_back += telemetry["parse_fail_count"]
+
+            with (out_dir / f"decisions_game{game_id}.jsonl").open("w") as decisions_f:
+                for record in agent.decision_log:
+                    decisions_f.write(json.dumps(record, default=str) + "\n")
 
             if i < args.transcripts:
                 (out_dir / f"transcript_game{game_id}.md").write_text(

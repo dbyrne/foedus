@@ -70,26 +70,25 @@ def test_render_orders_prompt_without_intents_omits_intents_section() -> None:
     assert "DECLARED INTENTS" not in user
 
 
-def _section(user: str, start_marker: str, end_marker: str) -> str:
-    start = user.index(start_marker)
-    end = user.index(end_marker, start)
-    return user[start:end]
-
-
 # --- machine-facing sections use bare integer ids (parse-robustness fix) --
 
 
 def test_render_negotiation_prompt_legal_orders_use_bare_ids() -> None:
-    """The legal-orders list under YOUR UNITS is the exact text an LLM
-    copies into declared_order JSON -- value-annotated labels here (7$1,
-    2H, u5) are invalid JSON tokens and are the root cause of the ~42%
-    parse-fail rate. Only the human-readable MAP section may keep them."""
+    """The "legal orders = [...]" list is the exact text an LLM copies
+    into declared_order JSON -- value-annotated labels there (7$1, 2H,
+    u5) are invalid JSON tokens and are the root cause of the ~42%
+    parse-fail rate. Only the human-readable MAP section may keep them.
+    (The "u<id>" unit-header prefix identifying *which* unit's menu
+    follows is untouched -- it's a quoted-string-safe label the parser
+    already coerces, not a bare invalid JSON token.)
+    """
     state = simple_two_player_state()
     view = visible_state_for(state, 0)
     _, user = render_negotiation_prompt(state, view, 0)
-    section = _section(user, "YOUR UNITS (for declaring intents):",
-                        "=== RESPONSE FORMAT ===")
-    assert not _LABEL_RE.search(section), section
+    option_lists = re.findall(r"legal orders = \[(.*?)\]", user)
+    assert option_lists, user
+    for opts in option_lists:
+        assert not _LABEL_RE.search(opts), opts
     # sanity: the map section elsewhere in the same prompt still annotates.
     assert "$" in user or "H" in user
 
@@ -98,9 +97,13 @@ def test_render_orders_prompt_legal_orders_use_bare_ids() -> None:
     state = simple_two_player_state()
     view = visible_state_for(state, 0)
     _, user = render_orders_prompt(state, view, 0, own_intents=[])
-    section = _section(user, "YOUR UNITS — choose ONE order per unit:",
-                        "=== RESPONSE FORMAT ===")
-    assert not _LABEL_RE.search(section), section
+    option_lines = [
+        line.split("] ", 1)[1] for line in user.splitlines()
+        if re.match(r"\s*\[\d+\] ", line)
+    ]
+    assert option_lines, user
+    for opt in option_lines:
+        assert not _LABEL_RE.search(opt), opt
     assert "$" in user or "H" in user
 
 

@@ -72,7 +72,7 @@ def node_label(m: Map, n: NodeId) -> str:
     return str(n)
 
 
-def order_to_str(o: Order, state: GameState | None = None) -> str:
+def order_to_str(o: Order, state: GameState | None = None, *, bare: bool = False) -> str:
     """Render an Order for display.
 
     Without `state`, renders the bare structural form (dest/target ids
@@ -82,18 +82,30 @@ def order_to_str(o: Order, state: GameState | None = None) -> str:
     without cross-referencing a separate visible-units list (playtest
     finding: players were offered Support(target=uX) for units that
     weren't listed anywhere with an owner or location).
+
+    `bare=True` forces truly bare integer ids regardless of `state` --
+    for machine-facing text an LLM must copy verbatim into JSON, where
+    "7$1"/"u3" are invalid tokens (diagnosed root cause of ~42% of
+    LLMDiplomat parse failures: the model copied these labels straight
+    into declared_order/orders JSON values).
     """
     if isinstance(o, Hold):
         return "Hold"
     if isinstance(o, Move):
-        dest = node_label(state.map, o.dest) if state is not None else str(o.dest)
+        if bare:
+            dest = str(o.dest)
+        else:
+            dest = node_label(state.map, o.dest) if state is not None else str(o.dest)
         return f"Move(dest={dest})"
     if isinstance(o, Support):
-        target_s = f"u{o.target}"
-        if state is not None:
-            target = state.units.get(o.target)
-            if target is not None:
-                target_s += f" [P{target.owner} @ n{target.location}]"
+        if bare:
+            target_s = str(o.target)
+        else:
+            target_s = f"u{o.target}"
+            if state is not None:
+                target = state.units.get(o.target)
+                if target is not None:
+                    target_s += f" [P{target.owner} @ n{target.location}]"
         if o.require_dest is None:
             return f"Support(target={target_s})"
         return f"Support(target={target_s}, require_dest={o.require_dest})"
