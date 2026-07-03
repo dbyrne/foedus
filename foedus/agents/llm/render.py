@@ -10,6 +10,7 @@ way for a human LLM driver, and this mirrors it.
 
 from __future__ import annotations
 
+from foedus.agents.llm.memory import ReciprocationMemory
 from foedus.core import GameState, Intent, PlayerId
 from foedus.legal import legal_orders_for_unit
 from foedus.render_common import (
@@ -51,8 +52,43 @@ def _render_visible_units(view: dict, player: PlayerId) -> list[str]:
     return lines
 
 
+def render_reciprocation_record(
+    memory: ReciprocationMemory, player: PlayerId
+) -> list[str]:
+    """The agent-side reciprocation record for `player` (see
+    foedus.agents.llm.memory). Purely factual bookkeeping: per opponent, how
+    many of the turns this seat observed they declared ALLY toward it, how many
+    turns this seat spent supporting their units, and this seat's own prior
+    declared stances toward them.
+
+    NEUTRALITY is a hard requirement (experiment integrity): counts and turn
+    numbers only. No advice, judgement, or leading language — the experiment
+    tests whether the model acts on information, not whether a prompt can smuggle
+    in the conclusion. The one framing sentence names what the section is.
+    """
+    opponents = memory.opponents()
+    if not opponents:
+        return ["RECIPROCATION RECORD: none observed yet."]
+    lines = [
+        "RECIPROCATION RECORD (your own observations across prior turns; "
+        "declared stance you received vs. Support you have given — from your "
+        "fogged views only):"
+    ]
+    for p in opponents:
+        rec = memory.record(p)
+        prior = ", ".join(rec.my_prior_stances) or "none"
+        lines.append(
+            f"  p{p}: declared ALLY toward you on {rec.ally_toward_me} of "
+            f"{rec.turns_observed} prior turns; you gave Support to their units "
+            f"on {rec.turns_i_supported_them} turns; your prior stances toward "
+            f"them: {prior}."
+        )
+    return lines
+
+
 def render_negotiation_prompt(
-    state: GameState, view: dict, player: PlayerId
+    state: GameState, view: dict, player: PlayerId,
+    recip_memory: ReciprocationMemory | None = None,
 ) -> tuple[str, str]:
     lines: list[str] = []
     lines.append(f"You are Player {player}. " + render_turn_calendar(state))
@@ -114,6 +150,12 @@ def render_negotiation_prompt(
                 f"  p{p}: {r['given']}/{r['received']}/"
                 f"{r['standing']:.2f}/{r['freeride_debt']}"
             )
+        lines.append("")
+
+    # Optional agent-side reciprocation memory (default OFF -> nothing appended,
+    # so the prompt is byte-identical to the no-ledger arm).
+    if recip_memory is not None:
+        lines.extend(render_reciprocation_record(recip_memory, player))
         lines.append("")
 
     lines.append("YOUR UNITS (for declaring intents):")

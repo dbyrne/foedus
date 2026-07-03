@@ -115,9 +115,8 @@ def test_support_of_my_own_unit_not_counted() -> None:
     mem = ReciprocationMemory()
     unit_owner = {9: 0, 10: 0}  # both mine
     mem.observe_orders({9: Support(target=10)}, unit_owner, me=0, turn=1)
-    assert mem.record(0).turns_i_supported_them == 0
-    # p0 (me) is never an "opponent" in my own record set.
-    assert 0 not in mem.opponents()
+    # Supporting my own unit records no opponent at all (and never me).
+    assert mem.opponents() == []
 
 
 def test_observe_orders_idempotent_per_turn() -> None:

@@ -17,6 +17,7 @@ from foedus.eval.memory_metrics import (
     aggregate_scorecard,
     game_scorecard,
     parse_visible_owners,
+    scorecard,
     stance_toward_targets,
     supports_targeting_freerider,
 )
@@ -164,6 +165,43 @@ def test_game_scorecard_subsidy_and_stance_trajectory() -> None:
 
 
 # --- aggregate across games --------------------------------------------------
+
+
+def test_scorecard_reads_a_scripted_out_dir(tmp_path) -> None:
+    """End-to-end file read: a scripted stub run out-dir (multi-seat naming)
+    with one game where the freerider wins and one LLM seat subsidises it."""
+    sweep = {
+        "game_id": 0, "seed": 0,
+        "agents": ["LLMDiplomat", "LLMDiplomat", "DishonestCooperator"],
+        "llm_seats": [0, 1],
+        "final_scores": [7.0, 9.0, 20.0],
+        "winners": [2],
+    }
+    telemetry = {"game_id": 0, "per_seat": {
+        "0": {"n_decisions": 4, "parse_fail_count": 1},
+        "1": {"n_decisions": 4, "parse_fail_count": 0},
+    }}
+    (tmp_path / "sweep.jsonl").write_text(json.dumps(sweep) + "\n")
+    (tmp_path / "telemetry.jsonl").write_text(json.dumps(telemetry) + "\n")
+    (tmp_path / "decisions_game0_seat0.jsonl").write_text(
+        json.dumps(_neg_record(0, 0, {"2": "hostile"})) + "\n"
+        + json.dumps(_orders_record(
+            0, 0, [(5, 2, 0), (9, 0, 0)],
+            {"9": {"type": "Support", "target": 5}})) + "\n"
+    )
+    (tmp_path / "decisions_game0_seat1.jsonl").write_text(
+        json.dumps(_neg_record(1, 0, {"2": "hostile"})) + "\n"
+    )
+
+    agg = scorecard(tmp_path, freerider_names={"DishonestCooperator"})
+    assert agg["n_games"] == 1
+    assert agg["freerider_win_rate"] == 1.0
+    assert agg["mean_margin"] == 12.0
+    assert agg["total_subsidy"] == 1
+    g = agg["per_game"][0]
+    assert g["stance_trajectory"][0]["hostile"] == 2
+    # parse-fail rate: 1 fail out of 8 decisions across seats.
+    assert abs(agg["parse_fail_rate"] - 1 / 8) < 1e-9
 
 
 def test_aggregate_scorecard_win_rate_and_mean_margin() -> None:
