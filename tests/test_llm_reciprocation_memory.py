@@ -11,14 +11,18 @@ stances between OTHER players ever enters a seat's record).
 
 from __future__ import annotations
 
-from foedus.core import Hold, Move, Press, Stance, Support
+from foedus.core import Hold, Intent, Move, Press, Stance, Support
 
-from foedus.agents.llm.memory import ReciprocationMemory
+from foedus.agents.llm.memory import OpponentRecord, ReciprocationMemory
 
 
 def _view(matrix: dict, outbound: list[Press]) -> dict:
     """A minimal fogged view carrying just what the memory reads."""
     return {"public_stance_matrix": matrix, "your_outbound_press": outbound}
+
+
+def _intent(unit_id: int, order, visible_to=None) -> Intent:
+    return Intent(unit_id=unit_id, declared_order=order, visible_to=visible_to)
 
 
 def _press(stance: dict[int, Stance]) -> Press:
@@ -166,3 +170,72 @@ def test_asymmetry_freerider_vs_honest_ally() -> None:
     assert mem.record(1).turns_i_supported_them == 3
     assert mem.record(2).ally_toward_me == 3
     assert mem.record(2).turns_i_supported_them == 1
+
+
+# --- their declared support-intents toward my units (fog-legal proxy) --------
+#
+# Executed "they supported my units" is NOT fog-observable (SupportRound is
+# set-valued; the fog view exposes no executed-order data). The fog-legal proxy
+# is inbound Support *intents* that were visible to this seat (already filtered
+# by fog.visible_state_for), counted per turn.
+
+
+def _view_intents(inbound: dict, my_units: list[int], outbound: list[Press]) -> dict:
+    return {
+        "public_stance_matrix": {},
+        "your_outbound_press": outbound,
+        "your_inbound_intents": inbound,
+        "visible_units": [{"id": u, "owner": 0, "location": 0} for u in my_units],
+    }
+
+
+def test_their_support_intent_toward_my_unit_counts() -> None:
+    mem = ReciprocationMemory()
+    # p1 declares u5 -> Support(my unit u9), visible to me, on turns 1 and 3.
+    for turn in (1, 2, 3):
+        inbound = {}
+        if turn in (1, 3):
+            inbound = {1: [_intent(5, Support(target=9))]}
+        mem.observe_view(
+            _view_intents(inbound, my_units=[9], outbound=[_press({})] * turn),
+            me=0, turn=turn,
+        )
+    assert mem.record(1).their_support_intent_toward_me == 2
+
+
+def test_their_support_intent_counts_turns_not_intents() -> None:
+    """Two support-intents toward my units in one turn is one turn."""
+    mem = ReciprocationMemory()
+    inbound = {1: [_intent(5, Support(target=9)), _intent(6, Support(target=10))]}
+    mem.observe_view(
+        _view_intents(inbound, my_units=[9, 10], outbound=[_press({})]),
+        me=0, turn=1,
+    )
+    assert mem.record(1).their_support_intent_toward_me == 1
+
+
+def test_support_intent_toward_non_mine_or_non_support_ignored() -> None:
+    mem = ReciprocationMemory()
+    inbound = {
+        1: [_intent(5, Support(target=99))],  # target not one of my units
+        2: [_intent(7, Move(dest=3))],        # not a Support intent
+    }
+    mem.observe_view(
+        _view_intents(inbound, my_units=[9], outbound=[_press({})]),
+        me=0, turn=1,
+    )
+    assert mem.record(1).their_support_intent_toward_me == 0
+    assert mem.record(2).their_support_intent_toward_me == 0
+
+
+# --- non-mutating accessor ---------------------------------------------------
+
+
+def test_get_is_non_mutating() -> None:
+    mem = ReciprocationMemory()
+    rec = mem.get(5)
+    assert isinstance(rec, OpponentRecord)
+    assert rec.ally_toward_me == 0
+    # Reading an unseen opponent must not create a record (keeps opponents()
+    # honest for the cross-game snapshot).
+    assert mem.opponents() == []
