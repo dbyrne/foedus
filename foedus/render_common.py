@@ -83,11 +83,16 @@ def order_to_str(o: Order, state: GameState | None = None, *, bare: bool = False
     finding: players were offered Support(target=uX) for units that
     weren't listed anywhere with an owner or location).
 
-    `bare=True` forces truly bare integer ids regardless of `state` --
-    for machine-facing text an LLM must copy verbatim into JSON, where
-    "7$1"/"u3" are invalid tokens (diagnosed root cause of ~42% of
-    LLMDiplomat parse failures: the model copied these labels straight
-    into declared_order/orders JSON values).
+    `bare=True` forces the copied-into-JSON token itself to be a plain
+    integer regardless of `state` -- Move drops the value suffix (no
+    "$1"/"H") and Support drops the "u" prefix -- since those are the
+    exact glued-on tokens an LLM copied verbatim into declared_order/
+    orders JSON (diagnosed root cause of ~42% of LLMDiplomat parse
+    failures), not the space-separated "[P.. @ n..]" aside. So `bare`
+    and `state` are independent: `order_to_str(o, state, bare=True)`
+    still shows the owner/location annotation for a Support target
+    (preserving the playtest-driven legibility above) while keeping the
+    digit itself bare and unambiguous.
     """
     if isinstance(o, Hold):
         return "Hold"
@@ -98,14 +103,11 @@ def order_to_str(o: Order, state: GameState | None = None, *, bare: bool = False
             dest = node_label(state.map, o.dest) if state is not None else str(o.dest)
         return f"Move(dest={dest})"
     if isinstance(o, Support):
-        if bare:
-            target_s = str(o.target)
-        else:
-            target_s = f"u{o.target}"
-            if state is not None:
-                target = state.units.get(o.target)
-                if target is not None:
-                    target_s += f" [P{target.owner} @ n{target.location}]"
+        target_s = str(o.target) if bare else f"u{o.target}"
+        if state is not None:
+            target = state.units.get(o.target)
+            if target is not None:
+                target_s += f" [P{target.owner} @ n{target.location}]"
         if o.require_dest is None:
             return f"Support(target={target_s})"
         return f"Support(target={target_s}, require_dest={o.require_dest})"

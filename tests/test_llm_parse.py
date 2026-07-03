@@ -149,6 +149,19 @@ def test_extract_json_with_recovery_does_not_mangle_string_literals() -> None:
     assert data == {"note": "supply 7$1 is contested", "a": 1}
 
 
+def test_extract_json_with_recovery_sanitizes_outer_object_not_a_smaller_inner_one() -> None:
+    """Regression pinned from code review: the balanced-brace scan tries
+    candidates left-to-right and only advances to a later "{" when the
+    current one fails to parse -- so sanitizing must be retried on THIS
+    candidate before advancing, or a genuinely-valid *inner* fragment
+    (here {"inner_ok": 1}) would be returned instead of the real,
+    sanitized top-level object once the label token is fixed."""
+    raw = '{"wrap": {"inner_ok": 1}, "dest": u9}'
+    data, used_fallback = extract_json_with_recovery(raw)
+    assert used_fallback is True
+    assert data == {"wrap": {"inner_ok": 1}, "dest": 9}
+
+
 # --- parse_order ---------------------------------------------------------
 
 

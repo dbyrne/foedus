@@ -121,7 +121,7 @@ def render_negotiation_prompt(
         if u.owner != player:
             continue
         legal = legal_orders_for_unit(state, u.id)
-        opts = ", ".join(order_to_str(o, bare=True) for o in legal)
+        opts = ", ".join(order_to_str(o, state, bare=True) for o in legal)
         lines.append(f"  u{u.id} at node {u.location}: legal orders = [{opts}]")
     lines.append("")
 
@@ -227,7 +227,7 @@ def render_orders_prompt(
             f"(adj: {sorted(state.map.neighbors(u.location))})"
         )
         for i, o in enumerate(legal):
-            lines.append(f"    [{i}] {order_to_str(o, bare=True)}")
+            lines.append(f"    [{i}] {order_to_str(o, state, bare=True)}")
     lines.append("")
 
     lines.append("=== RESPONSE FORMAT ===")

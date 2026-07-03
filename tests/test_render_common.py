@@ -121,14 +121,25 @@ def test_order_to_str_move_bare_ignores_state() -> None:
     assert order_to_str(Move(dest=1), s, bare=True) == "Move(dest=1)"
 
 
-def test_order_to_str_support_bare_ignores_state() -> None:
-    """Same rationale as the Move case -- bare=True must also drop the "u"
-    prefix (u3 is not a valid bare JSON int either) and the owner/location
-    annotation."""
+def test_order_to_str_support_bare_without_state_has_no_prefix() -> None:
+    """bare=True must drop the "u" prefix (u3 is not a valid bare JSON int)
+    when no state is available to annotate the target at all."""
+    assert order_to_str(Support(target=3), bare=True) == "Support(target=3)"
+
+
+def test_order_to_str_support_bare_with_state_keeps_bracket_annotation() -> None:
+    """bare=True only removes the "u" prefix glued directly onto the digit
+    (that's the actual invalid-JSON token an LLM copied verbatim, per the
+    diagnosed bug) -- it does NOT need to drop the space-separated
+    "[P.. @ n..]" aside, which was never the copied token and restores the
+    owner/location legibility a prior playtest finding required (see
+    order_to_str's docstring) for Support options the VISIBLE UNITS list
+    doesn't otherwise cover (fogged targets up to 2 hops away)."""
     m = triangle_map()
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 1), Unit(2, 2, 2)],
                    num_players=3)
-    assert order_to_str(Support(target=1), s, bare=True) == "Support(target=1)"
+    assert (order_to_str(Support(target=1), s, bare=True)
+            == "Support(target=1 [P1 @ n1])")
 
 
 def test_order_to_str_support_bare_with_require_dest() -> None:
@@ -136,7 +147,7 @@ def test_order_to_str_support_bare_with_require_dest() -> None:
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 1), Unit(2, 2, 2)],
                    num_players=3)
     out = order_to_str(Support(target=1, require_dest=2), s, bare=True)
-    assert out == "Support(target=1, require_dest=2)"
+    assert out == "Support(target=1 [P1 @ n1], require_dest=2)"
 
 
 # --- render_map ------------------------------------------------------------
