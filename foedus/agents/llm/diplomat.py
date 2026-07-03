@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 from foedus.agents.llm.client import LLMClient, make_client_from_env
+from foedus.agents.llm.memory import ReciprocationMemory
 from foedus.agents.llm.parse import (
     NegotiationDecision,
     parse_negotiation_response,
@@ -22,6 +23,10 @@ from foedus.core import (
     ChatDraft, GameState, Hold, Order, PactProposal, PlayerId, Press, UnitId,
 )
 from foedus.fog import visible_state_for
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 class LLMDiplomat:
@@ -58,13 +63,27 @@ class LLMDiplomat:
     than raising through `play_game` and aborting the game.
     """
 
-    def __init__(self, client: LLMClient | None = None) -> None:
+    def __init__(
+        self,
+        client: LLMClient | None = None,
+        *,
+        recip_ledger: bool | None = None,
+    ) -> None:
         self._client: LLMClient = client if client is not None else make_client_from_env()
         self.decision_log: list[dict] = []
         self._negotiation_cache: dict[tuple[int, PlayerId], NegotiationDecision] = {}
         self._orders_cache: dict[tuple[int, PlayerId], dict[UnitId, Order]] = {}
         log_dir = os.environ.get("FOEDUS_LLM_LOG_DIR")
         self._log_dir = Path(log_dir) if log_dir else None
+        # Reciprocation-memory arm (experiment toggle). Default OFF; the
+        # constructor arg wins over FOEDUS_LLM_RECIP_LEDGER so the two arms are
+        # the same code, one toggle apart. A live memory means the negotiation
+        # prompt carries the RECIPROCATION RECORD block; None means it doesn't.
+        if recip_ledger is None:
+            recip_ledger = _env_flag("FOEDUS_LLM_RECIP_LEDGER")
+        self._memory: ReciprocationMemory | None = (
+            ReciprocationMemory() if recip_ledger else None
+        )
 
     # --- Agent protocol -----------------------------------------------
 
@@ -98,6 +117,15 @@ class LLMDiplomat:
             orders, fell_back, n_coerced = parse_orders_response(raw, state, player)
             self._log("orders", state, player, system, user, raw, orders,
                       fell_back, n_coerced)
+        if self._memory is not None:
+            # Ownership must come from the seat's OWN fogged view, not the
+            # omniscient state: a Support can be legal against a unit outside
+            # fog (2-hop move-support), and crediting its true owner would leak
+            # information the seat never observed. An out-of-fog target maps to
+            # owner=None and is simply not attributed (fog-legal by
+            # construction; matches memory_metrics.parse_visible_owners).
+            unit_owner = {u["id"]: u["owner"] for u in view["visible_units"]}
+            self._memory.observe_orders(orders, unit_owner, player, state.turn)
         self._orders_cache[key] = orders
         return orders
 
@@ -114,7 +142,11 @@ class LLMDiplomat:
         if cached is not None:
             return cached
         view = visible_state_for(state, player)
-        system, user = render_negotiation_prompt(state, view, player)
+        if self._memory is not None:
+            self._memory.observe_view(view, player, state.turn)
+        system, user = render_negotiation_prompt(
+            state, view, player, recip_memory=self._memory
+        )
 
         raw, error = self._complete(system, user)
         if error is not None:

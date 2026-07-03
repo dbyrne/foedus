@@ -349,12 +349,19 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
     parser.add_argument("--transcripts", type=int, default=1,
                         help="Number of games (from the start) to also render "
                              "as a human-readable markdown transcript.")
+    parser.add_argument("--recip-ledger", action="store_true",
+                        help="Enable the reciprocation-memory arm: sets "
+                             "FOEDUS_LLM_RECIP_LEDGER=1 so each LLMDiplomat seat "
+                             "carries the agent-side reciprocation record in its "
+                             "negotiation prompt. Default OFF (baseline arm).")
     args = parser.parse_args(argv)
 
     if args.backend:
         os.environ["FOEDUS_LLM_BACKEND"] = args.backend
     if args.model:
         os.environ["FOEDUS_LLM_MODEL"] = args.model
+    if args.recip_ledger:
+        os.environ["FOEDUS_LLM_RECIP_LEDGER"] = "1"
 
     factory = llm_agent_factory or LLMDiplomat
     archetype = Archetype(args.archetype)
