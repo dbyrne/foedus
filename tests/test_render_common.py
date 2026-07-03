@@ -111,6 +111,34 @@ def test_order_to_str_support_target_gone_falls_back_gracefully() -> None:
     assert order_to_str(Support(target=99), s) == "Support(target=u99)"
 
 
+def test_order_to_str_move_bare_ignores_state() -> None:
+    """bare=True is for machine-facing text an LLM must copy into JSON --
+    7$1 is not a valid JSON token, so even with state available the value
+    annotation must be suppressed."""
+    m = line_map(3)
+    m = replace(m, supply_values={1: 2})
+    s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 2)], num_players=2)
+    assert order_to_str(Move(dest=1), s, bare=True) == "Move(dest=1)"
+
+
+def test_order_to_str_support_bare_ignores_state() -> None:
+    """Same rationale as the Move case -- bare=True must also drop the "u"
+    prefix (u3 is not a valid bare JSON int either) and the owner/location
+    annotation."""
+    m = triangle_map()
+    s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 1), Unit(2, 2, 2)],
+                   num_players=3)
+    assert order_to_str(Support(target=1), s, bare=True) == "Support(target=1)"
+
+
+def test_order_to_str_support_bare_with_require_dest() -> None:
+    m = triangle_map()
+    s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 1), Unit(2, 2, 2)],
+                   num_players=3)
+    out = order_to_str(Support(target=1, require_dest=2), s, bare=True)
+    assert out == "Support(target=1, require_dest=2)"
+
+
 # --- render_map ------------------------------------------------------------
 
 

@@ -14,6 +14,7 @@ from foedus.core import Hold, Move, Support, Unit
 from foedus.agents.llm.parse import (
     coerce_id,
     extract_json,
+    extract_json_with_recovery,
     parse_intent,
     parse_negotiation_response,
     parse_order,
@@ -22,7 +23,7 @@ from foedus.agents.llm.parse import (
     parse_stance,
 )
 
-from tests.helpers import line_map, make_state
+from tests.helpers import line_map, make_state, triangle_map
 
 
 # --- coerce_id ---------------------------------------------------------
@@ -90,6 +91,62 @@ def test_extract_json_returns_none_for_garbage() -> None:
 def test_extract_json_ignores_braces_inside_strings() -> None:
     text = '{"a": "a string with a } brace inside"}'
     assert extract_json(text) == {"a": "a string with a } brace inside"}
+
+
+# --- extract_json_with_recovery (node-label-copying sanitizer) -----------
+#
+# Diagnosed live: real local models copy value-annotated node/unit labels
+# straight out of the prompt into JSON values -- e.g. `"dest": 7$1`,
+# `"unit_id": 2H`, `"target": u5` -- which are invalid JSON tokens and
+# previously discarded the whole decision. These pin the fix: the same
+# text recovers to the bare int, and the recovery is reported (never a
+# silent fix) via the `used_fallback` flag.
+
+
+def test_extract_json_with_recovery_sanitizes_dollar_value_label() -> None:
+    raw = '{"orders": {"0": {"type": "Move", "dest": 7$1}}}'
+    data, used_fallback = extract_json_with_recovery(raw)
+    assert used_fallback is True
+    assert data == {"orders": {"0": {"type": "Move", "dest": 7}}}
+
+
+def test_extract_json_with_recovery_sanitizes_home_label() -> None:
+    raw = (
+        '{"press": {"intents": [{"unit_id": 2H, '
+        '"declared_order": {"type": "Hold"}, "visible_to": null}]}}'
+    )
+    data, used_fallback = extract_json_with_recovery(raw)
+    assert used_fallback is True
+    assert data["press"]["intents"][0]["unit_id"] == 2
+
+
+def test_extract_json_with_recovery_sanitizes_unit_prefixed_label() -> None:
+    raw = '{"orders": {"0": {"type": "Support", "target": u5}}}'
+    data, used_fallback = extract_json_with_recovery(raw)
+    assert used_fallback is True
+    assert data == {"orders": {"0": {"type": "Support", "target": 5}}}
+
+
+def test_extract_json_with_recovery_no_fallback_needed_for_valid_json() -> None:
+    data, used_fallback = extract_json_with_recovery('{"a": 1}')
+    assert data == {"a": 1}
+    assert used_fallback is False
+
+
+def test_extract_json_with_recovery_returns_none_for_truly_unparseable() -> None:
+    data, used_fallback = extract_json_with_recovery("not json at all { {{")
+    assert data is None
+    assert used_fallback is False
+
+
+def test_extract_json_with_recovery_does_not_mangle_string_literals() -> None:
+    """The sanitizer must only touch text outside JSON string literals --
+    otherwise a legitimate chat-like value mentioning a label would be
+    corrupted."""
+    raw = '{"note": "supply 7$1 is contested", "a": 1}'
+    data, used_fallback = extract_json_with_recovery(raw)
+    assert used_fallback is False
+    assert data == {"note": "supply 7$1 is contested", "a": 1}
 
 
 # --- parse_order ---------------------------------------------------------
@@ -372,6 +429,34 @@ def test_parse_negotiation_response_non_list_intents_does_not_crash() -> None:
     assert decision.fell_back is True
 
 
+def test_parse_negotiation_response_recovers_home_annotated_unit_id() -> None:
+    """Model copies the home-node label ("0H") into unit_id instead of the
+    bare id -- previously invalid JSON, forcing an all-empty fallback."""
+    state = _two_unit_state()
+    raw = (
+        '{"press": {"stance": {}, "intents": [{"unit_id": 0H, '
+        '"declared_order": {"type": "Hold"}, "visible_to": null}]}}'
+    )
+    decision = parse_negotiation_response(raw, state, player=0)
+    assert len(decision.press.intents) == 1
+    assert decision.press.intents[0].unit_id == 0
+    assert decision.fell_back is True  # sanitizer use is surfaced, not silent
+
+
+def test_parse_negotiation_response_recovers_dollar_value_dest_in_intent() -> None:
+    """Model copies the supply-value label ("1$1") into a Move dest."""
+    state = _two_unit_state()
+    raw = (
+        '{"press": {"stance": {}, "intents": [{"unit_id": 0, '
+        '"declared_order": {"type": "Move", "dest": 1$1}, '
+        '"visible_to": null}]}}'
+    )
+    decision = parse_negotiation_response(raw, state, player=0)
+    assert len(decision.press.intents) == 1
+    assert decision.press.intents[0].declared_order == Move(dest=1)
+    assert decision.fell_back is True
+
+
 # --- parse_orders_response -----------------------------------------------
 
 
@@ -424,3 +509,33 @@ def test_parse_orders_response_malformed_json_falls_back_all_hold() -> None:
     orders, fell_back, n_coerced = parse_orders_response("garbage", state, player=0)
     assert orders == {0: Hold()}
     assert fell_back is True
+
+
+def test_parse_orders_response_recovers_dollar_value_dest() -> None:
+    """Model copies the supply-value label ("1$1") into a Move dest instead
+    of the bare node id 1 -- previously invalid JSON -> forced all-Hold."""
+    state = _two_unit_state()
+    raw = '{"orders": {"0": {"type": "Move", "dest": 1$1}}}'
+    orders, fell_back, n_coerced = parse_orders_response(raw, state, player=0)
+    assert orders == {0: Move(dest=1)}
+    assert fell_back is True  # sanitizer use is surfaced, not silent
+    assert n_coerced >= 1
+
+
+def _support_capable_state():
+    """Fully-connected triangle -- every unit is adjacent to every other,
+    so Support(target=<other>) is geometrically legal for each unit."""
+    m = triangle_map()
+    units = [Unit(0, 0, 0), Unit(1, 1, 1), Unit(2, 2, 2)]
+    return make_state(m, units, num_players=3)
+
+
+def test_parse_orders_response_recovers_unit_prefixed_support_target() -> None:
+    """Model copies the "u"-prefixed unit label into a Support target
+    instead of the bare unit id -- previously invalid JSON."""
+    state = _support_capable_state()
+    raw = '{"orders": {"0": {"type": "Support", "target": u1}}}'
+    orders, fell_back, n_coerced = parse_orders_response(raw, state, player=0)
+    assert orders[0] == Support(target=1)
+    assert fell_back is True
+    assert n_coerced >= 1

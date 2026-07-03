@@ -104,3 +104,30 @@ def test_main_writes_sweep_telemetry_and_transcript(tmp_path) -> None:
     transcripts = sorted(out_dir.glob("transcript_game*.md"))
     assert len(transcripts) >= 1
     assert transcripts[0].read_text().strip()
+
+
+def test_main_persists_per_decision_log(tmp_path) -> None:
+    """Aggregate parse_fail_count alone isn't enough to diagnose a specific
+    bad prompt/response -- the harness must persist each decision (prompt,
+    raw response, parsed result, fell_back) so a regression is inspectable
+    after the fact, not just counted."""
+    out_dir = tmp_path / "out"
+    rc = harness.main([
+        "--num-games", "2", "--max-turns", "2", "--seed-offset", "5",
+        "--heuristics", "GreedyHold,GreedyHold,GreedyHold",
+        "--out-dir", str(out_dir),
+    ], llm_agent_factory=_stub_factory(2))
+    assert rc == 0
+
+    decision_files = sorted(out_dir.glob("decisions_game*.jsonl"))
+    assert len(decision_files) == 2
+
+    records = [json.loads(line) for line in decision_files[0].read_text().splitlines()]
+    assert records
+    for record in records:
+        assert "turn" in record
+        assert "phase" in record
+        assert "prompt" in record and "system" in record["prompt"] and "user" in record["prompt"]
+        assert "raw_response" in record
+        assert "parsed" in record
+        assert "fell_back" in record
