@@ -238,6 +238,50 @@ def test_timeout_value_is_passed_to_subprocess(monkeypatch) -> None:
     assert captured["kwargs"]["timeout"] == 42.0
 
 
+# --- configurable timeout (FOEDUS_LLM_CLI_TIMEOUT, default 300) ------------
+#
+# PR #37 found 18% of decisions were forced Holds from `claude -p` hitting the
+# old 180s client timeout. The new default is 300s to kill that handicap going
+# forward; the paired cross-game experiment re-pins it to 180 via the env var.
+
+
+def test_default_timeout_is_300_when_env_unset(monkeypatch) -> None:
+    monkeypatch.delenv("FOEDUS_LLM_CLI_TIMEOUT", raising=False)
+    assert ClaudeCLIClient().timeout == 300.0
+
+
+def test_timeout_reads_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("FOEDUS_LLM_CLI_TIMEOUT", "180")
+    assert ClaudeCLIClient().timeout == 180.0
+
+
+def test_timeout_env_accepts_float(monkeypatch) -> None:
+    monkeypatch.setenv("FOEDUS_LLM_CLI_TIMEOUT", "90.5")
+    assert ClaudeCLIClient().timeout == 90.5
+
+
+def test_explicit_timeout_arg_beats_env(monkeypatch) -> None:
+    monkeypatch.setenv("FOEDUS_LLM_CLI_TIMEOUT", "180")
+    assert ClaudeCLIClient(timeout=42.0).timeout == 42.0
+
+
+def test_bad_timeout_env_falls_back_to_default(monkeypatch) -> None:
+    monkeypatch.setenv("FOEDUS_LLM_CLI_TIMEOUT", "not-a-number")
+    assert ClaudeCLIClient().timeout == 300.0
+
+
+def test_empty_timeout_env_falls_back_to_default(monkeypatch) -> None:
+    monkeypatch.setenv("FOEDUS_LLM_CLI_TIMEOUT", "   ")
+    assert ClaudeCLIClient().timeout == 300.0
+
+
+def test_nonpositive_timeout_env_falls_back_to_default(monkeypatch) -> None:
+    # A zero or negative timeout would make every call fail instantly; reject it.
+    for bad in ("0", "-5", "-1.5"):
+        monkeypatch.setenv("FOEDUS_LLM_CLI_TIMEOUT", bad)
+        assert ClaudeCLIClient().timeout == 300.0, bad
+
+
 # --- argv logged once, not per call ---------------------------------------
 
 
