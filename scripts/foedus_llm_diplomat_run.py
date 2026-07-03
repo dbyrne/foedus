@@ -343,7 +343,11 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
     parser.add_argument("--map-radius", type=int, default=2)
     parser.add_argument("--out-dir", type=str, default="runs/llm_diplomat")
     parser.add_argument("--backend", type=str, default=None,
-                        help="Sets FOEDUS_LLM_BACKEND for this run (ollama|claude).")
+                        help="Sets FOEDUS_LLM_BACKEND for this run "
+                             "(ollama|claude|claude-cli). 'claude-cli' shells out "
+                             "to the Claude Code CLI in headless print mode using "
+                             "the machine's claude.ai subscription auth "
+                             "(no API key / no API dollars).")
     parser.add_argument("--model", type=str, default=None,
                         help="Sets FOEDUS_LLM_MODEL for this run.")
     parser.add_argument("--transcripts", type=int, default=1,
