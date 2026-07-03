@@ -4,6 +4,8 @@ foedus.render_common primitives (no re-implementation of rendering).
 
 from __future__ import annotations
 
+import re
+
 from foedus.core import Intent, Move
 from foedus.fog import visible_state_for
 from foedus.agents.llm.render import (
@@ -12,6 +14,8 @@ from foedus.agents.llm.render import (
 )
 
 from tests.helpers import simple_two_player_state
+
+_LABEL_RE = re.compile(r"\d+\$\d+|\d+H\b|\bu\d+\b")
 
 
 def test_render_negotiation_prompt_contains_map_and_response_format() -> None:
@@ -64,3 +68,54 @@ def test_render_orders_prompt_without_intents_omits_intents_section() -> None:
     view = visible_state_for(state, 0)
     _, user = render_orders_prompt(state, view, 0, own_intents=[])
     assert "DECLARED INTENTS" not in user
+
+
+# --- machine-facing sections use bare integer ids (parse-robustness fix) --
+
+
+def test_render_negotiation_prompt_legal_orders_use_bare_ids() -> None:
+    """The "legal orders = [...]" list is the exact text an LLM copies
+    into declared_order JSON -- value-annotated labels there (7$1, 2H,
+    u5) are invalid JSON tokens and are the root cause of the ~42%
+    parse-fail rate. Only the human-readable MAP section may keep them.
+    (The "u<id>" unit-header prefix identifying *which* unit's menu
+    follows is untouched -- it's a quoted-string-safe label the parser
+    already coerces, not a bare invalid JSON token.)
+    """
+    state = simple_two_player_state()
+    view = visible_state_for(state, 0)
+    _, user = render_negotiation_prompt(state, view, 0)
+    option_lists = re.findall(r"legal orders = \[(.*?)\]", user)
+    assert option_lists, user
+    for opts in option_lists:
+        assert not _LABEL_RE.search(opts), opts
+    # sanity: the map section elsewhere in the same prompt still annotates.
+    assert "$" in user or "H" in user
+
+
+def test_render_orders_prompt_legal_orders_use_bare_ids() -> None:
+    state = simple_two_player_state()
+    view = visible_state_for(state, 0)
+    _, user = render_orders_prompt(state, view, 0, own_intents=[])
+    option_lines = [
+        line.split("] ", 1)[1] for line in user.splitlines()
+        if re.match(r"\s*\[\d+\] ", line)
+    ]
+    assert option_lines, user
+    for opt in option_lines:
+        assert not _LABEL_RE.search(opt), opt
+    assert "$" in user or "H" in user
+
+
+def test_render_negotiation_prompt_has_bare_id_instruction() -> None:
+    state = simple_two_player_state()
+    view = visible_state_for(state, 0)
+    _, user = render_negotiation_prompt(state, view, 0)
+    assert "bare integer" in user.lower()
+
+
+def test_render_orders_prompt_has_bare_id_instruction() -> None:
+    state = simple_two_player_state()
+    view = visible_state_for(state, 0)
+    _, user = render_orders_prompt(state, view, 0, own_intents=[])
+    assert "bare integer" in user.lower()

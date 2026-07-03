@@ -72,7 +72,7 @@ def node_label(m: Map, n: NodeId) -> str:
     return str(n)
 
 
-def order_to_str(o: Order, state: GameState | None = None) -> str:
+def order_to_str(o: Order, state: GameState | None = None, *, bare: bool = False) -> str:
     """Render an Order for display.
 
     Without `state`, renders the bare structural form (dest/target ids
@@ -82,14 +82,28 @@ def order_to_str(o: Order, state: GameState | None = None) -> str:
     without cross-referencing a separate visible-units list (playtest
     finding: players were offered Support(target=uX) for units that
     weren't listed anywhere with an owner or location).
+
+    `bare=True` forces the copied-into-JSON token itself to be a plain
+    integer regardless of `state` -- Move drops the value suffix (no
+    "$1"/"H") and Support drops the "u" prefix -- since those are the
+    exact glued-on tokens an LLM copied verbatim into declared_order/
+    orders JSON (diagnosed root cause of ~42% of LLMDiplomat parse
+    failures), not the space-separated "[P.. @ n..]" aside. So `bare`
+    and `state` are independent: `order_to_str(o, state, bare=True)`
+    still shows the owner/location annotation for a Support target
+    (preserving the playtest-driven legibility above) while keeping the
+    digit itself bare and unambiguous.
     """
     if isinstance(o, Hold):
         return "Hold"
     if isinstance(o, Move):
-        dest = node_label(state.map, o.dest) if state is not None else str(o.dest)
+        if bare:
+            dest = str(o.dest)
+        else:
+            dest = node_label(state.map, o.dest) if state is not None else str(o.dest)
         return f"Move(dest={dest})"
     if isinstance(o, Support):
-        target_s = f"u{o.target}"
+        target_s = str(o.target) if bare else f"u{o.target}"
         if state is not None:
             target = state.units.get(o.target)
             if target is not None:

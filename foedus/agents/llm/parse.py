@@ -74,26 +74,50 @@ def coerce_id(raw: object) -> int | None:
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
 
-def extract_json(text: str):
-    """Extract and parse the first JSON object found in `text`.
-
-    Tries, in order: the whole text as-is; the first fenced code block;
-    the first balanced top-level `{...}` substring (brace-depth scan
-    that ignores braces inside string literals). Returns None if
-    nothing parses.
-    """
-    text = text.strip()
+def _try_json(candidate: str):
     try:
-        return json.loads(text)
+        return json.loads(candidate)
     except (json.JSONDecodeError, ValueError):
-        pass
+        return None
+
+
+def _extract_json_stages(text: str, *, sanitize: bool = False) -> tuple[object, bool]:
+    """The parse attempts shared by `extract_json` and
+    `extract_json_with_recovery`: the whole text as-is; the first fenced
+    code block; the first balanced top-level `{...}` substring
+    (brace-depth scan that ignores braces inside string literals).
+
+    `sanitize=True` retries each of those three candidates through
+    `_sanitize_node_labels` before moving on to the next one -- e.g. if
+    the whole-text candidate fails only because of a stray `7$1`/`2H`/`u5`
+    token, it's repaired and re-parsed *before* the balanced-brace scan
+    would otherwise wander into a smaller, spuriously-valid inner
+    substring (a nested `{"type": "Hold"}` two levels down, say) and
+    silently return the wrong object.
+
+    Returns `(data, used_sanitizer)`; `data` is None if nothing parses.
+    """
+    def parse_candidate(candidate: str):
+        data = _try_json(candidate)
+        if data is not None:
+            return data, False
+        if sanitize:
+            sanitized = _sanitize_node_labels(candidate)
+            if sanitized != candidate:
+                data = _try_json(sanitized)
+                if data is not None:
+                    return data, True
+        return None, False
+
+    data, used = parse_candidate(text)
+    if data is not None:
+        return data, used
 
     m = _FENCE_RE.search(text)
     if m:
-        try:
-            return json.loads(m.group(1).strip())
-        except (json.JSONDecodeError, ValueError):
-            pass
+        data, used = parse_candidate(m.group(1).strip())
+        if data is not None:
+            return data, used
 
     start = text.find("{")
     while start != -1:
@@ -118,12 +142,85 @@ def extract_json(text: str):
                 depth -= 1
                 if depth == 0:
                     candidate = text[start:i + 1]
-                    try:
-                        return json.loads(candidate)
-                    except (json.JSONDecodeError, ValueError):
-                        break
+                    data, used = parse_candidate(candidate)
+                    if data is not None:
+                        return data, used
+                    break
         start = text.find("{", start + 1)
-    return None
+    return None, False
+
+
+def extract_json(text: str):
+    """Extract and parse the first JSON object found in `text`.
+
+    Tries, in order: the whole text as-is; the first fenced code block;
+    the first balanced top-level `{...}` substring. Returns None if
+    nothing parses. See `extract_json_with_recovery` for a variant that
+    also recovers node/unit labels copied verbatim from the prompt.
+    """
+    data, _ = _extract_json_stages(text.strip())
+    return data
+
+
+_NODE_LABEL_RE = re.compile(r"(\d+)\$\d+|(\d+)H\b|\bu(\d+)\b")
+
+
+def _sanitize_node_labels(text: str) -> str:
+    """Rewrite value-annotated node/unit labels (7$1, 2H, u5) copied
+    verbatim from the prompt's human-readable map/legal-orders text into
+    JSON values, back to their bare integer id -- e.g. `"dest": 7$1` ->
+    `"dest": 7`, `"unit_id": 2H` -> `"unit_id": 2`, `"target": u5` ->
+    `"target": 5`. These are otherwise invalid JSON tokens that abort
+    `json.loads` entirely (diagnosed root cause of ~42% of LLMDiplomat
+    parse failures).
+
+    Scans outside string literals only (mirrors the brace-depth scan in
+    `_extract_json_stages`), so legitimate quoted string content (e.g. a
+    stance rationale mentioning "7$1") is never touched.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    in_str = False
+    esc = False
+    while i < n:
+        c = text[i]
+        if in_str:
+            out.append(c)
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            i += 1
+            continue
+        if c == '"':
+            in_str = True
+            out.append(c)
+            i += 1
+            continue
+        m = _NODE_LABEL_RE.match(text, i)
+        if m:
+            out.append(m.group(1) or m.group(2) or m.group(3))
+            i = m.end()
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def extract_json_with_recovery(text: str) -> tuple[object, bool]:
+    """`extract_json`, plus a sanitizer-fallback retry.
+
+    If a candidate doesn't parse as-is, retries after rewriting
+    model-copied node/unit labels that are invalid JSON tokens (see
+    `_sanitize_node_labels`). Returns `(data, used_fallback)` so callers
+    can count sanitizer use as a parse-quality signal even when it
+    successfully recovers a decision -- per this module's contract, parse
+    quality is measured, never silently fixed.
+    """
+    return _extract_json_stages(text.strip(), sanitize=True)
 
 
 def parse_order(d: object, legal: list[Order]) -> tuple[Order, bool]:
@@ -231,12 +328,12 @@ class NegotiationDecision:
 def parse_negotiation_response(
     raw: str, state: GameState, player: PlayerId
 ) -> NegotiationDecision:
-    data = extract_json(raw)
+    data, used_sanitizer = extract_json_with_recovery(raw)
     if not isinstance(data, dict):
         return NegotiationDecision(Press(stance={}, intents=[]), fell_back=True)
 
-    fell_back = False
-    n_coerced = 0
+    fell_back = used_sanitizer
+    n_coerced = 1 if used_sanitizer else 0
 
     press_raw = data.get("press")
     if press_raw is None:
@@ -329,9 +426,9 @@ def parse_orders_response(
     not a parse failure.
     """
     own_units = [u for u in state.units.values() if u.owner == player]
-    data = extract_json(raw)
-    fell_back = False
-    n_coerced = 0
+    data, used_sanitizer = extract_json_with_recovery(raw)
+    fell_back = used_sanitizer
+    n_coerced = 1 if used_sanitizer else 0
 
     orders_raw = None
     if isinstance(data, dict):

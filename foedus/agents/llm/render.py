@@ -121,7 +121,7 @@ def render_negotiation_prompt(
         if u.owner != player:
             continue
         legal = legal_orders_for_unit(state, u.id)
-        opts = ", ".join(order_to_str(o, state) for o in legal)
+        opts = ", ".join(order_to_str(o, state, bare=True) for o in legal)
         lines.append(f"  u{u.id} at node {u.location}: legal orders = [{opts}]")
     lines.append("")
 
@@ -172,6 +172,9 @@ def render_negotiation_prompt(
     lines.append(
         "- once accepted, diverging from a pact term at finalize is a stronger, "
         "publicly-reputation-tracked PactBreach."
+    )
+    lines.append(
+        "- in JSON, use bare integer node/unit ids (e.g. 7, not 7$1; 2, not 2H)."
     )
 
     return NEGOTIATION_SYSTEM_PROMPT, "\n".join(lines)
@@ -224,7 +227,7 @@ def render_orders_prompt(
             f"(adj: {sorted(state.map.neighbors(u.location))})"
         )
         for i, o in enumerate(legal):
-            lines.append(f"    [{i}] {order_to_str(o, state)}")
+            lines.append(f"    [{i}] {order_to_str(o, state, bare=True)}")
     lines.append("")
 
     lines.append("=== RESPONSE FORMAT ===")
@@ -235,5 +238,8 @@ def render_orders_prompt(
     lines.append('  {"type": "Support", "target": <unit_id>}')
     lines.append('  {"type": "Support", "target": <unit_id>, "require_dest": <node_id>}')
     lines.append("Any owned unit you omit defaults to Hold.")
+    lines.append(
+        "In JSON, use bare integer node/unit ids (e.g. 7, not 7$1; 2, not 2H)."
+    )
 
     return ORDERS_SYSTEM_PROMPT, "\n".join(lines)
