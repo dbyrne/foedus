@@ -10,6 +10,7 @@ way for a human LLM driver, and this mirrors it.
 
 from __future__ import annotations
 
+from foedus.agents.llm.campaign_memory import CampaignMemory, GameFacts
 from foedus.agents.llm.memory import ReciprocationMemory
 from foedus.core import GameState, Intent, PlayerId
 from foedus.legal import legal_orders_for_unit
@@ -41,6 +42,14 @@ ORDERS_SYSTEM_PROMPT = (
     "strategy game. This is the orders phase: choose one order per unit "
     "you own. Respond with ONLY a single JSON object -- no prose, no "
     "markdown fences."
+)
+
+SELF_NOTE_SYSTEM_PROMPT = (
+    "You just finished a game of Foedus. The next game reuses the SAME seats, "
+    "so you will face these same opponents again. Write a brief private note to "
+    "your future self: at most 80 words, plain text only (no markdown, no JSON, "
+    "no headings). Capture whatever you judge useful for playing these opponents "
+    "next time. The note is for your eyes only."
 )
 
 
@@ -89,9 +98,83 @@ def render_reciprocation_record(
     return lines
 
 
+def _fmt_score(s: float) -> str:
+    # Integer scores render without a trailing ".0"; fractional keep precision.
+    return f"{s:g}"
+
+
+def render_game_facts(facts: GameFacts, player: PlayerId) -> list[str]:
+    """Neutral per-game facts for the PRIOR GAMES section: counts and outcomes
+    only, no advice or judgement (same neutrality bar as the within-game
+    reciprocation ledger). The self-note is rendered SEPARATELY, verbatim.
+
+    `their_support_intent_toward_me` is labeled as a DECLARED intent, never as
+    executed support, because executed support is not fog-observable.
+    """
+    scores = "; ".join(
+        f"p{p}={_fmt_score(s)}" for p, s in sorted(facts.final_scores.items())
+    )
+    lines = [
+        f"  Game (seed {facts.seed}): final scores {scores}; you were seat "
+        f"p{facts.my_seat}, finished rank {facts.my_rank} of {facts.n_players}."
+    ]
+    for p, of in sorted(facts.per_opponent.items()):
+        lines.append(
+            f"    p{p}: declared ally toward you on {of.ally_toward_me} of "
+            f"{of.turns_observed} observed turns; you gave Support to their units "
+            f"on {of.my_supports_of_them} turns; they declared Support intents "
+            f"toward your units on {of.their_support_intent_toward_me} turns; "
+            f"accepted pact with you: {'yes' if of.pact_with_me else 'no'}; "
+            f"breach by them toward you: {'yes' if of.breach_involving_me else 'no'}."
+        )
+    return lines
+
+
+def render_campaign_record(
+    campaign_memory: CampaignMemory, player: PlayerId
+) -> list[str]:
+    """The PRIOR GAMES section: per past game (capped, oldest-first) the neutral
+    facts followed by this seat's OWN verbatim note. Empty when no prior game
+    has been recorded (i.e. game 1 of a campaign)."""
+    games = campaign_memory.recent()
+    if not games:
+        return []
+    lines = [
+        "PRIOR GAMES (your own records from earlier games this campaign, "
+        "oldest first — factual counts from your fogged views, then your own "
+        "note to yourself):"
+    ]
+    for rec in games:
+        lines.extend(render_game_facts(rec.facts, player))
+        # The note is the agent's OWN words: rendered EXACTLY, no editing.
+        note = rec.self_note.strip() or "(none)"
+        lines.append(f'    Your note to yourself: "{note}"')
+    return lines
+
+
+def render_self_note_prompt(
+    facts: GameFacts, player: PlayerId
+) -> tuple[str, str]:
+    """The one post-game LLM call that asks a seat to write its own ≤80-word
+    note to its future self. The neutral facts are handed to the model; the note
+    it returns is stored verbatim (see campaign_memory)."""
+    lines = [
+        f"You are Player {player}. The game just ended.",
+        "",
+        "FACTS FROM THE GAME YOU JUST PLAYED:",
+    ]
+    lines.extend(render_game_facts(facts, player))
+    lines.append("")
+    lines.append(
+        "Write your note now: at most 80 words, plain text, no markdown."
+    )
+    return SELF_NOTE_SYSTEM_PROMPT, "\n".join(lines)
+
+
 def render_negotiation_prompt(
     state: GameState, view: dict, player: PlayerId,
     recip_memory: ReciprocationMemory | None = None,
+    campaign_memory: CampaignMemory | None = None,
 ) -> tuple[str, str]:
     lines: list[str] = []
     lines.append(f"You are Player {player}. " + render_turn_calendar(state))
@@ -154,6 +237,15 @@ def render_negotiation_prompt(
                 f"{r['standing']:.2f}/{r['freeride_debt']}"
             )
         lines.append("")
+
+    # Optional cross-game memory (campaign mode). Default OFF -> nothing
+    # appended, so the prompt is byte-identical to the single-game arm. Rendered
+    # before the within-game ledger: prior-game history, then this game's record.
+    if campaign_memory is not None:
+        section = render_campaign_record(campaign_memory, player)
+        if section:
+            lines.extend(section)
+            lines.append("")
 
     # Optional agent-side reciprocation memory (default OFF -> nothing appended,
     # so the prompt is byte-identical to the no-ledger arm).
