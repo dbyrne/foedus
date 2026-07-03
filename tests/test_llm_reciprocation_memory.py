@@ -181,12 +181,34 @@ def test_asymmetry_freerider_vs_honest_ally() -> None:
 
 
 def _view_intents(inbound: dict, my_units: list[int], outbound: list[Press]) -> dict:
+    # Inbound senders are LIVE opponents, so they also appear in the public
+    # stance matrix (fog.visible_state_for writes matrix[sender][me] for every
+    # non-eliminated seat). Mirroring that keeps these fixtures realistic and
+    # exercises the same live-opponent gate the real view goes through.
+    matrix = {s: {0: "neutral"} for s in inbound}
     return {
-        "public_stance_matrix": {},
+        "public_stance_matrix": matrix,
         "your_outbound_press": outbound,
         "your_inbound_intents": inbound,
         "visible_units": [{"id": u, "owner": 0, "location": 0} for u in my_units],
     }
+
+
+def test_eliminated_sender_support_intent_not_registered() -> None:
+    """An opponent eliminated on its final turn is absent from the public stance
+    matrix, but its last press (carrying a Support-intent toward my unit) is
+    still in your_inbound_intents. It must NOT be newly registered as an
+    opponent from the intent alone — otherwise opponents() (and the rendered
+    RECIPROCATION RECORD block) would diverge from baseline for a dead seat."""
+    mem = ReciprocationMemory()
+    view = {
+        "public_stance_matrix": {},  # eliminated sender absent from the matrix
+        "your_outbound_press": [_press({})],
+        "your_inbound_intents": {2: [_intent(5, Support(target=9))]},
+        "visible_units": [{"id": 9, "owner": 0, "location": 0}],
+    }
+    mem.observe_view(view, me=0, turn=1)
+    assert mem.opponents() == []
 
 
 def test_their_support_intent_toward_my_unit_counts() -> None:

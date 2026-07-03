@@ -34,20 +34,14 @@ def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-# A compliant self-note is ~80 words (<~600 chars). This is a pathological-input
-# guard so a runaway note can't bloat every later prompt (the last-N cap already
-# bounds how many render); normal notes pass through verbatim.
-_SELF_NOTE_CHAR_CAP = 1200
-
-
 def _clean_self_note(raw: str) -> str:
-    """Normalize a self-note for storage: strip surrounding whitespace and apply
-    the pathological-length guard. The agent's actual words are preserved
-    verbatim (no content filtering) — this is the neutrality-exempt part."""
-    text = raw.strip()
-    if len(text) > _SELF_NOTE_CHAR_CAP:
-        text = text[:_SELF_NOTE_CHAR_CAP].rstrip() + " […]"
-    return text
+    """Normalize a self-note for storage: strip surrounding whitespace only. The
+    agent's own words are stored VERBATIM (no truncation, no content filtering) —
+    this is the neutrality-exempt part, and the persisted record is the audit
+    artifact, so it must be faithful. Total prompt growth is instead bounded by
+    the last-N-games render cap (CampaignMemory.recent) plus the model's own
+    ≤80-word instruction; a single note is never truncated."""
+    return raw.strip()
 
 
 class LLMDiplomat:

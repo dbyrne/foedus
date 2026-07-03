@@ -105,12 +105,20 @@ class ReciprocationMemory:
         # (fog.visible_state_for already filtered your_inbound_intents to intents
         # whose visible_to includes me). One increment per sender per turn,
         # regardless of how many of my units they pledged to back.
+        #
+        # Gated on `sender in matrix` (i.e. a still-live opponent, already
+        # registered by the stance loop above): a seat eliminated on its final
+        # turn is absent from the matrix but its last press can still carry an
+        # intent, and registering it here from the intent ALONE would add a stray
+        # opponent to opponents() -> an extra zero-count line in the recip block,
+        # diverging from baseline. All live opponents are always in the matrix,
+        # so this only drops a dead seat's final-turn intent (negligible).
         inbound = view.get("your_inbound_intents") or {}
         my_unit_ids = {
             u["id"] for u in (view.get("visible_units") or []) if u["owner"] == me
         }
         for sender, intents in inbound.items():
-            if sender == me:
+            if sender == me or sender not in matrix:
                 continue
             if any(
                 isinstance(it.declared_order, Support)
