@@ -2,7 +2,11 @@
 LLMDiplomat seats against a chosen heuristic roster, single-process.
 
 For each game emits a sweep-compatible JSONL record (feeds
-`foedus_compute_ratings.py` unchanged), a telemetry sidecar record
+`foedus_compute_ratings.py` unchanged for single-LLM-seat runs; NOTE for
+multi-seat runs every LLM seat is listed under the identity "LLMDiplomat",
+so foedus_compute_ratings.py's per-identity ratings collapse those seats
+together -- read per-seat outcomes from sweep `final_scores`/`llm_seats`,
+not the ratings), a telemetry sidecar record
 (betrayals, pact breaches, public reputation, decision-log parse-fail
 count -- aggregate and per-LLM-seat), and a per-decision JSONL log
 (turn/phase/prompt/raw_response/parsed/fell_back/n_coerced for every LLM
@@ -125,7 +129,15 @@ def run_one_llm_game(
     if len(set(seats)) != len(seats):
         raise ValueError(f"llm_seats contains duplicate seat(s): {seats}")
 
-    heuristic_names = list(heuristic_names or ["GreedyHold", "GreedyHold", "GreedyHold"])
+    # NB: distinguish an EXPLICIT empty list (a legitimate all-LLM roster:
+    # zero heuristic seats) from "not passed" -- `heuristic_names or [...]`
+    # would treat [] as falsy and silently pad the game with 3 phantom
+    # GreedyHold seats, mis-sizing an all-LLM table (caught in review).
+    heuristic_names = (
+        list(heuristic_names)
+        if heuristic_names is not None
+        else ["GreedyHold", "GreedyHold", "GreedyHold"]
+    )
     num_players = len(seats) + len(heuristic_names)
     for s in seats:
         if not (0 <= s < num_players):
@@ -215,7 +227,7 @@ def render_transcript(
     betrayals, pact breaches, final reputation -- the "read the
     scheming" artifact. Renders all seats regardless of which are
     LLM-driven; `llm_seat`/`llm_seats` only label the header."""
-    seats = llm_seats if llm_seats is not None else [llm_seat]
+    seats = sorted(llm_seats) if llm_seats is not None else [llm_seat]
     seats_label = ", ".join(str(s) for s in seats)
     plural = "s" if len(seats) != 1 else ""
     lines = [f"# Foedus LLM Diplomat transcript — LLM seat{plural} {seats_label}", ""]
@@ -349,6 +361,8 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
 
     if args.llm_seats:
         llm_seats = [int(x.strip()) for x in args.llm_seats.split(",") if x.strip()]
+        if not llm_seats:
+            parser.error("--llm-seats parsed to no seats; give e.g. '0,1,2'")
     else:
         llm_seats = [args.llm_seat]
     if len(set(llm_seats)) != len(llm_seats):

@@ -255,3 +255,69 @@ def test_cli_single_heuristic_fills_all_non_llm_seats(tmp_path) -> None:
     assert sweep["agents"] == [
         "LLMDiplomat", "LLMDiplomat", "DishonestCooperator", "DishonestCooperator",
     ]
+
+
+# --- Regression tests for review findings ------------------------------------
+
+
+def test_all_llm_roster_not_padded_with_phantom_heuristics() -> None:
+    """Regression (review Finding 1): an EXPLICIT empty heuristic list is a
+    legitimate all-LLM roster (zero heuristic seats) and must NOT be silently
+    replaced by the 3-name GreedyHold default. 3 LLM seats + [] => a 3-player
+    all-LLM game, not a padded 6-player one."""
+    seats = [0, 1, 2]
+    sweep, _telemetry, final_state, agents_by_seat = harness.run_one_llm_game(
+        game_id=0, seed=5, llm_seats=seats,
+        heuristic_names=[],
+        max_turns=2,
+        llm_agent_factory=_cli_stub_factory(2),
+    )
+    assert sweep["agents"] == ["LLMDiplomat", "LLMDiplomat", "LLMDiplomat"]
+    assert len(sweep["final_scores"]) == 3
+    assert set(agents_by_seat) == set(seats)
+
+
+def test_cli_all_llm_roster_not_padded(tmp_path) -> None:
+    """Regression (review Finding 1, CLI path): --llm-seats 0,1,2 --heuristics ''
+    builds a 3-player all-LLM game, not a silently-padded 6-player one."""
+    out_dir = tmp_path / "out"
+    rc = harness.main([
+        "--num-games", "1", "--max-turns", "2",
+        "--llm-seats", "0,1,2",
+        "--heuristics", "",
+        "--out-dir", str(out_dir),
+    ], llm_agent_factory=_cli_stub_factory(2))
+    assert rc == 0
+    sweep = json.loads((out_dir / "sweep.jsonl").read_text().strip())
+    assert sweep["agents"] == ["LLMDiplomat", "LLMDiplomat", "LLMDiplomat"]
+    assert len(sweep["final_scores"]) == 3
+
+
+def test_cli_empty_llm_seats_errors_clearly(capsys) -> None:
+    """Regression (review Finding 2): --llm-seats that parses to no seats
+    must be a clean parser.error, not an uncaught ValueError from deep inside
+    run_one_llm_game."""
+    with pytest.raises(SystemExit):
+        harness.main([
+            "--num-games", "1", "--max-turns", "1",
+            "--llm-seats", ",",
+            "--heuristics", "GreedyHold",
+        ], llm_agent_factory=_cli_stub_factory(1))
+    err = capsys.readouterr().err
+    assert "no seats" in err
+
+
+def test_cli_transcript_header_uses_sorted_seats(tmp_path) -> None:
+    """Regression (review Finding 3): the transcript header must use the same
+    sorted seat order as sweep/telemetry, even for an unsorted --llm-seats."""
+    out_dir = tmp_path / "out"
+    rc = harness.main([
+        "--num-games", "1", "--max-turns", "2",
+        "--llm-seats", "2,0,1",
+        "--heuristics", "DishonestCooperator",
+        "--transcripts", "1",
+        "--out-dir", str(out_dir),
+    ], llm_agent_factory=_cli_stub_factory(2))
+    assert rc == 0
+    header = (out_dir / "transcript_game0.md").read_text().splitlines()[0]
+    assert "0, 1, 2" in header
