@@ -190,7 +190,13 @@ def run_one_llm_game(
     for i, name in enumerate(agent_names):
         agents[i] = agents_by_seat[i] if i in seat_set else ROSTER[name]()
 
-    final = play_game(agents, state=state)
+    on_turn_resolved = None
+    spectate_dir = os.environ.get("FOEDUS_SPECTATE_DIR")
+    if spectate_dir:
+        from foedus.spectate.emit import spectate_turn_emitter
+        on_turn_resolved = spectate_turn_emitter(spectate_dir, game_id)
+
+    final = play_game(agents, state=state, on_turn_resolved=on_turn_resolved)
 
     sweep = {
         "game_id": game_id,
@@ -388,6 +394,13 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
                              "between games. Sets FOEDUS_LLM_CAMPAIGN=1; persists "
                              "each seat's cross-game memory per game to the "
                              "out-dir. Default OFF (independent games).")
+    parser.add_argument("--spectate-dir", type=str, default=None,
+                        help="Sets FOEDUS_SPECTATE_DIR: opt-in per-turn "
+                             "spectate stream. When set, each resolved turn "
+                             "appends one JSON line (stances/intents/orders/"
+                             "scores) to spectate_game{id}.jsonl in this dir, "
+                             "for foedus_spectator.py to tail live. Default "
+                             "OFF (unset) -> byte-identical output.")
     args = parser.parse_args(argv)
 
     if args.backend:
@@ -398,6 +411,8 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
         os.environ["FOEDUS_LLM_RECIP_LEDGER"] = "1"
     if args.campaign:
         os.environ["FOEDUS_LLM_CAMPAIGN"] = "1"
+    if args.spectate_dir:
+        os.environ["FOEDUS_SPECTATE_DIR"] = args.spectate_dir
 
     factory = llm_agent_factory or LLMDiplomat
     archetype = Archetype(args.archetype)
