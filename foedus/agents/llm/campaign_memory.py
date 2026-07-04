@@ -33,6 +33,25 @@ from foedus.agents.llm.memory import OpponentRecord, ReciprocationMemory
 from foedus.core import PactStatus, PlayerId
 
 
+@dataclass(frozen=True)
+class IdentityContext:
+    """Stable per-entrant handles for one game (Ruleset v1.1, identity-keyed
+    memory).
+
+    The ratified format rotates seats every game, so a seat number is not a
+    stable identity. Each entrant carries a neutral HANDLE that does not change
+    when seats rotate; `seat_to_handle` maps this game's seats to those handles
+    and `my_handle` is this seat's own handle. Cross-game memory and the
+    OpenSkill rating key on the handle, so "who freeloaded last game" tracks the
+    entrant, not whoever inherited its old seat. The handles are neutral labels
+    with no hint of any player's strategy (integrity: the model must infer
+    behaviour from facts, not from the name).
+    """
+
+    my_handle: str
+    seat_to_handle: dict[PlayerId, str]
+
+
 @dataclass
 class OpponentGameFacts:
     """Per-opponent neutral facts from one completed game (this seat's view)."""
@@ -77,6 +96,13 @@ class GameFacts:
     n_players: int
     final_scores: dict[PlayerId, float]   # seat -> final score (public)
     per_opponent: dict[PlayerId, OpponentGameFacts]
+    # Ruleset v1.1 (optional, identity-keyed memory): this game's stable handle
+    # for this seat, and the full seat->handle map. None => seat-keyed rendering
+    # (the pre-v1.1 / single-game behaviour). per_opponent stays keyed by seat
+    # (unambiguous within a game); the render layer translates to handles for
+    # cross-game consistency using `handles`.
+    my_handle: str | None = None
+    handles: dict[PlayerId, str] | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -89,10 +115,14 @@ class GameFacts:
             "per_opponent": {
                 str(k): v.to_dict() for k, v in self.per_opponent.items()
             },
+            "my_handle": self.my_handle,
+            "handles": (None if self.handles is None
+                        else {str(k): v for k, v in self.handles.items()}),
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "GameFacts":
+        handles = d.get("handles")
         return cls(
             game_index=d["game_index"],
             seed=d["seed"],
@@ -104,6 +134,9 @@ class GameFacts:
                 int(k): OpponentGameFacts.from_dict(v)
                 for k, v in d["per_opponent"].items()
             },
+            my_handle=d.get("my_handle"),
+            handles=(None if handles is None
+                     else {int(k): v for k, v in handles.items()}),
         )
 
 
@@ -159,11 +192,16 @@ def build_game_facts(
     *,
     seed: int,
     game_index: int,
+    identity: IdentityContext | None = None,
 ) -> GameFacts:
     """Assemble the neutral per-game record for seat `me` from its final fogged
     `view` and its within-game `recip_memory`. Fog-legal by construction: reads
     only public `scores` and observer-gated pact/breach/betrayal lists, plus the
     seat's own reciprocation counts.
+
+    When `identity` is given (Ruleset v1.1), the record also carries this game's
+    stable handle for `me` and the seat->handle map, so a later game renders the
+    record by the stable handle regardless of how seats rotated.
     """
     scores: dict[PlayerId, float] = dict(view.get("scores") or {})
     my_score = scores.get(me, 0.0)
@@ -203,4 +241,6 @@ def build_game_facts(
         n_players=len(scores),
         final_scores=scores,
         per_opponent=per_opponent,
+        my_handle=(identity.my_handle if identity is not None else None),
+        handles=(dict(identity.seat_to_handle) if identity is not None else None),
     )

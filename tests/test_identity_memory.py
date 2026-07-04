@@ -91,14 +91,14 @@ class TestIdentityContextOnFacts:
 
 class TestHandleRendering:
     def test_render_game_facts_uses_handles_not_seats(self):
-        facts = _handle_facts(0, 11, delta_seat=3)  # Golf at seat 3
+        facts = _handle_facts(0, 11, golf_seat=3)  # Golf at seat 3
         text = "\n".join(render_game_facts(facts, 0))
         assert "Golf" in text and "Echo" in text and "Foxtrot" in text
         # opponents are named by handle, not "p1/p2/p3"
         assert "p1:" not in text and "p2:" not in text and "p3:" not in text
 
     def test_render_game_facts_handles_are_neutral(self):
-        facts = _handle_facts(0, 11, delta_seat=3)
+        facts = _handle_facts(0, 11, golf_seat=3)
         text = "\n".join(render_game_facts(facts, 0)).lower()
         for w in LEADING_WORDS:
             assert w not in text, f"leading word leaked: {w!r}"
@@ -119,9 +119,9 @@ class TestCrossGameHandleRoundTrip:
         # Nova's required round-trip: a record about 'Golf' in game 0 (seat 3)
         # is still about 'Golf' in game 1 (seat 1), regardless of seat.
         cm = CampaignMemory()
-        cm.append(GameRecord(facts=_handle_facts(0, 100, delta_seat=3),
+        cm.append(GameRecord(facts=_handle_facts(0, 100, golf_seat=3),
                              self_note="Golf ran ahead last game."))
-        cm.append(GameRecord(facts=_handle_facts(1, 101, delta_seat=1),
+        cm.append(GameRecord(facts=_handle_facts(1, 101, golf_seat=1),
                              self_note="Golf again."))
         text = "\n".join(render_campaign_record(cm, 0))
         # both prior games attribute facts to the stable handle 'Golf'
@@ -132,7 +132,7 @@ class TestCrossGameHandleRoundTrip:
 
 class TestSelfNotePromptIdentity:
     def test_self_note_prompt_drops_same_seats_and_uses_handles(self):
-        facts = _handle_facts(0, 5, delta_seat=3)
+        facts = _handle_facts(0, 5, golf_seat=3)
         system, user = render_self_note_prompt(facts, 0)
         assert "SAME seats" not in system
         # opponents named by handle in the facts handed to the model
