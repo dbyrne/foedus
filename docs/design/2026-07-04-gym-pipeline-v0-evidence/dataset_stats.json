@@ -1,0 +1,25 @@
+{
+  "corpus": "archived Sonnet decision-logs: #37 armA (probe/merged) + #38 armB (campaign_run)",
+  "teacher": "claude -p (sonnet) via ClaudeCLIClient",
+  "imitate_sonnet_all_valid": {
+    "files": 24,
+    "records": 380,
+    "fell_back": 88,
+    "not_json": 39,
+    "malformed_prompt": 0,
+    "winners_filtered": 0,
+    "duplicates": 1,
+    "written": 252
+  },
+  "winners_only": {
+    "files": 24,
+    "records": 380,
+    "fell_back": 88,
+    "not_json": 39,
+    "malformed_prompt": 0,
+    "winners_filtered": 176,
+    "duplicates": 0,
+    "written": 77
+  },
+  "note": "not_json = <client error> timeout sentinels + reasoning-prose rows with no parseable JSON"
+}

@@ -1,0 +1,45 @@
+{
+  "base_model": "Qwen/Qwen2.5-3B-Instruct",
+  "sft_path": "<scratchpad>/data/sft_corpus.jsonl",
+  "n_examples": 32,
+  "smoke": true,
+  "metrics": {
+    "train_runtime": 56.428,
+    "train_samples_per_second": 1.134,
+    "train_steps_per_second": 0.142,
+    "total_flos": 1493506652160000.0,
+    "train_loss": 2.002949073910713,
+    "epoch": 2.0
+  },
+  "vram": "VRAM: peak_alloc=4.5GB, free_now=6.9GB / total=12.9GB (headroom vs total=8.4GB)",
+  "config": {
+    "sft_path": "<scratchpad>/data/sft_corpus.jsonl",
+    "base_model": "Qwen/Qwen2.5-3B-Instruct",
+    "out_dir": "<scratchpad>/runs/qlora_entrant_v0",
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "load_in_4bit": true,
+    "max_length": 2048,
+    "per_device_batch_size": 1,
+    "grad_accum": 8,
+    "learning_rate": 0.0002,
+    "num_train_epochs": 1.0,
+    "max_steps": 8,
+    "subset": 32,
+    "seed": 0,
+    "logging_steps": 1,
+    "save_steps": 0,
+    "resume_from_checkpoint": null,
+    "smoke": true,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ]
+  }
+}
