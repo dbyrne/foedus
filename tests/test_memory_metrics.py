@@ -20,6 +20,7 @@ from foedus.eval.memory_metrics import (
     scorecard,
     stance_toward_targets,
     supports_targeting_freerider,
+    supports_targeting_llm_seats,
 )
 
 
@@ -71,6 +72,60 @@ def test_supports_unknown_target_owner_skipped() -> None:
 
 def test_supports_unparseable_raw_is_zero() -> None:
     assert supports_targeting_freerider("<client error: boom>", {5: 3}, {3}) == 0
+
+
+# --- LLM<->LLM supports (coordination formation) -----------------------------
+
+
+def test_supports_targeting_llm_seats_counts_only_other_llm_seats() -> None:
+    # 5 -> p1 (another LLM seat): counts. 6 -> p3 (freerider): no.
+    # 7 -> p0 (me): excluded (self-support isn't coordination).
+    owners = {5: 1, 6: 3, 7: 0}
+    raw = json.dumps({"orders": {
+        "10": {"type": "Support", "target": 5},
+        "11": {"type": "Support", "target": 6},
+        "12": {"type": "Support", "target": 7},
+    }})
+    assert supports_targeting_llm_seats(raw, owners, {0, 1, 2}, me_seat=0) == 1
+
+
+def test_llm_llm_supports_unparseable_is_zero() -> None:
+    assert supports_targeting_llm_seats("<client error>", {5: 1}, {0, 1}, 0) == 0
+
+
+def test_game_scorecard_reports_llm_llm_supports() -> None:
+    sweep = {
+        "game_id": 0, "seed": 0,
+        "agents": ["LLMDiplomat", "LLMDiplomat", "DishonestCooperator"],
+        "llm_seats": [0, 1],
+        "final_scores": [10.0, 10.0, 8.0],
+        "winners": [0, 1],
+    }
+    telemetry = {"per_seat": {"0": {"n_decisions": 2, "parse_fail_count": 0},
+                              "1": {"n_decisions": 2, "parse_fail_count": 0}}}
+    # Seat 0 supports seat 1's unit (u5) -> one LLM<->LLM support. Seat 0 also
+    # supports the freerider's unit (u6) -> subsidy, NOT an LLM<->LLM support.
+    decisions = {
+        0: [_orders_record(0, 1, [(5, 1, 0), (6, 2, 0), (9, 0, 0)], {
+            "9": {"type": "Support", "target": 5},
+            "8": {"type": "Support", "target": 6},
+        })],
+        1: [],
+    }
+    sc = game_scorecard(sweep, telemetry, decisions,
+                        freerider_names={"DishonestCooperator"})
+    assert sc["llm_llm_supports"] == 1
+    assert sc["subsidy"] == 1
+
+
+def test_aggregate_reports_llm_llm_supports() -> None:
+    g0 = {"freerider_won": False, "margin": -1.0, "subsidy": 0,
+          "llm_llm_supports": 3, "freerider_seats": [2], "llm_seats": [0, 1]}
+    g1 = {"freerider_won": False, "margin": -2.0, "subsidy": 1,
+          "llm_llm_supports": 5, "freerider_seats": [2], "llm_seats": [0, 1]}
+    agg = aggregate_scorecard([g0, g1])
+    assert agg["total_llm_llm_supports"] == 8
+    assert agg["mean_llm_llm_supports_per_game"] == 4.0
 
 
 # --- stance toward the freerider ---------------------------------------------

@@ -74,6 +74,20 @@ def _betrayal_to_dict(obs) -> dict:
     }
 
 
+def _write_campaign_memory(out_dir: Path, agent, game_id: int, seat: int) -> None:
+    """Persist one seat's cross-game memory (all records + verbatim self-notes)
+    after a campaign game, for audit: what did the seat tell itself, and did
+    behavior follow? Cumulative -- game g's file has all records up to game g."""
+    payload = {
+        "seat": seat,
+        "after_game_index": game_id,
+        "records": [r.to_dict() for r in agent.campaign_records()],
+    }
+    (out_dir / f"campaign_memory_game{game_id}_seat{seat}.json").write_text(
+        json.dumps(payload, indent=2)
+    )
+
+
 def _pact_breach_to_dict(b) -> dict:
     return {
         "turn": b.turn,
@@ -97,6 +111,7 @@ def run_one_llm_game(
     map_radius: int = 2,
     llm_agent_factory=LLMDiplomat,
     config_overrides: dict | None = None,
+    agents_by_seat: dict[int, object] | None = None,
 ):
     """Run one game with one or more LLMDiplomat seats vs the given
     heuristic roster.
@@ -162,7 +177,15 @@ def run_one_llm_game(
                      map_radius=cfg.map_radius)
     state = initial_state(cfg, m)
 
-    agents_by_seat: dict[int, LLMDiplomat] = {s: llm_agent_factory() for s in seats}
+    # Campaign mode passes PERSISTENT agents in (reused across the run's games);
+    # otherwise construct one fresh per LLM seat, as before.
+    if agents_by_seat is None:
+        agents_by_seat = {s: llm_agent_factory() for s in seats}
+    elif set(agents_by_seat) != set(seats):
+        raise ValueError(
+            f"agents_by_seat keys {sorted(agents_by_seat)} must match the LLM "
+            f"seats {seats}"
+        )
     agents: dict[PlayerId, object] = {}
     for i, name in enumerate(agent_names):
         agents[i] = agents_by_seat[i] if i in seat_set else ROSTER[name]()
@@ -358,6 +381,13 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
                              "FOEDUS_LLM_RECIP_LEDGER=1 so each LLMDiplomat seat "
                              "carries the agent-side reciprocation record in its "
                              "negotiation prompt. Default OFF (baseline arm).")
+    parser.add_argument("--campaign", action="store_true",
+                        help="Campaign mode: play the run's games SEQUENTIALLY "
+                             "with the SAME persistent LLMDiplomat instances "
+                             "(recurring opponents), so cross-game memory carries "
+                             "between games. Sets FOEDUS_LLM_CAMPAIGN=1; persists "
+                             "each seat's cross-game memory per game to the "
+                             "out-dir. Default OFF (independent games).")
     args = parser.parse_args(argv)
 
     if args.backend:
@@ -366,6 +396,8 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
         os.environ["FOEDUS_LLM_MODEL"] = args.model
     if args.recip_ledger:
         os.environ["FOEDUS_LLM_RECIP_LEDGER"] = "1"
+    if args.campaign:
+        os.environ["FOEDUS_LLM_CAMPAIGN"] = "1"
 
     factory = llm_agent_factory or LLMDiplomat
     archetype = Archetype(args.archetype)
@@ -422,16 +454,29 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
         s: {"n_decisions": 0, "parse_fail_count": 0} for s in llm_seats
     }
 
+    # Campaign mode: construct the persistent LLM agents ONCE (reused across
+    # every game of this run); None => the historical per-game fresh agents.
+    campaign_agents: dict[int, object] | None = None
+    if args.campaign:
+        campaign_agents = {s: factory() for s in llm_seats}
+
     with (out_dir / "sweep.jsonl").open("w") as sweep_f, \
          (out_dir / "telemetry.jsonl").open("w") as telemetry_f:
         for i in range(args.num_games):
             game_id = i
             seed = args.seed_offset + i
+            if campaign_agents is not None:
+                # Clear each reused agent's WITHIN-game state (caches keyed by
+                # (turn, player) would otherwise leak a prior game's decision,
+                # since turn numbering restarts). Cross-game memory is kept.
+                for agent in campaign_agents.values():
+                    agent.reset_for_new_game()
             sweep, telemetry, final_state, result = run_one_llm_game(
                 game_id, seed, llm_seats=llm_seats,
                 heuristic_names=heuristic_names, max_turns=args.max_turns,
                 archetype=archetype, map_radius=args.map_radius,
                 llm_agent_factory=factory,
+                agents_by_seat=campaign_agents,
             )
             sweep_f.write(json.dumps(sweep) + "\n")
             telemetry_f.write(json.dumps(telemetry) + "\n")
@@ -477,6 +522,18 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
                 f"parse_fail={telemetry['parse_fail_count']}/{telemetry['n_decisions']}"
                 f"{per_seat_str}"
             )
+
+            if campaign_agents is not None:
+                # Record each seat's cross-game entry (neutral facts + its own
+                # ≤80-word self-note, one extra LLM call per seat) and persist.
+                # Decision logs are already written above; the self-note call
+                # never lands in decision_log. Done last so the intact within-
+                # game reciprocation memory is still available to build the facts.
+                for s in llm_seats:
+                    campaign_agents[s].finalize_game(
+                        final_state, s, seed=seed, game_index=game_id
+                    )
+                    _write_campaign_memory(out_dir, campaign_agents[s], game_id, s)
 
     rate = (total_fell_back / total_decisions) if total_decisions else 0.0
     print(f"\n{args.num_games} game(s) written to {out_dir}")

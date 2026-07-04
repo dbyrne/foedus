@@ -71,6 +71,35 @@ def supports_targeting_freerider(
     return count
 
 
+def supports_targeting_llm_seats(
+    raw_response: str,
+    visible_owners: dict[int, int],
+    llm_seats: set[int],
+    me_seat: int,
+) -> int:
+    """Count `Support` orders whose target unit is owned by ANOTHER LLM seat —
+    the coordination-formation metric. An LLM seat spending an action to back a
+    fellow LLM seat's unit is exactly the mutual-support block PR #37 saw
+    qualitatively; this makes it first-class. Self-support (target owned by
+    `me_seat`) is excluded — it isn't coordination."""
+    data = _extract(raw_response)
+    if not isinstance(data, dict):
+        return 0
+    orders = data.get("orders")
+    if not isinstance(orders, dict):
+        return 0
+    count = 0
+    for od in orders.values():
+        if isinstance(od, dict) and od.get("type") == "Support":
+            target = coerce_id(od.get("target"))
+            if target is None:
+                continue
+            owner = visible_owners.get(target)
+            if owner is not None and owner != me_seat and owner in llm_seats:
+                count += 1
+    return count
+
+
 def stance_toward_targets(raw_response: str, targets: set[int]) -> dict[int, str]:
     """Extract the declared stance toward each target seat from a raw negotiate
     response. Only explicit stances are returned; a missing target is omitted
@@ -113,8 +142,10 @@ def game_scorecard(
 
     freerider_score = _mean([final_scores[i] for i in freerider_seats])
     llm_mean = _mean([final_scores[i] for i in llm_seats])
+    llm_set = set(llm_seats)
 
     subsidy = 0
+    llm_llm_supports = 0
     per_turn: dict[int, dict] = {}
     for seat in llm_seats:
         for rec in decisions_by_seat.get(seat, []):
@@ -123,6 +154,9 @@ def game_scorecard(
             if phase == "orders":
                 owners = parse_visible_owners(rec.get("prompt", {}).get("user", ""), seat)
                 subsidy += supports_targeting_freerider(raw, owners, fr_set)
+                llm_llm_supports += supports_targeting_llm_seats(
+                    raw, owners, llm_set, seat
+                )
             elif phase == "negotiate":
                 turn = rec.get("turn")
                 bucket = per_turn.setdefault(
@@ -163,6 +197,7 @@ def game_scorecard(
         "winner_seats": sorted(winners),
         "freerider_won": any(fs in winners for fs in freerider_seats),
         "subsidy": subsidy,
+        "llm_llm_supports": llm_llm_supports,
         "stance_trajectory": stance_trajectory,
         "parse_fail": parse_fail,
     }
@@ -173,6 +208,7 @@ def aggregate_scorecard(games: list[dict]) -> dict:
     n = len(games)
     won = sum(1 for g in games if g.get("freerider_won"))
     total_subsidy = sum(g.get("subsidy", 0) for g in games)
+    total_llm_llm = sum(g.get("llm_llm_supports", 0) for g in games)
     total_decisions = sum(
         pf.get("n", 0) for g in games for pf in g.get("parse_fail", {}).values()
     )
@@ -186,6 +222,8 @@ def aggregate_scorecard(games: list[dict]) -> dict:
         "mean_margin": _mean([g.get("margin", 0.0) for g in games]),
         "total_subsidy": total_subsidy,
         "mean_subsidy_per_game": (total_subsidy / n) if n else 0.0,
+        "total_llm_llm_supports": total_llm_llm,
+        "mean_llm_llm_supports_per_game": (total_llm_llm / n) if n else 0.0,
         "parse_fail_rate": (total_fails / total_decisions) if total_decisions else 0.0,
         "per_game": games,
     }

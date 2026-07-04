@@ -11,6 +11,9 @@ import json
 import os
 from pathlib import Path
 
+from foedus.agents.llm.campaign_memory import (
+    CampaignMemory, GameRecord, build_game_facts,
+)
 from foedus.agents.llm.client import LLMClient, make_client_from_env
 from foedus.agents.llm.memory import ReciprocationMemory
 from foedus.agents.llm.parse import (
@@ -18,7 +21,9 @@ from foedus.agents.llm.parse import (
     parse_negotiation_response,
     parse_orders_response,
 )
-from foedus.agents.llm.render import render_negotiation_prompt, render_orders_prompt
+from foedus.agents.llm.render import (
+    render_negotiation_prompt, render_orders_prompt, render_self_note_prompt,
+)
 from foedus.core import (
     ChatDraft, GameState, Hold, Order, PactProposal, PlayerId, Press, UnitId,
 )
@@ -27,6 +32,16 @@ from foedus.fog import visible_state_for
 
 def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _clean_self_note(raw: str) -> str:
+    """Normalize a self-note for storage: strip surrounding whitespace only. The
+    agent's own words are stored VERBATIM (no truncation, no content filtering) —
+    this is the neutrality-exempt part, and the persisted record is the audit
+    artifact, so it must be faithful. Total prompt growth is instead bounded by
+    the last-N-games render cap (CampaignMemory.recent) plus the model's own
+    ≤80-word instruction; a single note is never truncated."""
+    return raw.strip()
 
 
 class LLMDiplomat:
@@ -68,6 +83,7 @@ class LLMDiplomat:
         client: LLMClient | None = None,
         *,
         recip_ledger: bool | None = None,
+        campaign: bool | None = None,
     ) -> None:
         self._client: LLMClient = client if client is not None else make_client_from_env()
         self.decision_log: list[dict] = []
@@ -75,14 +91,26 @@ class LLMDiplomat:
         self._orders_cache: dict[tuple[int, PlayerId], dict[UnitId, Order]] = {}
         log_dir = os.environ.get("FOEDUS_LLM_LOG_DIR")
         self._log_dir = Path(log_dir) if log_dir else None
-        # Reciprocation-memory arm (experiment toggle). Default OFF; the
-        # constructor arg wins over FOEDUS_LLM_RECIP_LEDGER so the two arms are
-        # the same code, one toggle apart. A live memory means the negotiation
-        # prompt carries the RECIPROCATION RECORD block; None means it doesn't.
+        # Reciprocation-memory arm (experiment toggle) and campaign (cross-game)
+        # mode. Both default OFF; the constructor arg wins over the env var so
+        # arms are the same code, one toggle apart.
         if recip_ledger is None:
             recip_ledger = _env_flag("FOEDUS_LLM_RECIP_LEDGER")
+        if campaign is None:
+            campaign = _env_flag("FOEDUS_LLM_CAMPAIGN")
+        self._recip_ledger = recip_ledger
+        # A within-game reciprocation accumulator is needed to RENDER the recip
+        # block (recip arm) AND to BUILD the cross-game record (campaign mode) --
+        # accumulation and rendering are decoupled: campaign mode accumulates
+        # without rendering the block (that stays gated on _recip_ledger).
         self._memory: ReciprocationMemory | None = (
-            ReciprocationMemory() if recip_ledger else None
+            ReciprocationMemory() if (recip_ledger or campaign) else None
+        )
+        # Cross-game memory: prior games' records + verbatim self-notes. Persists
+        # across the games of a campaign (the instance is reused); None = the
+        # single-game arms (prompt byte-identical, PRIOR GAMES never appears).
+        self._campaign_memory: CampaignMemory | None = (
+            CampaignMemory() if campaign else None
         )
 
     # --- Agent protocol -----------------------------------------------
@@ -134,6 +162,56 @@ class LLMDiplomat:
         free-text chat -- see the First Light design doc, §2."""
         return []
 
+    # --- campaign (cross-game) lifecycle --------------------------------
+
+    def reset_for_new_game(self) -> None:
+        """Clear all WITHIN-game state so a reused instance starts the next
+        campaign game clean, while KEEPING the cross-game memory.
+
+        Critical for correctness: the per-(turn, player) negotiate/orders caches
+        would otherwise return a PRIOR game's decision, since turn numbering
+        restarts at 0 each game. Also resets the within-game reciprocation
+        accumulator so counts don't bleed across games, and clears decision_log
+        (the harness has already persisted the finished game's log by now)."""
+        self._negotiation_cache = {}
+        self._orders_cache = {}
+        self.decision_log = []
+        if self._memory is not None:
+            self._memory = ReciprocationMemory()
+
+    def finalize_game(
+        self, final_state: GameState, player: PlayerId, *, seed: int, game_index: int
+    ) -> None:
+        """Record this game's compact cross-game entry: neutral facts (built
+        fog-legally from the seat's own final view + within-game memory) plus the
+        seat's OWN ≤80-word note. No-op when campaign mode is off.
+
+        Makes ONE extra LLM call (the self-note); that call is deliberately NOT
+        written to decision_log -- it is not a game decision and must not pollute
+        the parse-fail counts. A failed call degrades to an empty note."""
+        if self._campaign_memory is None:
+            return
+        view = visible_state_for(final_state, player)
+        facts = build_game_facts(
+            self._memory, view, player, seed=seed, game_index=game_index
+        )
+        note = self._write_self_note(facts, player)
+        self._campaign_memory.append(GameRecord(facts=facts, self_note=note))
+
+    def _write_self_note(self, facts, player: PlayerId) -> str:
+        system, user = render_self_note_prompt(facts, player)
+        raw, error = self._complete(system, user)
+        if error is not None or raw is None:
+            return ""
+        return _clean_self_note(raw)
+
+    def campaign_records(self) -> list[GameRecord]:
+        """All cross-game records recorded so far (empty when campaign mode is
+        off). The harness serializes these per game for audit."""
+        if self._campaign_memory is None:
+            return []
+        return self._campaign_memory.all()
+
     # --- internals ------------------------------------------------------
 
     def _negotiate(self, state: GameState, player: PlayerId) -> NegotiationDecision:
@@ -144,8 +222,13 @@ class LLMDiplomat:
         view = visible_state_for(state, player)
         if self._memory is not None:
             self._memory.observe_view(view, player, state.turn)
+        # Render the within-game RECIPROCATION RECORD block only in the recip
+        # arm; campaign mode accumulates the same memory but does not render it.
+        recip_for_prompt = self._memory if self._recip_ledger else None
         system, user = render_negotiation_prompt(
-            state, view, player, recip_memory=self._memory
+            state, view, player,
+            recip_memory=recip_for_prompt,
+            campaign_memory=self._campaign_memory,
         )
 
         raw, error = self._complete(system, user)

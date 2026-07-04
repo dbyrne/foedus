@@ -48,6 +48,8 @@ def _print_report(agg: dict, label: str) -> None:
     print(
         f"mean margin (freerider - LLM mean): {agg['mean_margin']:+.2f}   "
         f"mean subsidy/game: {agg['mean_subsidy_per_game']:.2f}   "
+        f"mean LLM<->LLM supports/game: "
+        f"{agg.get('mean_llm_llm_supports_per_game', 0.0):.2f}   "
         f"parse-fail: {agg['parse_fail_rate']:.1%}"
     )
     print()
@@ -60,7 +62,8 @@ def _print_report(agg: dict, label: str) -> None:
             f"  game {g['game_id']} (seed {g['seed']}): "
             f"freerider {g['freerider_score']:.1f} vs LLM mean "
             f"{g['llm_mean_score']:.1f} (margin {g['margin']:+.1f})  "
-            f"[{outcome}]  subsidy={g['subsidy']}"
+            f"[{outcome}]  subsidy={g['subsidy']}  "
+            f"LLM<->LLM supports={g.get('llm_llm_supports', 0)}"
         )
         print(f"      stance-toward-freerider: {_fmt_traj(g['stance_trajectory'])}")
 

@@ -37,6 +37,13 @@ class OpponentRecord:
     neutral_toward_me: int = 0
     hostile_toward_me: int = 0
     turns_i_supported_them: int = 0
+    # Turns this opponent declared a Support *intent* toward one of my units,
+    # visible to me. This is the fog-legal proxy for "they supported my units":
+    # executed support attribution is NOT fog-observable (SupportRound is
+    # set-valued; the view exposes no executed-order data), so we count the
+    # declared, visible intent instead. Never surfaced in the within-game
+    # RECIPROCATION RECORD block; used only by the cross-game record.
+    their_support_intent_toward_me: int = 0
     # This seat's own declared stance toward this opponent, one entry per prior
     # turn (chronological); an undeclared turn reads as the game default,
     # "neutral". Rebuilt from `your_outbound_press` each turn.
@@ -53,6 +60,12 @@ class ReciprocationMemory:
 
     def record(self, pid: PlayerId) -> OpponentRecord:
         return self._records.setdefault(pid, OpponentRecord())
+
+    def get(self, pid: PlayerId) -> OpponentRecord:
+        """Non-mutating read: an unseen opponent returns a fresh default record
+        WITHOUT registering it, so `opponents()` stays honest when the
+        cross-game snapshot probes every seat."""
+        return self._records.get(pid, OpponentRecord())
 
     def opponents(self) -> list[PlayerId]:
         return sorted(self._records)
@@ -87,6 +100,32 @@ class ReciprocationMemory:
                 rec.hostile_toward_me += 1
             else:
                 rec.neutral_toward_me += 1
+
+        # Their declared Support intents toward my units, visible to me
+        # (fog.visible_state_for already filtered your_inbound_intents to intents
+        # whose visible_to includes me). One increment per sender per turn,
+        # regardless of how many of my units they pledged to back.
+        #
+        # Gated on `sender in matrix` (i.e. a still-live opponent, already
+        # registered by the stance loop above): a seat eliminated on its final
+        # turn is absent from the matrix but its last press can still carry an
+        # intent, and registering it here from the intent ALONE would add a stray
+        # opponent to opponents() -> an extra zero-count line in the recip block,
+        # diverging from baseline. All live opponents are always in the matrix,
+        # so this only drops a dead seat's final-turn intent (negligible).
+        inbound = view.get("your_inbound_intents") or {}
+        my_unit_ids = {
+            u["id"] for u in (view.get("visible_units") or []) if u["owner"] == me
+        }
+        for sender, intents in inbound.items():
+            if sender == me or sender not in matrix:
+                continue
+            if any(
+                isinstance(it.declared_order, Support)
+                and it.declared_order.target in my_unit_ids
+                for it in intents
+            ):
+                self.record(sender).their_support_intent_toward_me += 1
 
         # Rebuild my own prior declared stances toward every opponent I have a
         # relationship with (either direction), one entry per completed round.

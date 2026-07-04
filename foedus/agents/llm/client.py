@@ -19,6 +19,30 @@ import tempfile
 from typing import Protocol, runtime_checkable
 
 
+_DEFAULT_CLI_TIMEOUT = 300.0
+
+
+def _resolve_cli_timeout(explicit: float | None) -> float:
+    """Resolve the per-call `claude -p` timeout: an explicit constructor arg
+    wins, else `FOEDUS_LLM_CLI_TIMEOUT` (seconds), else the default 300s.
+
+    A missing / empty / non-numeric / non-positive env value falls back to the
+    default rather than raising -- a bad timeout must never silently make every
+    call fail instantly. (PR #37's 180s handicap is now opt-in via the env var,
+    which the paired cross-game experiment sets to stay comparable.)
+    """
+    if explicit is not None:
+        return explicit
+    raw = os.environ.get("FOEDUS_LLM_CLI_TIMEOUT")
+    if raw is None or not raw.strip():
+        return _DEFAULT_CLI_TIMEOUT
+    try:
+        val = float(raw)
+    except ValueError:
+        return _DEFAULT_CLI_TIMEOUT
+    return val if val > 0 else _DEFAULT_CLI_TIMEOUT
+
+
 @runtime_checkable
 class LLMClient(Protocol):
     def complete(self, system: str, user: str) -> str:
@@ -154,7 +178,7 @@ class ClaudeCLIClient:
         *,
         binary: str | None = None,
         cwd: str | None = None,
-        timeout: float = 180.0,
+        timeout: float | None = None,
     ) -> None:
         self.model = model or os.environ.get("FOEDUS_LLM_MODEL") or "sonnet"
         self.binary = (
@@ -164,7 +188,8 @@ class ClaudeCLIClient:
         # lazy so construction has no filesystem side effects, which keeps
         # tests hermetic).
         self._cwd = cwd
-        self.timeout = timeout
+        # An explicit `timeout=` wins; else FOEDUS_LLM_CLI_TIMEOUT; else 300s.
+        self.timeout = _resolve_cli_timeout(timeout)
         self._argv_logged = False
 
     @property
