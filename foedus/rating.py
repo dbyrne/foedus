@@ -90,6 +90,13 @@ class RatingSystem:
 
         `identities[i]` is the identity of the player in seat `i`. The list
         must have one entry per seat in the game.
+
+        If the same identity occupies multiple seats in this match (e.g. a
+        roster with repeated agent names, or self-play), every seat's
+        outcome is reflected: the identity's new rating is the mean of
+        (mu, sigma) across all of its seats' individual updates. This keeps
+        the update loss-free and order-independent rather than last-write-
+        wins (whichever seat happened to be applied last).
         """
         n = len(identities)
         if n != len(match.rank):
@@ -105,8 +112,14 @@ class RatingSystem:
         ranks = [match.rank[i] for i in range(n)]
         new_teams = self._model.rate(teams, ranks=ranks)
 
+        by_identity: dict[Hashable, list[tuple[float, float]]] = {}
         for i, team in enumerate(new_teams):
-            self._ratings[identities[i]] = (team[0].mu, team[0].sigma)
+            by_identity.setdefault(identities[i], []).append((team[0].mu, team[0].sigma))
+
+        for identity, results in by_identity.items():
+            mu = sum(mu for mu, _ in results) / len(results)
+            sigma = sum(sigma for _, sigma in results) / len(results)
+            self._ratings[identity] = (mu, sigma)
 
     def all_ratings(self) -> dict[Hashable, Rating]:
         """Snapshot of every tracked player's current rating."""

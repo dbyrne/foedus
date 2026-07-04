@@ -98,6 +98,38 @@ def test_contains_check() -> None:
     assert "alice" in rs
 
 
+def test_duplicate_identity_within_match_loses_no_update() -> None:
+    """When the same identity occupies multiple seats in one match (e.g. a
+    3-seat all-"LLMDiplomat" table), every seat's outcome must be reflected
+    in the identity's rating -- not just whichever seat is written last.
+
+    Reference: three DISTINCT fresh identities finishing in the same
+    1st/2nd/3rd ranks receive three different per-seat updates (since
+    OpenSkill's math depends only on the pre-match rating value, which is
+    identical here, and the rank). If "X" occupies all three seats, its
+    rating must combine all three outcomes, not silently collapse to
+    whichever seat happened to be applied last (a dict overwrite bug).
+    """
+    s = _make_terminal_state({0: 100.0, 1: 50.0, 2: 10.0}, num_players=3)
+    match = compute_match_result(s)
+
+    reference = RatingSystem()
+    reference.update(match, identities=["seat0", "seat1", "seat2"])
+    mu_by_seat = [reference.get(f"seat{i}").mu for i in range(3)]
+    sigma_by_seat = [reference.get(f"seat{i}").sigma for i in range(3)]
+
+    rs = RatingSystem()
+    rs.update(match, identities=["X", "X", "X"])
+
+    # Pin the fix's defined semantics exactly: the mean of every seat's
+    # individual per-seat update.
+    assert rs.get("X").mu == pytest.approx(sum(mu_by_seat) / 3)
+    assert rs.get("X").sigma == pytest.approx(sum(sigma_by_seat) / 3)
+    # Last-write-wins (the bug) would make rs["X"] exactly equal seat 2's
+    # (the last-place seat's) isolated update, discarding seats 0 and 1.
+    assert rs.get("X").mu != pytest.approx(mu_by_seat[2])
+
+
 def test_detente_uses_tied_top_ranks() -> None:
     """In a détente, all survivors share rank 1 — but payout is score-weighted.
     OpenSkill should treat them as tied (no rating swing between survivors).

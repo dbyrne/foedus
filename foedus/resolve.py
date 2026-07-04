@@ -477,6 +477,13 @@ def _resolve_moves(canon: dict[UnitId, Order], move_str: dict[UnitId, int],
                         outcome[u] = "success"
                         visited.add(u)
                 break
+            if curr in outcome:
+                # `curr`'s fate was already decided outside this walk (e.g. a
+                # head-to-head loss, or a dislodge resolved earlier in the
+                # vacating loop). It cannot be a live rotation partner, so
+                # this chain cannot close into a genuine simultaneous cycle
+                # through it — stop without touching its outcome.
+                break
             chain.append(curr)
             order = canon.get(curr)
             if not isinstance(order, Move):

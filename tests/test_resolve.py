@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from foedus.core import (
     Hold,
+    Map,
     Move,
+    NodeType,
     Support,
     Unit,
 )
@@ -215,3 +217,57 @@ def test_attacker_loses_to_supported_defender() -> None:
     # u0 attacks with str 1, u1 holds with str 2. u0 bounces.
     assert out.units[0].location == 0
     assert out.units[1].location == 1
+
+
+def test_cycle_detection_does_not_overwrite_dislodged_unit() -> None:
+    """Regression: the cycle-detection chain-walk could sweep through a unit
+    whose outcome was ALREADY decided elsewhere (here, a head-to-head loss)
+    and overwrite it back to "success" -- landing two units on one node.
+
+    u0 (node 1) and u1 (node 2) swap head-to-head; u1 wins via u4's support,
+    dislodging u0. Separately, u2 (node 0) makes the sole attack on u0's
+    now-vacated origin (node 1), and u3 (node 3) makes the sole, uncontested
+    move into u1's now-vacated origin (node 2).
+
+    Before the fix: the vacating loop has no case for a defender whose
+    outcome is "dislodged" (only "success"/"fail" are handled), so u2's
+    resolution never completes there and it falls to cycle-detection.
+    The chain-walk from u2 (u2 -> node1's original occupant u0 -> u0's dest
+    node2's original occupant u1 -> u1's dest node1's original occupant u0
+    again) finds a "cycle" starting at u0 (not at u2, the walk's actual
+    start) and marks u0 AND u1 "success" -- reviving u0, which then lands
+    on node 2 alongside u3. Invariant broken: two units, one node.
+    """
+    coords = {0: (0, 0), 1: (1, 0), 2: (2, 0), 3: (2, 1), 4: (1, -1)}
+    edges = {
+        0: frozenset({1}),
+        1: frozenset({0, 2, 4}),
+        2: frozenset({1, 3}),
+        3: frozenset({2}),
+        4: frozenset({1}),
+    }
+    node_types = {n: NodeType.SUPPLY for n in coords}
+    m = Map(coords=coords, edges=edges, node_types=node_types, home_assignments={})
+
+    s = make_state(m, [
+        Unit(0, 0, 1),  # u0: owner 0, node 1 -- loses h2h, dislodged
+        Unit(1, 1, 2),  # u1: owner 1, node 2 -- wins h2h via u4's support
+        Unit(2, 2, 0),  # u2: owner 2, node 0 -- sole attacker on u0's origin
+        Unit(3, 0, 3),  # u3: owner 0, node 3 -- sole mover into u1's origin
+        Unit(4, 1, 4),  # u4: owner 1, node 4 -- supports u1's swap
+    ], num_players=3)
+
+    out = resolve_turn(s, {
+        0: {0: Move(dest=2), 3: Move(dest=2)},
+        1: {1: Move(dest=1), 4: Support(target=1)},
+        2: {2: Move(dest=1)},
+    })
+
+    locations = [u.location for u in out.units.values()]
+    assert len(locations) == len(set(locations)), (
+        f"two units landed on the same node: {locations}"
+    )
+    assert 0 not in out.units  # u0 was legitimately dislodged (no retreat)
+    assert out.units[1].location == 1
+    assert out.units[2].location == 0  # u2's attack on a stale spot fails
+    assert out.units[3].location == 2
