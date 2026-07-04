@@ -48,7 +48,7 @@ def fig_convergence(res, out_dir):
     ax.text(gs[-1], 0.955, "0.95 target", ha="right", va="bottom", fontsize=9)
     ax.set_xscale("log")
     ax.set_xlabel("games played in the match (log scale)")
-    ax.set_ylabel("P(ladder sorted correctly)  [tau_b >= 0.9]")
+    ax.set_ylabel("P(ladder sorted correctly)  [Kendall tau >= 0.9]")
     ax.set_title("Rating convergence: games until a match's standings sort correctly")
     ax.set_ylim(0, 1.02)
     ax.grid(True, alpha=0.3)
@@ -60,36 +60,70 @@ def fig_convergence(res, out_dir):
     return p
 
 
+def _cell(grid, seats, turns, radius):
+    return next(x for x in grid if x["seats"] == seats
+               and x["turns"] == turns and x["radius"] == radius)
+
+
 def fig_discrimination(res, out_dir):
+    """Two panels: (A) the recovery-tau validity gate (radius 1 fails);
+    (B) competitive-band discrimination D_mid ± CI at radius 2."""
     grid = res["grid"]
     seats = [4, 5, 6]
     turns = [8, 12, 15]
     hatches = {8: "///", 12: "...", 15: "xxx"}
-    colors = {8: OI["blue"], 12: OI["orange"], 15: OI["green"]}
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5), sharey=True)
-    for ax, radius in zip(axes, [1, 2]):
-        width = 0.25
-        for ti, t in enumerate(turns):
-            xs = [s + (ti - 1) * width for s in seats]
-            ys = [next(x["discrimination"] for x in grid
-                       if x["seats"] == s and x["turns"] == t
-                       and x["radius"] == radius) for s in seats]
-            bars = ax.bar(xs, ys, width, label=f"{t} turns",
-                          color=colors[t], hatch=hatches[t],
-                          edgecolor=OI["black"], lw=0.6)
-            for rect, y in zip(bars, ys):
-                ax.text(rect.get_x() + rect.get_width() / 2, y + 0.05,
-                        f"{y:.1f}", ha="center", va="bottom", fontsize=8)
-        ax.set_xticks(seats)
-        ax.set_xticklabels([f"{s} seats" for s in seats])
-        ax.set_title(f"map radius {radius}  "
-                     f"({'7 hexes — cramped' if radius == 1 else '19 hexes'})")
-        ax.set_xlabel("seats")
-        ax.grid(True, axis="y", alpha=0.3)
-    axes[0].set_ylabel("discrimination index  (stdev(mu) / mean(sigma))")
-    axes[1].legend(title="game length", loc="upper right")
+    colors = {8: OI["blue"], 12: OI["orange"], 15: OI["purple"]}
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(12, 5))
+
+    # Panel A: recovery tau by radius (the gate), at 12 turns.
+    width = 0.35
+    rad_color = {1: OI["vermillion"], 2: OI["blue"]}
+    rad_hatch = {1: "xxx", 2: None}
+    for ri, radius in enumerate([1, 2]):
+        xs = [s + (ri - 0.5) * width for s in seats]
+        ys = [_cell(grid, s, 12, radius)["recovery_tau"]["mean"] for s in seats]
+        es = [_cell(grid, s, 12, radius)["recovery_tau"]["std"] for s in seats]
+        bars = axA.bar(xs, ys, width,
+                       label=f"radius {radius} "
+                             f"({'7-cell disk — cramped' if radius==1 else '19-cell disk'})",
+                       color=rad_color[radius], hatch=rad_hatch[radius],
+                       edgecolor=OI["black"], lw=0.6, yerr=es, capsize=3)
+        for rect, y in zip(bars, ys):
+            axA.text(rect.get_x() + rect.get_width()/2, max(y, 0) + 0.03,
+                     f"{y:+.2f}", ha="center", va="bottom", fontsize=8)
+    axA.axhline(0.9, ls="--", color=OI["black"], lw=1)
+    axA.text(6.4, 0.91, "0.9 validity gate", ha="right", va="bottom", fontsize=9)
+    axA.set_xticks(seats)
+    axA.set_xticklabels([f"{s} seats" for s in seats])
+    axA.set_ylabel("recovery tau  (ladder ordering vs truth)")
+    axA.set_title("(A) Validity gate: only radius 2 recovers the ladder\n"
+                  "(12 turns; radius 1 tau near 0 = scrambled)")
+    axA.set_ylim(-0.1, 1.05)
+    axA.grid(True, axis="y", alpha=0.3)
+    axA.legend(loc="center left", fontsize=8)
+
+    # Panel B: competitive-band discrimination at radius 2, seats x turns.
+    width = 0.25
+    for ti, t in enumerate(turns):
+        xs = [s + (ti - 1) * width for s in seats]
+        ys = [_cell(grid, s, t, 2)["D_mid"]["mean"] for s in seats]
+        es = [_cell(grid, s, t, 2)["D_mid"]["std"] for s in seats]
+        bars = axB.bar(xs, ys, width, label=f"{t} turns",
+                       color=colors[t], hatch=hatches[t],
+                       edgecolor=OI["black"], lw=0.6, yerr=es, capsize=3)
+        for rect, y in zip(bars, ys):
+            axB.text(rect.get_x() + rect.get_width()/2, y + 0.03,
+                     f"{y:.2f}", ha="center", va="bottom", fontsize=7)
+    axB.set_xticks(seats)
+    axB.set_xticklabels([f"{s} seats" for s in seats])
+    axB.set_ylabel("competitive-band discrimination D_mid  (+/- std over seeds)")
+    axB.set_title("(B) Radius 2: discrimination of the competitive band\n"
+                  "(4 seats best; turns barely move it)")
+    axB.grid(True, axis="y", alpha=0.3)
+    axB.legend(title="game length", loc="upper right", fontsize=8)
+
     fig.suptitle("Skill discrimination by format "
-                 "(higher = ladder separated more cleanly)")
+                 "(read D only for tau-valid formats)")
     fig.tight_layout()
     p = out_dir / "fig2_discrimination.png"
     fig.savefig(p, dpi=130)
