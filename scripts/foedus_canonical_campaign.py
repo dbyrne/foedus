@@ -141,6 +141,11 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
         build_parser().error("--entrants parsed to no identities")
     # Roster: LLM entrants first (indices 0..k-1), freerider last.
     entrant_identities = entrant_llm + [args.freerider_identity]
+    # Handles double as OpenSkill identities, so duplicates would silently merge
+    # two entrants into one rating — reject them.
+    if len(set(entrant_identities)) != len(entrant_identities):
+        build_parser().error(
+            f"entrant/freerider handles must be unique, got {entrant_identities}")
     freerider_entrants = {len(entrant_llm)}  # the single trailing freerider seat
     num_seats = len(entrant_identities)
     rotate = not args.no_rotation
@@ -276,9 +281,11 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
             dt = time.time() - t0
             per_game_wall.append(dt)
 
-            # Relabel seats with stable entrant identities: distinct OpenSkill
-            # identities for the LLM seats, freerider kept as its class name so
-            # the scorecard still finds it by name.
+            # Relabel seats with stable entrant identities (neutral handles):
+            # distinct OpenSkill identities for every seat incl. the freerider's
+            # handle "Golf". The scorecard finds the freerider via the operator-
+            # side freerider_handles in campaign_plan.json (never by class name,
+            # which is deliberately not exposed to agents).
             sweep["agents"] = list(gs.identity_by_seat)
             sweep["game_index"] = g
             sweep["seed"] = seed
@@ -334,7 +341,8 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
 
     # --- §7.5 reveal: publish seeds + nonce; verify the commitment holds -----
     revealed = campaign.revealed_manifest(sealed, seeds, nonce)
-    assert campaign.verify(revealed), "seed manifest failed self-verification"
+    if not campaign.verify(revealed):
+        raise RuntimeError("seed manifest failed self-verification")
     (out_dir / "seed_manifest.revealed.json").write_text(
         json.dumps(revealed.to_dict(), indent=2)
     )

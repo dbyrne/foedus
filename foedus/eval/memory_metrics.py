@@ -26,8 +26,15 @@ from pathlib import Path
 
 from foedus.agents.llm.parse import coerce_id, extract_json_with_recovery
 
+# Owner marker forms this must parse, across arms:
+#   "(player 2)"      seat-keyed / pre-v1.1 baseline
+#   "(p2)"            (defensive) bare seat label
+#   "(p2 (Foxtrot))"  Ruleset v1.1 identity-annotated (render.py _hlabel)
+#   "(YOURS)"         owned by the prompt's own seat
+# The closing ")" is intentionally not required so the identity form's trailing
+# "(Handle))" still captures the seat digits.
 _VISIBLE_UNIT_RE = re.compile(
-    r"u(\d+) at node \d+ \((?:player (\d+)|YOURS)\)"
+    r"u(\d+) at node \d+ \((?:YOURS|p(?:layer )?(\d+))"
 )
 
 

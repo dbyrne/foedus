@@ -96,7 +96,15 @@ def _render_visible_units(view: dict, player: PlayerId,
                           identity: IdentityContext | None = None) -> list[str]:
     lines = ["VISIBLE UNITS:"]
     for u in view["visible_units"]:
-        marker = "(YOURS)" if u["owner"] == player else f"({_hlabel(u['owner'], identity)})"
+        if u["owner"] == player:
+            marker = "(YOURS)"
+        elif identity is not None:
+            # "(p2 (Foxtrot))": keeps the seat number (the metrics extractor +
+            # the engine work in seat space) and adds the stable handle.
+            marker = f"({_hlabel(u['owner'], identity)})"
+        else:
+            # No identity => byte-identical to the pre-v1.1 seat-keyed prompt.
+            marker = f"(player {u['owner']})"
         lines.append(f"  u{u['id']} at node {u['location']} {marker}")
     return lines
 

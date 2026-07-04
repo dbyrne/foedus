@@ -21,12 +21,15 @@ from foedus.agents.llm.campaign_memory import (
     build_game_facts,
 )
 from foedus.agents.llm.render import (
+    _render_visible_units,
     render_campaign_record,
     render_game_facts,
     render_identity_legend,
     render_negotiation_prompt,
+    render_orders_prompt,
     render_self_note_prompt,
 )
+from foedus.eval.memory_metrics import parse_visible_owners
 from foedus.fog import visible_state_for
 from tests.helpers import simple_two_player_state
 
@@ -165,3 +168,42 @@ class TestNegotiationPromptToggle:
         _, b = render_negotiation_prompt(state, view, 0, identity=None)
         assert a == b
         assert "= Delta" not in a  # no legend when identity absent
+
+
+class TestVisibleUnitsRenderMetricsContract:
+    """Locks the render <-> memory_metrics ownership-parse contract for BOTH
+    arms, so the marker format and the extractor regex can never silently drift
+    (the bug both reviewers caught: subsidy/coalition silently zeroed)."""
+
+    VIEW = {"visible_units": [
+        {"id": 5, "location": 12, "owner": 0},   # mine (me = seat 0)
+        {"id": 8, "location": 7, "owner": 2},    # enemy seat 2
+        {"id": 9, "location": 3, "owner": 3},    # enemy seat 3
+    ]}
+    IDENT = IdentityContext(
+        my_handle="Delta",
+        seat_to_handle={0: "Delta", 1: "Echo", 2: "Foxtrot", 3: "Golf"})
+
+    def test_identity_arm_owners_parse(self):
+        text = "\n".join(_render_visible_units(self.VIEW, 0, self.IDENT))
+        assert "(p2 (Foxtrot))" in text and "(p3 (Golf))" in text
+        assert parse_visible_owners(text, 0) == {5: 0, 8: 2, 9: 3}
+
+    def test_baseline_arm_is_byte_identical_and_parses(self):
+        text = "\n".join(_render_visible_units(self.VIEW, 0, None))
+        # true back-compat: the pre-v1.1 literal marker, not "(p2)"
+        assert "u8 at node 7 (player 2)" in text
+        assert "(p2" not in text
+        assert parse_visible_owners(text, 0) == {5: 0, 8: 2, 9: 3}
+
+    def test_full_orders_prompt_owners_parse_under_identity(self):
+        state = simple_two_player_state()
+        view = visible_state_for(state, 0)
+        ident = IdentityContext(my_handle="Delta",
+                                seat_to_handle={0: "Delta", 1: "Echo"})
+        _, user = render_orders_prompt(state, view, 0, [], identity=ident)
+        owners = parse_visible_owners(user, 0)
+        # every VISIBLE UNIT line is recovered (own + any visible enemy)
+        assert owners  # non-empty
+        for u in view["visible_units"]:
+            assert owners.get(u["id"]) == u["owner"]

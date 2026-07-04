@@ -134,9 +134,14 @@ def canonical_seed_json(seeds: list[int]) -> str:
     return json.dumps(list(seeds), separators=(",", ":"))
 
 
-def seed_commitment(match_id: str, seeds: list[int], nonce: str) -> str:
-    """SHA-256 hex commitment: ``DOMAIN|match_id|json(seeds)|nonce`` (§7.5)."""
-    payload = f"{DOMAIN}|{match_id}|{canonical_seed_json(seeds)}|{nonce}"
+def seed_commitment(match_id: str, seeds: list[int], nonce: str,
+                    domain: str = DOMAIN) -> str:
+    """SHA-256 hex commitment: ``domain|match_id|json(seeds)|nonce`` (§7.5).
+
+    ``domain`` defaults to the ruleset tag and is folded into the hash so a
+    manifest's ``domain`` field is cryptographically bound, not decorative.
+    """
+    payload = f"{domain}|{match_id}|{canonical_seed_json(seeds)}|{nonce}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -242,5 +247,6 @@ def verify(manifest: SeedManifest) -> bool:
         return False
     if manifest.num_games != len(manifest.seeds):
         return False
-    recomputed = seed_commitment(manifest.match_id, manifest.seeds, manifest.nonce)
+    recomputed = seed_commitment(manifest.match_id, manifest.seeds,
+                                 manifest.nonce, domain=manifest.domain)
     return secrets.compare_digest(recomputed, manifest.commit)

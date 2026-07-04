@@ -146,6 +146,14 @@ class TestSeedManifest:
         revealed.num_games = 7  # inconsistent with len(seeds) == 8
         assert campaign.verify(revealed) is False
 
+    def test_verify_rejects_tampered_domain(self):
+        # domain is folded into the commitment, so it is cryptographically
+        # bound, not decorative.
+        sealed, seeds, nonce = campaign.seal("m8", 8, rng=random.Random(8))
+        revealed = campaign.revealed_manifest(sealed, seeds, nonce)
+        revealed.domain = "some-other-ruleset"
+        assert campaign.verify(revealed) is False
+
 
 # --- per-game seating plan (rotation composed with the roster) -----------
 
