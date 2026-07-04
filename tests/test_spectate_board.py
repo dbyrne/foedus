@@ -76,6 +76,43 @@ def test_build_turn_frames_llm_llm_support_excludes_freerider_and_self() -> None
     assert frames[0]["subsidy"] == 1
 
 
+def test_build_turn_frames_support_targets_classifies_each_order() -> None:
+    """Per-order classification (not just the turn-level aggregate) so the
+    replay UI can badge EACH Support order individually."""
+    prompt = (
+        "VISIBLE UNITS:\n"
+        "  u9 at node 3 (player 1)\n"
+        "  u10 at node 4 (player 3)\n"
+        "  u11 at node 5 (YOURS)\n"
+    )
+    decisions_by_seat = {
+        0: [_orders(
+            1, 0,
+            '{"5": {"type": "Support", "target": 9}, '
+            '"6": {"type": "Support", "target": 10}, '
+            '"7": {"type": "Support", "target": 11}, '
+            '"8": {"type": "Hold"}}',
+            prompt_user=prompt,
+        )],
+    }
+    frames = build_turn_frames(decisions_by_seat, freerider_seats=[3], llm_seats=[0, 1])
+    assert frames[0]["support_targets"][0] == {
+        "5": "llm",       # targets u9, owned by player 1 (another LLM seat)
+        "6": "freerider",  # targets u10, owned by player 3 (freerider)
+        "7": "self",       # targets u11, owned by the declaring seat itself
+    }
+    # Hold orders (unit 8) aren't Support orders -- no entry.
+    assert "8" not in frames[0]["support_targets"][0]
+
+
+def test_build_turn_frames_support_targets_unknown_owner() -> None:
+    decisions_by_seat = {
+        0: [_orders(1, 0, '{"5": {"type": "Support", "target": 999}}', prompt_user="")],
+    }
+    frames = build_turn_frames(decisions_by_seat, freerider_seats=[3], llm_seats=[0, 1])
+    assert frames[0]["support_targets"][0] == {"5": "unknown"}
+
+
 def test_build_turn_frames_fell_back_flag_recorded_per_seat() -> None:
     decisions_by_seat = {
         0: [_orders(1, 0, "{}", fell_back=True)],

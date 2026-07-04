@@ -82,7 +82,23 @@ def test_route_api_games_lists_finished_games(tmp_path) -> None:
     status, content_type, body = route(_fixture_run_dir(tmp_path), "GET", "/api/games")
     assert status == 200
     data = json.loads(body)
-    assert data == [{"game_id": 0, "game_index": 0}]
+    assert data == [{"game_id": 0, "game_index": 0, "live": False}]
+
+
+def test_route_api_games_includes_in_flight_live_game_when_stream_exists(tmp_path) -> None:
+    """Brief requirement: the server auto-upgrades to live turn-by-turn when
+    a spectate stream exists, even though that game has no sweep record
+    yet (it hasn't finished) -- /api/games must surface it as selectable."""
+    run_dir = _fixture_run_dir(tmp_path)
+    (run_dir / "spectate_game1.jsonl").write_text(json.dumps({
+        "game_id": 1, "turn": 1, "stances": {}, "intents": {}, "orders": {},
+        "scores": {"0": 0.0}, "eliminated": [],
+    }) + "\n")
+    status, content_type, body = route(run_dir, "GET", "/api/games")
+    assert status == 200
+    data = json.loads(body)
+    assert {"game_id": 0, "game_index": 0, "live": False} in data
+    assert {"game_id": 1, "game_index": 1, "live": True} in data
 
 
 def test_route_api_replay_returns_game_data(tmp_path) -> None:

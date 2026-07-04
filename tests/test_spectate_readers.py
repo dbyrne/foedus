@@ -12,9 +12,11 @@ from foedus.spectate.readers import (
     load_campaign_plan,
     load_decisions,
     load_self_notes,
+    load_spectate_stream,
     load_sweep,
     load_telemetry,
     load_timing,
+    seating_for_game,
 )
 
 
@@ -128,6 +130,29 @@ def test_load_self_notes_skips_blank_notes(tmp_path) -> None:
 
 def test_load_self_notes_no_files_returns_empty_list(tmp_path) -> None:
     assert load_self_notes(tmp_path) == []
+
+
+def test_seating_for_game_finds_matching_game_index() -> None:
+    plan = {"seatings": [
+        {"game_index": 0, "identity_by_seat": ["Delta", "Golf"]},
+        {"game_index": 1, "identity_by_seat": ["Golf", "Delta"]},
+    ]}
+    assert seating_for_game(plan, 1) == {"game_index": 1, "identity_by_seat": ["Golf", "Delta"]}
+
+
+def test_seating_for_game_missing_returns_empty_dict() -> None:
+    assert seating_for_game({"seatings": []}, 0) == {}
+    assert seating_for_game(None, 0) == {}
+
+
+def test_load_spectate_stream_reads_jsonl_lines(tmp_path) -> None:
+    lines = [{"game_id": 2, "turn": 1}, {"game_id": 2, "turn": 2}]
+    (tmp_path / "spectate_game2.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+    assert load_spectate_stream(tmp_path, game_id=2) == lines
+
+
+def test_load_spectate_stream_missing_file_returns_empty_list(tmp_path) -> None:
+    assert load_spectate_stream(tmp_path, game_id=0) == []
 
 
 def test_load_self_notes_dedupes_across_cumulative_files(tmp_path) -> None:

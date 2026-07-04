@@ -44,6 +44,23 @@ def load_telemetry(run_dir: str | Path) -> list[dict]:
     return _load_jsonl(Path(run_dir) / "telemetry.jsonl")
 
 
+def load_spectate_stream(run_dir: str | Path, game_id: int) -> list[dict]:
+    """The opt-in live per-turn stream (see foedus/spectate/emit.py), if a
+    harness run had FOEDUS_SPECTATE_DIR pointed at this run_dir. Empty for
+    any game that either finished normally (no live stream needed) or was
+    never run with the emitter enabled."""
+    return _load_jsonl(Path(run_dir) / f"spectate_game{game_id}.jsonl")
+
+
+def seating_for_game(plan: dict | None, game_index: int) -> dict:
+    """The campaign_plan.json seating entry for one game_index, or {} if the
+    plan is absent or has no matching entry (e.g. a non-campaign run)."""
+    for seating in (plan or {}).get("seatings") or []:
+        if seating.get("game_index") == game_index:
+            return seating
+    return {}
+
+
 def load_timing(run_dir: str | Path) -> dict:
     result = {"started_at": None, "ended_at": None, "rc": None, "elapsed_s": None}
     path = Path(run_dir) / "timing.log"

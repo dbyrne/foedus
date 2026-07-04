@@ -57,6 +57,8 @@ select {{ font-size: 0.95rem; padding: 3px 6px; }}
 .tag {{ font-size: 0.68rem; padding: 0 4px; border-radius: 4px; margin-left: 4px; }}
 .tag.pub {{ background: rgba(0,114,178,0.18); }}
 .tag.priv {{ background: rgba(230,159,0,0.25); }}
+.tag.support-freerider {{ background: rgba(230,159,0,0.3); font-weight: 600; }}
+.tag.support-llm {{ background: rgba(0,114,178,0.22); font-weight: 600; }}
 .empty {{ opacity: 0.6; font-size: 0.8rem; }}
 a {{ color: var(--blue); }}
 nav a {{ margin-right: 14px; }}
@@ -254,7 +256,9 @@ async function loadGameList() {{
   const res = await fetch('/api/games');
   const games = await res.json();
   const sel = document.getElementById('game-select');
-  sel.innerHTML = games.map(g => `<option value="${{g.game_id}}">Game ${{g.game_index}} (id ${{g.game_id}})</option>`).join('');
+  sel.innerHTML = games.map(g =>
+    `<option value="${{g.game_id}}">Game ${{g.game_index}}${{g.live ? ' 🔴 LIVE (in progress)' : ''}}</option>`
+  ).join('');
   if (!games.length) {{
     document.getElementById('status').textContent = 'No finished games yet — the campaign is still running. Check back soon.';
     return;
@@ -279,10 +283,20 @@ function renderHeader() {{
   const d = replayData;
   document.getElementById('identities').textContent = d.identity_by_seat
     .map((h, i) => `${{i}}:${{h}}${{d.freerider_seats.includes(i) ? ' 🎭' : ''}}`).join('   ');
-  const finalScores = Object.entries(d.final_scores)
+  const scores = Object.entries(d.final_scores)
     .map(([seat, score]) => `${{d.identity_by_seat[seat] ?? 'seat'+seat}}=${{score.toFixed(1)}}`).join(', ');
-  document.getElementById('final-banner').textContent =
-    `Final: ${{finalScores}} — winners: ${{d.winners.map(s => d.identity_by_seat[s] ?? s).join(', ')}}${{d.detente_reached ? ' (détente)' : ''}}`;
+  document.getElementById('final-banner').textContent = d.live
+    ? `🔴 LIVE — game in progress, turn ${{d.turns.length}} so far. Current scores: ${{scores}}`
+    : `Final: ${{scores}} — winners: ${{d.winners.map(s => d.identity_by_seat[s] ?? s).join(', ')}}${{d.detente_reached ? ' (détente)' : ''}}`;
+}}
+
+function supportBadge(d, turn, seat, unitId) {{
+  const cls = (turn.support_targets[seat] || {{}})[unitId];
+  if (!cls) return '';
+  const labels = {{
+    freerider: '🎭 subsidizes freerider', llm: '🤝 LLM↔LLM', self: '(self)', unknown: '(unknown target)',
+  }};
+  return ` <span class="tag support-${{cls}}">${{labels[cls] || cls}}</span>`;
 }}
 
 function buildGraphSvg(d, turn) {{
@@ -359,7 +373,7 @@ function renderTurn() {{
     }}
     if (orders) {{
       decls += '<div class="label">submitted orders</div><ul>' + Object.entries(orders).map(([uid, o]) =>
-        `<li>u${{uid}} ${{orderLabel(o)}}</li>`
+        `<li>u${{uid}} ${{orderLabel(o)}}${{supportBadge(d, turn, seat, uid)}}</li>`
       ).join('') + '</ul>';
     }}
     if (!declared.length && !orders) decls += '<div class="empty">(no data this turn)</div>';
@@ -374,7 +388,7 @@ function renderTurn() {{
   document.getElementById('next-btn').disabled = currentTurnIdx === d.turns.length - 1;
 
   const endCard = document.getElementById('game-end-card');
-  if (currentTurnIdx === d.turns.length - 1) {{
+  if (!d.live && currentTurnIdx === d.turns.length - 1) {{
     const scores = Object.entries(d.final_scores).map(([seat, score]) =>
       `<li>${{esc(d.identity_by_seat[seat] ?? 'seat' + seat)}}: ${{score.toFixed(1)}}</li>`).join('');
     const notes = d.self_notes.map(n => `<li><b>${{esc(n.entrant_identity)}}</b>: "${{esc(n.self_note)}}"</li>`).join('') || '<li class="empty">(none)</li>';

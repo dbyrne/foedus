@@ -20,18 +20,12 @@ from foedus.spectate.readers import (
     load_sweep,
     load_telemetry,
     load_timing,
+    seating_for_game,
 )
 
 
 def _mean(xs: list[float]) -> float | None:
     return (sum(xs) / len(xs)) if xs else None
-
-
-def _seating_for(plan: dict | None, game_index: int) -> dict:
-    for seating in (plan or {}).get("seatings") or []:
-        if seating.get("game_index") == game_index:
-            return seating
-    return {}
 
 
 def build_dashboard(run_dir: str | Path) -> dict:
@@ -50,7 +44,7 @@ def build_dashboard(run_dir: str | Path) -> dict:
     games = []
     for i, sw in enumerate(sweep):
         game_index = sw.get("game_index", i)
-        seating = _seating_for(plan, game_index)
+        seating = seating_for_game(plan, game_index)
         identity_by_seat = (
             seating.get("identity_by_seat") or sw.get("identity_by_seat") or []
         )

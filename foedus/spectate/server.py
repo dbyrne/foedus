@@ -11,6 +11,7 @@ http.server.ThreadingHTTPServer for the `foedus_spectator.py serve` CLI.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,6 +22,28 @@ from foedus.spectate.dashboard import build_dashboard
 from foedus.spectate.html import DASHBOARD_HTML, REPLAY_HTML
 from foedus.spectate.readers import load_sweep
 from foedus.spectate.replay import build_replay
+
+_SPECTATE_STREAM_RE = re.compile(r"^spectate_game(\d+)\.jsonl$")
+
+
+def _list_games(run_dir: Path) -> list[dict]:
+    """Finished games (from sweep.jsonl) plus any in-flight game that has an
+    opt-in live spectate stream but no sweep record yet -- "the spectator
+    server auto-upgrades to live turn-by-turn when the stream exists"."""
+    games = [
+        {"game_id": r.get("game_id"), "game_index": r.get("game_index"), "live": False}
+        for r in load_sweep(run_dir)
+    ]
+    finished_ids = {g["game_id"] for g in games}
+    for path in sorted(run_dir.glob("spectate_game*.jsonl")):
+        m = _SPECTATE_STREAM_RE.match(path.name)
+        if not m:
+            continue
+        game_id = int(m.group(1))
+        if game_id in finished_ids:
+            continue
+        games.append({"game_id": game_id, "game_index": game_id, "live": True})
+    return games
 
 _ACTIVITY_FILES = (
     "sweep.jsonl", "telemetry.jsonl", "timing.log",
@@ -79,11 +102,7 @@ def route(run_dir: str | Path, method: str, path: str) -> tuple[int, str, bytes]
         return _json_response(data)
 
     if p == "/api/games":
-        games = [
-            {"game_id": r.get("game_id"), "game_index": r.get("game_index")}
-            for r in load_sweep(run_dir)
-        ]
-        return _json_response(games)
+        return _json_response(_list_games(run_dir))
 
     if p.startswith("/api/replay/"):
         raw_id = p[len("/api/replay/"):]
