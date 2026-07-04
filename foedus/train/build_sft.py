@@ -24,8 +24,8 @@ Only **valid teacher decisions** are kept:
 * ``fell_back`` is falsey (the harness didn't fall back to a default order), AND
 * ``raw_response`` is *real JSON* — not a ``<client error ...>`` timeout
   sentinel, not empty, and not free-form reasoning prose. (In the archived
-  corpus ~13% of non-fell_back rows were prose narration with no parseable JSON;
-  the brief requires we drop those.)
+  corpus ~13% of non-fell_back rows had no parseable JSON — a mix of timeout
+  sentinels and reasoning-prose narration; the brief requires we drop those.)
 
 Identical ``(system, user, assistant)`` triples are de-duplicated. With
 ``--winners-only`` (default OFF) only decisions from seats that won or tied-top
@@ -47,7 +47,10 @@ from pathlib import Path
 from typing import Iterable
 
 SENTINEL_PREFIX = "<client error"
-_DECISION_FILE_RE = re.compile(r"decisions_game(\d+)_seat(\d+)\.jsonl$")
+# Matches both the multi-seat harness name (decisions_game{N}_seat{M}.jsonl) and
+# the default single-seat name (decisions_game{N}.jsonl, no seat suffix).
+_DECISION_FILE_RE = re.compile(r"decisions_game(\d+)(?:_seat(\d+))?\.jsonl$")
+_DECISION_GLOB = "decisions_game*.jsonl"
 _FENCE_RE = re.compile(r"^```[a-zA-Z0-9_-]*\n(.*)\n```$", re.DOTALL)
 
 
@@ -61,10 +64,12 @@ def _strip_code_fence(text: str) -> str:
 
 
 def _is_real_json(raw_response: object) -> bool:
-    """True iff ``raw_response`` is a non-empty string that parses as JSON.
+    """True iff ``raw_response`` is a non-empty string parsing to a JSON object/array.
 
     Tolerates a single Markdown code fence around the JSON. Rejects the
-    ``<client error ...>`` sentinel, empty strings, and reasoning prose.
+    ``<client error ...>`` sentinel, empty strings, reasoning prose, and bare
+    JSON scalars (``42``, ``"foo"``, ``null``) — a real decision is always an
+    object (or array).
     """
     if not isinstance(raw_response, str):
         return False
@@ -73,10 +78,10 @@ def _is_real_json(raw_response: object) -> bool:
         return False
     candidate = _strip_code_fence(stripped)
     try:
-        json.loads(candidate)
+        parsed = json.loads(candidate)
     except (ValueError, TypeError):
         return False
-    return True
+    return isinstance(parsed, (dict, list))
 
 
 def _has_prompt(record: dict) -> bool:
@@ -118,12 +123,19 @@ def _dedup_key(record: dict) -> tuple[str, str, str]:
     return (prompt["system"], prompt["user"], record["raw_response"])
 
 
-def parse_game_seat(path) -> tuple[int, int]:
-    """Extract ``(game_id, seat)`` from a ``decisions_game{N}_seat{M}.jsonl`` path."""
+def parse_game_seat(path) -> tuple[int, int | None]:
+    """Extract ``(game_id, seat)`` from a decision-log filename.
+
+    Handles both ``decisions_game{N}_seat{M}.jsonl`` (multi-seat harness) and
+    ``decisions_game{N}.jsonl`` (default single-seat harness) — in the latter the
+    filename carries no seat, so ``seat`` is ``None`` and the record's ``player``
+    field is used for winner attribution instead.
+    """
     m = _DECISION_FILE_RE.search(Path(path).name)
     if not m:
         raise ValueError(f"not a decision-log filename: {path}")
-    return int(m.group(1)), int(m.group(2))
+    seat = int(m.group(2)) if m.group(2) is not None else None
+    return int(m.group(1)), seat
 
 
 def load_winners(directory) -> dict[int, set[int]]:
@@ -171,29 +183,34 @@ class BuildStats:
 
 def _iter_decision_files(run_dirs: Iterable) -> Iterable[Path]:
     for run_dir in run_dirs:
-        for path in sorted(Path(run_dir).rglob("decisions_game*_seat*.jsonl")):
-            yield path
+        for path in sorted(Path(run_dir).rglob(_DECISION_GLOB)):
+            if _DECISION_FILE_RE.search(path.name):
+                yield path
 
 
 def build_dataset(run_dirs, winners_only: bool = False):
     """Return ``(examples, BuildStats)`` for all decision logs under ``run_dirs``.
 
-    ``run_dirs`` is one or more directories searched recursively. Identical
-    ``(system, user, response)`` pairs are de-duplicated across all inputs.
+    ``run_dirs`` is one or more directories searched recursively (both the
+    multi-seat ``decisions_game{N}_seat{M}.jsonl`` and single-seat
+    ``decisions_game{N}.jsonl`` names). Identical ``(system, user, response)``
+    pairs are de-duplicated across all inputs.
     """
     stats = BuildStats()
     seen: set[tuple[str, str, str]] = set()
     examples: list[dict] = []
     winners_cache: dict[Path, dict[int, set[int]]] = {}
+    warned_dirs: set[Path] = set()
 
     for path in _iter_decision_files(run_dirs):
         stats.files += 1
-        game_id, seat = parse_game_seat(path)
+        game_id, _seat = parse_game_seat(path)
         if winners_only:
             if path.parent not in winners_cache:
                 winners_cache[path.parent] = load_winners(path.parent)
             game_winners = winners_cache[path.parent]
-            if not game_winners:
+            if not game_winners and path.parent not in warned_dirs:
+                warned_dirs.add(path.parent)
                 sys.stderr.write(
                     f"[build_sft] warning: --winners-only but no sweep.jsonl in "
                     f"{path.parent}; dropping its decisions\n"
@@ -215,9 +232,13 @@ def build_dataset(run_dirs, winners_only: bool = False):
             if not _has_prompt(record):
                 stats.malformed_prompt += 1
                 continue
-            if winners_only and seat not in winners_cache[path.parent].get(game_id, set()):
-                stats.winners_filtered += 1
-                continue
+            if winners_only:
+                # Seat is authoritative from the record's `player` field, which
+                # is present in both single- and multi-seat logs.
+                seat = record.get("player")
+                if seat not in winners_cache[path.parent].get(game_id, set()):
+                    stats.winners_filtered += 1
+                    continue
 
             key = _dedup_key(record)
             if key in seen:
@@ -264,6 +285,18 @@ def main(argv: list[str] | None = None) -> int:
     write_jsonl(examples, args.out)
     sys.stderr.write(f"[build_sft] {stats.summary()}\n")
     sys.stderr.write(f"[build_sft] wrote {stats.written} examples -> {args.out}\n")
+
+    if stats.files == 0:
+        sys.stderr.write(
+            "[build_sft] WARNING: no decision logs (decisions_game*.jsonl) found "
+            "under the given run dir(s) — wrote an EMPTY dataset. Check the paths "
+            "and that the harness wrote decisions_game{N}[_seat{M}].jsonl.\n"
+        )
+    elif stats.written == 0:
+        sys.stderr.write(
+            f"[build_sft] WARNING: found {stats.files} file(s) but 0 valid pairs "
+            "survived filtering — wrote an EMPTY dataset.\n"
+        )
     return 0
 
 

@@ -17,6 +17,7 @@ from foedus.train.build_sft import (
     build_dataset,
     is_valid_teacher,
     load_winners,
+    main,
     parse_game_seat,
     to_chat_example,
 )
@@ -52,6 +53,14 @@ def rec(
 def write_decisions(directory: Path, game: int, seat: int, records: list[dict]) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"decisions_game{game}_seat{seat}.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in records))
+    return path
+
+
+def write_decisions_unsuffixed(directory: Path, game: int, records: list[dict]) -> Path:
+    """Single-seat harness mode: decisions_game{N}.jsonl (no _seat suffix)."""
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"decisions_game{game}.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in records))
     return path
 
@@ -97,6 +106,14 @@ def test_accepts_fenced_json_block():
     assert is_valid_teacher(rec(raw_response=fenced)) is True
 
 
+def test_rejects_bare_json_scalar():
+    # A decision is always a JSON object (or array); a bare scalar that merely
+    # happens to parse as JSON is not a valid teacher decision.
+    assert is_valid_teacher(rec(raw_response="42")) is False
+    assert is_valid_teacher(rec(raw_response='"just a string"')) is False
+    assert is_valid_teacher(rec(raw_response="null")) is False
+
+
 # --- to_chat_example --------------------------------------------------------
 
 
@@ -116,6 +133,11 @@ def test_chat_example_shape_and_verbatim_assistant():
 
 def test_parse_game_seat_from_filename():
     assert parse_game_seat(Path("runs/x/decisions_game2_seat3.jsonl")) == (2, 3)
+
+
+def test_parse_game_seat_unsuffixed_single_seat():
+    # harness default single-seat mode: no _seat suffix -> seat is None
+    assert parse_game_seat(Path("runs/x/decisions_game5.jsonl")) == (5, None)
 
 
 def test_load_winners_reads_sweep(tmp_path):
@@ -198,6 +220,57 @@ def test_build_dataset_winners_only(tmp_path):
     assert win_stats.written == 1
     assert win_stats.winners_filtered == 1
     assert win_ex[0]["messages"][1]["content"] == "winner"
+
+
+def test_build_dataset_reads_unsuffixed_single_seat_file(tmp_path):
+    # The runner's default single-seat mode writes decisions_game{N}.jsonl.
+    # Builder must pick these up, not silently ignore them.
+    write_decisions_unsuffixed(
+        tmp_path, game=0, records=[rec(user="x"), rec(user="y", raw_response=CLEAN_JSON)]
+    )
+    examples, stats = build_dataset([tmp_path])
+    assert stats.files == 1
+    assert stats.written == 2
+
+
+def test_winners_only_uses_player_field_for_unsuffixed(tmp_path):
+    # For unsuffixed single-seat files, winner attribution reads the record's
+    # `player` field (the filename carries no seat).
+    write_sweep(tmp_path, [{"game_id": 0, "winners": [2]}])
+    write_decisions_unsuffixed(
+        tmp_path,
+        game=0,
+        records=[rec(player=2, user="winner"), rec(player=1, user="loser")],
+    )
+    ex, stats = build_dataset([tmp_path], winners_only=True)
+    assert stats.written == 1
+    assert stats.winners_filtered == 1
+    assert ex[0]["messages"][1]["content"] == "winner"
+
+
+def test_build_dataset_counts_malformed_prompt(tmp_path):
+    # valid JSON raw_response but the record is missing prompt fields
+    bad = {
+        "turn": 0,
+        "phase": "orders",
+        "player": 0,
+        "raw_response": CLEAN_JSON,
+        "fell_back": False,
+    }
+    write_decisions(tmp_path, 0, 0, [bad])
+    _, stats = build_dataset([tmp_path])
+    assert stats.malformed_prompt == 1
+    assert stats.written == 0
+
+
+def test_main_warns_loudly_on_empty_dataset(tmp_path, capsys):
+    # No decision logs present -> loud warning (not a silent empty file).
+    out = tmp_path / "empty.jsonl"
+    code = main([str(tmp_path), "--out", str(out)])
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert out.read_text() == ""
 
 
 def test_build_dataset_dedups_across_multiple_dirs(tmp_path):

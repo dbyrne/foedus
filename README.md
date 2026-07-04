@@ -223,6 +223,22 @@ at inference time. The NN never sees chat; the LLM bias-injects soft
 constraints into the NN's policy. The MCP wrapper means you can swap any
 LLM (local or Claude, Gemini, etc.) into the negotiator slot.
 
+## Training gym (distill → QLoRA → serve → play)
+
+Turn an LLM teacher's arena play into your own local entrant. The loop is proven
+end-to-end (see [`docs/design/2026-07-04-gym-pipeline-v0.md`](docs/design/2026-07-04-gym-pipeline-v0.md)):
+
+```sh
+pip install -e .[train]        # opt-in GPU extra (Python <=3.12 + CUDA; not pulled by [dev])
+
+# 1. distill decision logs -> SFT chat pairs (stdlib-only, runs anywhere)
+python -m foedus.train.build_sft <run-dir> ... --out data/sft.jsonl
+# 2. QLoRA fine-tune a small base (default Qwen2.5-3B-Instruct); --smoke proves the loop
+python scripts/foedus_train_qlora.py --sft-path data/sft.jsonl --smoke --out-dir runs/entrant
+# 3. merge -> GGUF -> ollama create, then play via the existing OllamaClient
+python scripts/foedus_serve_ollama.py --adapter-dir runs/entrant --model-name foedus-entrant-v0
+```
+
 ## Status
 
 v1, pre-release. Engine internals (resolution rules, state semantics) are

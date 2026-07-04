@@ -74,8 +74,9 @@ the seat prompt and assistant is the teacher's `raw_response` **verbatim**.
 Keeps only **valid teacher decisions**:
 - `fell_back == False`, **and**
 - `raw_response` is **real JSON** — not a `<client error …>` timeout sentinel, not
-  empty, not reasoning prose. (In the corpus, ~13% of non-fell_back rows were prose
-  narration with no parseable JSON — the brief requires dropping those.)
+  empty, not reasoning prose, and not a bare scalar (a decision is always a JSON
+  object). (In the corpus, ~13% of non-fell_back rows had no parseable JSON — a mix
+  of timeout sentinels and prose narration — the brief requires dropping those.)
 
 Identical `(system, user, response)` triples are de-duplicated. `--winners-only`
 (default **OFF**) keeps only seats that won/tied-top their game (from sibling
@@ -156,7 +157,8 @@ v0 proves the loop; the follow-up makes a *real* entrant:
    (same log format) as it lands — no code change. Consider `--winners-only` and/or
    mixing arms once N is large enough.
 2. **Full train.** Drop `--smoke`; set `--epochs 2–3` (or a step budget), keep 3B,
-   tune LR/warmup. The harness is already resumable via `--resume`.
+   tune LR/warmup. For a crash-resumable full run also pass `--save-steps N` (the
+   v0 default is `0` = save only at the end, so `--resume` needs a checkpointed run).
 3. **Quality levers to try:** `assistant_only_loss` (mask the prompt so loss is on the
    decision only — verify the Qwen chat template supports assistant masking first);
    LoRA rank/target-module sweeps; possibly the winners-only subset for higher-quality
