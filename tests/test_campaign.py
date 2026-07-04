@@ -145,3 +145,59 @@ class TestSeedManifest:
         revealed = campaign.revealed_manifest(sealed, seeds, nonce)
         revealed.num_games = 7  # inconsistent with len(seeds) == 8
         assert campaign.verify(revealed) is False
+
+
+# --- per-game seating plan (rotation composed with the roster) -----------
+
+class TestGameSeating:
+    IDS = ["Alpha", "Bravo", "Charlie", "Freerider"]  # entrant 3 = freerider
+
+    def test_rotate_game0_is_identity(self):
+        gs = campaign.plan_seating(0, self.IDS, {3}, rotate=True)
+        assert gs.seat_to_entrant == {0: 0, 1: 1, 2: 2, 3: 3}
+        assert gs.identity_by_seat == self.IDS
+        assert gs.llm_seats == [0, 1, 2]
+        assert gs.freerider_seats == [3]
+
+    def test_rotation_moves_freerider_seat(self):
+        # entrant 3 (freerider) sits in seat (3 + k) % 4
+        for k in range(8):
+            gs = campaign.plan_seating(k, self.IDS, {3}, rotate=True)
+            assert gs.freerider_seats == [(3 + k) % 4]
+            # llm seats are exactly the other three
+            assert gs.llm_seats == sorted(set(range(4)) - {(3 + k) % 4})
+            # the freerider seat is labelled with the freerider identity
+            assert gs.identity_by_seat[(3 + k) % 4] == "Freerider"
+
+    def test_entrant_identity_travels_with_entrant_across_games(self):
+        # Alpha (entrant 0) is always identity "Alpha", wherever it sits
+        for k in range(8):
+            gs = campaign.plan_seating(k, self.IDS, {3}, rotate=True)
+            seat_of_alpha = gs.entrant_to_seat[0]
+            assert gs.identity_by_seat[seat_of_alpha] == "Alpha"
+
+    def test_no_rotation_pins_seats(self):
+        for k in range(4):
+            gs = campaign.plan_seating(k, self.IDS, {3}, rotate=False)
+            assert gs.seat_to_entrant == {0: 0, 1: 1, 2: 2, 3: 3}
+            assert gs.freerider_seats == [3]
+            assert gs.llm_seats == [0, 1, 2]
+
+    def test_full_cycle_balances_every_entrant_over_every_seat(self):
+        seen = {i: set() for i in range(4)}
+        for k in range(4):
+            gs = campaign.plan_seating(k, self.IDS, {3}, rotate=True)
+            for seat, ent in gs.seat_to_entrant.items():
+                seen[ent].add(seat)
+        assert all(seen[e] == {0, 1, 2, 3} for e in range(4))
+
+    def test_identity_by_seat_is_a_permutation_of_roster(self):
+        for k in range(8):
+            gs = campaign.plan_seating(k, self.IDS, {3}, rotate=True)
+            assert sorted(gs.identity_by_seat) == sorted(self.IDS)
+
+    def test_validation(self):
+        with pytest.raises(ValueError):
+            campaign.plan_seating(0, ["A", "B", "C"], {5}, rotate=True)  # bad frdr idx
+        with pytest.raises(ValueError):
+            campaign.plan_seating(0, [], set(), rotate=True)  # empty roster
