@@ -51,6 +51,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from foedus.core import Archetype               # noqa: E402
 from foedus.eval import campaign                 # noqa: E402
+from foedus.agents.llm.campaign_memory import IdentityContext  # noqa: E402
 from foedus.presets import ruleset_v1            # noqa: E402
 from foedus.scoring import compute_match_result  # noqa: E402
 
@@ -95,14 +96,17 @@ def build_parser() -> argparse.ArgumentParser:
                         "cycles).")
     p.add_argument("--out-dir", required=True,
                    help="Durable output directory (committed with the PR).")
-    p.add_argument("--entrants", default="Sonnet-Alpha,Sonnet-Bravo,Sonnet-Charlie",
-                   help="Comma-separated stable identities for the LLM entrants "
-                        "(3 by default).")
+    p.add_argument("--entrants", default="Delta,Echo,Foxtrot",
+                   help="Comma-separated stable NEUTRAL handles for the LLM "
+                        "entrants (3 by default). These are what opponents see + "
+                        "the OpenSkill identities (Ruleset v1.1, identity-keyed).")
     p.add_argument("--freerider", default="DishonestCooperator",
-                   help="Heuristic class name for the house freerider seat.")
-    p.add_argument("--freerider-identity", default="DishonestCooperator",
-                   help="Rating/archive identity for the freerider (kept equal "
-                        "to the class name so the scorecard finds it by name).")
+                   help="Heuristic CLASS name for the house freerider seat "
+                        "(what run_one_llm_game instantiates).")
+    p.add_argument("--freerider-identity", default="Golf",
+                   help="NEUTRAL arena handle for the freerider — nothing hinting "
+                        "at its nature. Agents + OpenSkill see only this handle; "
+                        "the handle->role map is recorded operator-side only.")
     p.add_argument("--backend", default="claude-cli",
                    help="FOEDUS_LLM_BACKEND for the LLM seats.")
     p.add_argument("--model", default="sonnet", help="FOEDUS_LLM_MODEL.")
@@ -117,6 +121,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Disable cross-game memory (default ON).")
     p.add_argument("--transcripts", type=int, default=None,
                    help="Number of games to render to markdown (default: all).")
+    p.add_argument("--max-turns", type=int, default=None,
+                   help="TEST/REPRO ONLY: override the ruleset_v1 preset's "
+                        "max_turns (12). A real match omits this.")
     p.add_argument("--seed-rng", type=int, default=None,
                    help="Seed the CSPRNG used to draw game seeds (TEST/REPRO "
                         "ONLY — a real match omits this for a true CSPRNG draw).")
@@ -126,7 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
     args = build_parser().parse_args(argv)
 
     entrant_llm = [e.strip() for e in args.entrants.split(",") if e.strip()]
@@ -143,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = ruleset_v1(num_players=num_seats)
     archetype = cfg.archetype
-    max_turns = cfg.max_turns
+    max_turns = args.max_turns if args.max_turns is not None else cfg.max_turns
     map_radius = cfg.map_radius
 
     # --- §7.5 commit: draw + seal the seed list, publish before any game -----
@@ -159,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
                               rotate=rotate)
         for g in range(args.num_games)
     ]
+    freerider_handles = [entrant_identities[e] for e in sorted(freerider_entrants)]
     plan = {
         "match_id": args.match_id,
         "num_games": args.num_games,
@@ -166,6 +174,15 @@ def main(argv: list[str] | None = None) -> int:
         "rotation": rotate,
         "entrant_identities": entrant_identities,
         "freerider_entrants": sorted(freerider_entrants),
+        # operator-only (never shown to agents): which neutral handle is the
+        # freerider house anchor, and each handle's true role.
+        "freerider_handles": freerider_handles,
+        "freerider_class": args.freerider,
+        "handle_roles": {
+            entrant_identities[e]: ("freerider" if e in freerider_entrants
+                                    else "llm-entrant")
+            for e in range(num_seats)
+        },
         "board": {"num_players": num_seats, "max_turns": max_turns,
                   "map_radius": map_radius, "archetype": archetype.value,
                   "detente_threshold": cfg.detente_threshold},
@@ -204,8 +221,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_campaign_memory:
         os.environ["FOEDUS_LLM_CAMPAIGN"] = "1"
 
-    from foedus.agents.llm.diplomat import LLMDiplomat  # noqa: E402
-    factory = LLMDiplomat
+    if agent_factory is not None:
+        factory = agent_factory  # test injection (StubLLMClient-backed agents)
+    else:
+        from foedus.agents.llm.diplomat import LLMDiplomat  # noqa: E402
+        factory = LLMDiplomat
 
     # Persistent per-entrant LLM agents (index by entrant, NOT seat, so memory
     # travels with the entrant across rotated seats). Freerider is a stateless
@@ -233,6 +253,14 @@ def main(argv: list[str] | None = None) -> int:
             agents_by_seat = {
                 seat: persistent[gs.seat_to_entrant[seat]] for seat in gs.llm_seats
             }
+            # Ruleset v1.1: give each reused agent this game's identity context
+            # (its own stable handle + the full seat->handle legend) so prompts
+            # show opponents by handle and cross-game memory keys on the handle.
+            seat_to_handle = {s: gs.identity_by_seat[s] for s in range(num_seats)}
+            for seat in gs.llm_seats:
+                agents_by_seat[seat].set_identity_context(
+                    IdentityContext(my_handle=gs.identity_by_seat[seat],
+                                    seat_to_handle=dict(seat_to_handle)))
 
             t0 = time.time()
             sweep, telemetry, final_state, _ = run_one_llm_game(

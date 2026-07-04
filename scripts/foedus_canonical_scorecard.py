@@ -95,8 +95,22 @@ def _halves_mean(series: list[float]):
     return first, second
 
 
-def build_report(out_dir: str, freerider_names: set[str]) -> dict:
+def _freerider_handles_from_plan(out_dir: Path) -> set[str] | None:
+    """The freerider handle(s) recorded operator-side in campaign_plan.json, so
+    the scorecard finds the (neutral-handle) freerider without the operator
+    having to remember it. None if no plan is present."""
+    plan_path = out_dir / "campaign_plan.json"
+    if not plan_path.exists():
+        return None
+    plan = json.loads(plan_path.read_text())
+    handles = plan.get("freerider_handles")
+    return set(handles) if handles else None
+
+
+def build_report(out_dir: str, freerider_names: set[str] | None = None) -> dict:
     d = Path(out_dir)
+    if not freerider_names:
+        freerider_names = _freerider_handles_from_plan(d) or {"DishonestCooperator"}
     agg = base_scorecard(out_dir, freerider_names)
     sweeps = {s.get("game_id"): s for s in _load_jsonl(d / "sweep.jsonl")}
 
@@ -228,11 +242,14 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--out-dir", required=True)
-    p.add_argument("--freerider", default="DishonestCooperator",
-                   help="Comma-separated identity/name(s) treated as freerider.")
+    p.add_argument("--freerider", default=None,
+                   help="Comma-separated identity/name(s) treated as freerider. "
+                        "Default: auto-read freerider_handles from "
+                        "campaign_plan.json, else 'DishonestCooperator'.")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
-    names = {n.strip() for n in args.freerider.split(",") if n.strip()}
+    names = ({n.strip() for n in args.freerider.split(",") if n.strip()}
+             if args.freerider else None)
     rep = build_report(args.out_dir, names)
     if args.json:
         print(json.dumps(rep, indent=2, default=str))
