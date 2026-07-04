@@ -15,6 +15,12 @@ rating = ["openskill>=6.0"]
 remote = ["fastapi>=0.110", "uvicorn[standard]>=0.30", "httpx>=0.27"]
 llm = ["httpx>=0.27", "anthropic>=0.40"]
 web = ["fastapi>=0.110", "uvicorn[standard]>=0.30", "httpx>=0.27", "sqlalchemy>=2.0", "alembic>=1.13", "authlib>=1.3", "itsdangerous>=2.2", "pyjwt>=2.8", "pydantic-settings>=2.2", "jinja2>=3.1", "python-multipart>=0.0.9"]
+# Training gym (QLoRA fine-tune a local entrant). GPU-only, opt-in — CI/others are
+# NOT forced to install torch. NOTE: requires Python <=3.12 (torch/bitsandbytes have
+# no 3.13/3.14 wheels yet) and a CUDA GPU; on Linux `pip install` pulls torch's bundled
+# CUDA build automatically. Floors match the versions validated in the v0 preflight
+# (torch 2.12.1+cu130, transformers 5.13, trl 1.7.1, peft 0.19.1, bitsandbytes 0.49.2).
+train = ["torch>=2.4", "transformers>=5.13", "trl>=1.7", "peft>=0.15", "accelerate>=1.0", "bitsandbytes>=0.45", "datasets>=3.0"]
 
 [project.scripts]
 foedus = "foedus.cli:main"
