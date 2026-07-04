@@ -44,6 +44,13 @@ LADDER: list[str] = [
     "DishonestCooperator",  # strong (req'd) (mu ~36.0, win 52.7%)
 ]
 
+# The competitive band: the ladder minus its trivially-separable floor and
+# ceiling. The full discrimination index is dominated by the two extremes
+# (every format tells Defensive from DishonestCooperator), so measuring
+# discrimination over the middle rungs is what reveals whether a format
+# separates *close* skill. See doc §6.3.
+MID_LADDER: list[str] = LADDER[1:-1]
+
 
 # --- seat assignment ------------------------------------------------------
 
@@ -167,6 +174,26 @@ def separated_adjacent_pairs(
     return count
 
 
+def min_adjacent_separation(
+    order: Sequence[Hashable],
+    ratings: dict[Hashable, tuple[float, float]],
+) -> float:
+    """Tightest adjacent-rung gap, in combined-sigma units.
+
+    `order` is best->worst; returns min over neighbours of
+    (mu_better - mu_worse) / (sigma_better + sigma_worse). A single number
+    for "how hard is the *hardest* pair to tell apart" — the bottleneck a
+    tail-dominated spread metric hides. inf for < 2 rungs.
+    """
+    gaps = []
+    for a, b in zip(order, order[1:]):
+        mu_a, sig_a = ratings[a]
+        mu_b, sig_b = ratings[b]
+        denom = sig_a + sig_b
+        gaps.append((mu_a - mu_b) / denom if denom else float("inf"))
+    return min(gaps) if gaps else float("inf")
+
+
 # --- game-level aggregates ------------------------------------------------
 
 def detente_rate(records: Sequence[dict]) -> float:
@@ -198,6 +225,10 @@ def rate_records(records: Sequence[dict]):
     from foedus.rating import RatingSystem
     from foedus.scoring import MatchResult
 
+    # NOTE: RatingSystem.update consumes ONLY match.rank — payout,
+    # final_scores, detente and solo_winner are ignored by OpenSkill. They are
+    # populated for fidelity to the MatchResult shape, not because they move
+    # ratings (rating is press-independent; see doc §7.8).
     rs = RatingSystem()
     for rec in records:
         agents = rec["agents"]
@@ -257,10 +288,12 @@ def convergence_curve(
             rs = rate_records(order[:g])
             rated = rs.all_ratings()
             # Only compare identities present in the reference; a
-            # never-seen identity keeps its default rating.
+            # never-seen identity keeps its default rating. Break rating ties
+            # deterministically on the name so the ordering (and thus tau) is
+            # reproducible if the helper is ever reused with roster > seats.
             observed = sorted(
                 ref_set,
-                key=lambda name: -rs.get(name).conservative,
+                key=lambda name: (-rs.get(name).conservative, str(name)),
             )
             tau = kendall_tau(reference, observed)
             taus.append(tau)

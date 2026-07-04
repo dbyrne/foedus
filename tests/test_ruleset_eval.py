@@ -15,6 +15,7 @@ import pytest
 
 from foedus.eval.ruleset import (
     LADDER,
+    MID_LADDER,
     convergence_curve,
     discrimination_index,
     distinct_seats,
@@ -22,6 +23,7 @@ from foedus.eval.ruleset import (
     detente_rate,
     kendall_tau,
     mean_turns,
+    min_adjacent_separation,
     ranks_from_record,
     rate_records,
     separated_adjacent_pairs,
@@ -41,6 +43,16 @@ def test_ladder_names_are_all_real_roster_heuristics():
     from foedus.agents.heuristics import ROSTER
     for name in LADDER:
         assert name in ROSTER
+
+
+def test_mid_ladder_is_the_competitive_band_without_floor_or_ceiling():
+    # The full discrimination index is dominated by the trivially-separable
+    # floor and ceiling; MID_LADDER is the competitive band used to measure
+    # discrimination that actually matters (doc §6.3).
+    assert MID_LADDER == LADDER[1:-1]
+    assert "Defensive" not in MID_LADDER            # floor dropped
+    assert "DishonestCooperator" not in MID_LADDER  # ceiling dropped
+    assert len(MID_LADDER) == 4
 
 
 # --- distinct-seat sampling (models unique-identity real matches) --------
@@ -120,6 +132,13 @@ def test_separated_adjacent_pairs_counts_gaps_beyond_combined_sigma():
     ratings = {"a": (30.0, 1.0), "b": (25.0, 1.0), "c": (24.5, 1.0)}
     # a-b gap 5 > 2 (separated); b-c gap 0.5 < 2 (not).
     assert separated_adjacent_pairs(order, ratings) == 1
+
+
+def test_min_adjacent_separation_is_the_tightest_gap_in_sigma_units():
+    order = ["a", "b", "c"]
+    ratings = {"a": (30.0, 1.0), "b": (25.0, 1.0), "c": (24.5, 1.0)}
+    # gaps in combined-sigma units: (30-25)/2 = 2.5, (25-24.5)/2 = 0.25.
+    assert min_adjacent_separation(order, ratings) == pytest.approx(0.25)
 
 
 # --- game-level aggregate metrics ----------------------------------------
