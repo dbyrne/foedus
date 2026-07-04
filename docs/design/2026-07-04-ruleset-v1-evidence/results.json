@@ -1,0 +1,1430 @@
+{
+  "ladder": [
+    "Defensive",
+    "Random",
+    "Sycophant",
+    "Greedy",
+    "Aggressive",
+    "DishonestCooperator"
+  ],
+  "params": {
+    "grid_games": 3000,
+    "conv_games": 800,
+    "conv_shuffles": 200,
+    "detente_games": 1500,
+    "conv_turns": 12,
+    "conv_radius": 2,
+    "archetype": "continental_sweep",
+    "peace_threshold": "engine-default"
+  },
+  "grid": [
+    {
+      "seats": 4,
+      "turns": 8,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 1.8693720933896707,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 0.2,
+      "detente_rate": 0.0,
+      "elim_rate": 0.23633333333333334,
+      "mean_turns": 7.974333333333333,
+      "ratings": {
+        "Greedy": {
+          "mu": 25.17051554463666,
+          "sigma": 1.6878724369026228
+        },
+        "DishonestCooperator": {
+          "mu": 28.4238934085918,
+          "sigma": 1.689688499455675
+        },
+        "Defensive": {
+          "mu": 18.410219240116813,
+          "sigma": 1.7442006203077842
+        },
+        "Random": {
+          "mu": 26.951910237500048,
+          "sigma": 1.648587175755767
+        },
+        "Aggressive": {
+          "mu": 24.90235038361329,
+          "sigma": 1.690156217604
+        },
+        "Sycophant": {
+          "mu": 25.952597535749486,
+          "sigma": 1.6806464023607874
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Random",
+        "Sycophant",
+        "Greedy",
+        "Aggressive",
+        "Defensive"
+      ],
+      "secs": 0.8
+    },
+    {
+      "seats": 5,
+      "turns": 8,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 1.7444174831670285,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 0.2,
+      "detente_rate": 0.0,
+      "elim_rate": 0.30833333333333335,
+      "mean_turns": 7.997,
+      "ratings": {
+        "Greedy": {
+          "mu": 25.352998839736035,
+          "sigma": 1.8515607093135116
+        },
+        "DishonestCooperator": {
+          "mu": 27.671754861708347,
+          "sigma": 1.828445648287851
+        },
+        "Defensive": {
+          "mu": 19.012570316270597,
+          "sigma": 1.8853076544312959
+        },
+        "Random": {
+          "mu": 28.96867221939053,
+          "sigma": 1.7857973344606244
+        },
+        "Sycophant": {
+          "mu": 25.19703292200524,
+          "sigma": 1.8490306625529478
+        },
+        "Aggressive": {
+          "mu": 23.248689427928507,
+          "sigma": 1.8491622275838924
+        }
+      },
+      "order": [
+        "Random",
+        "DishonestCooperator",
+        "Greedy",
+        "Sycophant",
+        "Aggressive",
+        "Defensive"
+      ],
+      "secs": 0.9
+    },
+    {
+      "seats": 6,
+      "turns": 8,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 2.6342330306633683,
+      "sep_pairs": 2,
+      "max_sep_pairs": 5,
+      "recovery_tau": 0.06666666666666667,
+      "detente_rate": 0.0,
+      "elim_rate": 0.3516666666666667,
+      "mean_turns": 7.999666666666666,
+      "ratings": {
+        "Greedy": {
+          "mu": 26.902471131308626,
+          "sigma": 1.9647789675970173
+        },
+        "DishonestCooperator": {
+          "mu": 24.712821110881208,
+          "sigma": 1.9566554445466386
+        },
+        "Defensive": {
+          "mu": 16.64414565607575,
+          "sigma": 2.0541724846663256
+        },
+        "Random": {
+          "mu": 34.12892913457868,
+          "sigma": 1.9298576376924348
+        },
+        "Sycophant": {
+          "mu": 24.39674681495164,
+          "sigma": 1.965436259544079
+        },
+        "Aggressive": {
+          "mu": 22.766903763189433,
+          "sigma": 1.9708431675647533
+        }
+      },
+      "order": [
+        "Random",
+        "Greedy",
+        "DishonestCooperator",
+        "Sycophant",
+        "Aggressive",
+        "Defensive"
+      ],
+      "secs": 1.0
+    },
+    {
+      "seats": 4,
+      "turns": 12,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 1.8615183944392657,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 0.4666666666666667,
+      "detente_rate": 0.0,
+      "elim_rate": 0.30833333333333335,
+      "mean_turns": 11.755333333333333,
+      "ratings": {
+        "Greedy": {
+          "mu": 24.962622578414976,
+          "sigma": 1.6904197328635262
+        },
+        "DishonestCooperator": {
+          "mu": 27.587353367275195,
+          "sigma": 1.6843916322558259
+        },
+        "Defensive": {
+          "mu": 18.16068493273404,
+          "sigma": 1.7320629344943381
+        },
+        "Random": {
+          "mu": 26.941208983575013,
+          "sigma": 1.634126178515763
+        },
+        "Aggressive": {
+          "mu": 26.030569839295087,
+          "sigma": 1.6841473637744562
+        },
+        "Sycophant": {
+          "mu": 25.812857229040468,
+          "sigma": 1.6753352816397251
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Random",
+        "Aggressive",
+        "Sycophant",
+        "Greedy",
+        "Defensive"
+      ],
+      "secs": 1.0
+    },
+    {
+      "seats": 5,
+      "turns": 12,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 1.7949302755848637,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 0.06666666666666667,
+      "detente_rate": 0.0,
+      "elim_rate": 0.3893333333333333,
+      "mean_turns": 11.929,
+      "ratings": {
+        "Greedy": {
+          "mu": 24.861266333179213,
+          "sigma": 1.8308704740669475
+        },
+        "DishonestCooperator": {
+          "mu": 28.03564663360233,
+          "sigma": 1.817606591456241
+        },
+        "Defensive": {
+          "mu": 18.76223081537341,
+          "sigma": 1.870552099463064
+        },
+        "Random": {
+          "mu": 28.803592404203467,
+          "sigma": 1.7693501770194398
+        },
+        "Sycophant": {
+          "mu": 25.024143562610913,
+          "sigma": 1.8317365418409792
+        },
+        "Aggressive": {
+          "mu": 23.624053000256218,
+          "sigma": 1.8290685741008408
+        }
+      },
+      "order": [
+        "Random",
+        "DishonestCooperator",
+        "Sycophant",
+        "Greedy",
+        "Aggressive",
+        "Defensive"
+      ],
+      "secs": 1.2
+    },
+    {
+      "seats": 6,
+      "turns": 12,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 2.8704386337976895,
+      "sep_pairs": 2,
+      "max_sep_pairs": 5,
+      "recovery_tau": -0.06666666666666667,
+      "detente_rate": 0.0,
+      "elim_rate": 0.44133333333333336,
+      "mean_turns": 11.980333333333334,
+      "ratings": {
+        "Greedy": {
+          "mu": 26.45401691070294,
+          "sigma": 1.930072602111467
+        },
+        "DishonestCooperator": {
+          "mu": 24.594846102016476,
+          "sigma": 1.9284644897007304
+        },
+        "Defensive": {
+          "mu": 15.910980690014021,
+          "sigma": 2.035390008716466
+        },
+        "Random": {
+          "mu": 34.61670218473701,
+          "sigma": 1.8981027015546967
+        },
+        "Sycophant": {
+          "mu": 25.90966202406702,
+          "sigma": 1.9411006020935946
+        },
+        "Aggressive": {
+          "mu": 22.004750263289917,
+          "sigma": 1.940170768337192
+        }
+      },
+      "order": [
+        "Random",
+        "Greedy",
+        "Sycophant",
+        "DishonestCooperator",
+        "Aggressive",
+        "Defensive"
+      ],
+      "secs": 1.3
+    },
+    {
+      "seats": 4,
+      "turns": 15,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 1.8418005426617448,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 0.4666666666666667,
+      "detente_rate": 0.0,
+      "elim_rate": 0.33366666666666667,
+      "mean_turns": 14.498333333333333,
+      "ratings": {
+        "Greedy": {
+          "mu": 25.224196077114648,
+          "sigma": 1.689538078122641
+        },
+        "DishonestCooperator": {
+          "mu": 27.952380736994648,
+          "sigma": 1.6851585708546624
+        },
+        "Defensive": {
+          "mu": 18.426154100498454,
+          "sigma": 1.7330941276145226
+        },
+        "Random": {
+          "mu": 26.902608994278083,
+          "sigma": 1.624768032688371
+        },
+        "Aggressive": {
+          "mu": 26.133917799878816,
+          "sigma": 1.6797062539130356
+        },
+        "Sycophant": {
+          "mu": 25.825371798779546,
+          "sigma": 1.6754393885646648
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Random",
+        "Aggressive",
+        "Sycophant",
+        "Greedy",
+        "Defensive"
+      ],
+      "secs": 1.2
+    },
+    {
+      "seats": 5,
+      "turns": 15,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 1.8073924652388331,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 0.06666666666666667,
+      "detente_rate": 0.0,
+      "elim_rate": 0.4216666666666667,
+      "mean_turns": 14.816,
+      "ratings": {
+        "Greedy": {
+          "mu": 25.026622799885835,
+          "sigma": 1.8221476034583777
+        },
+        "DishonestCooperator": {
+          "mu": 27.949683532426743,
+          "sigma": 1.813847148534271
+        },
+        "Defensive": {
+          "mu": 18.484211797621224,
+          "sigma": 1.862713880145859
+        },
+        "Random": {
+          "mu": 28.318360249061833,
+          "sigma": 1.7648705486658174
+        },
+        "Sycophant": {
+          "mu": 25.505868912216265,
+          "sigma": 1.8288883188644818
+        },
+        "Aggressive": {
+          "mu": 23.34255503147118,
+          "sigma": 1.8220034632643478
+        }
+      },
+      "order": [
+        "Random",
+        "DishonestCooperator",
+        "Sycophant",
+        "Greedy",
+        "Aggressive",
+        "Defensive"
+      ],
+      "secs": 1.4
+    },
+    {
+      "seats": 6,
+      "turns": 15,
+      "radius": 1,
+      "games": 3000,
+      "discrimination": 2.9208058775107344,
+      "sep_pairs": 2,
+      "max_sep_pairs": 5,
+      "recovery_tau": -0.2,
+      "detente_rate": 0.0,
+      "elim_rate": 0.48233333333333334,
+      "mean_turns": 14.926333333333334,
+      "ratings": {
+        "Greedy": {
+          "mu": 26.348074794202123,
+          "sigma": 1.9200121516207596
+        },
+        "DishonestCooperator": {
+          "mu": 25.197085850984653,
+          "sigma": 1.9216341203435507
+        },
+        "Defensive": {
+          "mu": 15.856724414719423,
+          "sigma": 2.011139458195822
+        },
+        "Random": {
+          "mu": 34.539015002338,
+          "sigma": 1.885956022740833
+        },
+        "Sycophant": {
+          "mu": 26.54421698531782,
+          "sigma": 1.923087440764846
+        },
+        "Aggressive": {
+          "mu": 21.49238493862999,
+          "sigma": 1.9324713000734801
+        }
+      },
+      "order": [
+        "Random",
+        "Sycophant",
+        "Greedy",
+        "DishonestCooperator",
+        "Aggressive",
+        "Defensive"
+      ],
+      "secs": 1.6
+    },
+    {
+      "seats": 4,
+      "turns": 8,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 5.056658142902459,
+      "sep_pairs": 3,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.03966666666666667,
+      "mean_turns": 8.0,
+      "ratings": {
+        "Greedy": {
+          "mu": 25.3505804821197,
+          "sigma": 1.6715542557468714
+        },
+        "DishonestCooperator": {
+          "mu": 39.06465725705125,
+          "sigma": 1.7811247649813453
+        },
+        "Defensive": {
+          "mu": 10.027721643528787,
+          "sigma": 1.901121554801389
+        },
+        "Random": {
+          "mu": 21.708640607635584,
+          "sigma": 1.6830859449739117
+        },
+        "Aggressive": {
+          "mu": 30.1185470334855,
+          "sigma": 1.6843858696468443
+        },
+        "Sycophant": {
+          "mu": 23.612542530260832,
+          "sigma": 1.6801243171394793
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 1.0
+    },
+    {
+      "seats": 5,
+      "turns": 8,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 3.880113812866236,
+      "sep_pairs": 2,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.10166666666666667,
+      "mean_turns": 8.0,
+      "ratings": {
+        "Greedy": {
+          "mu": 28.3767328492492,
+          "sigma": 1.7494493526793797
+        },
+        "DishonestCooperator": {
+          "mu": 33.83683015142918,
+          "sigma": 1.7674777647587556
+        },
+        "Defensive": {
+          "mu": 11.722128738882665,
+          "sigma": 1.9185400503496934
+        },
+        "Random": {
+          "mu": 22.553096862118004,
+          "sigma": 1.7621925901130713
+        },
+        "Sycophant": {
+          "mu": 25.70785298241623,
+          "sigma": 1.7488168849258965
+        },
+        "Aggressive": {
+          "mu": 28.851160065276964,
+          "sigma": 1.7470164697292974
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 1.1
+    },
+    {
+      "seats": 6,
+      "turns": 8,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 3.553547531840915,
+      "sep_pairs": 2,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.20866666666666667,
+      "mean_turns": 8.0,
+      "ratings": {
+        "Greedy": {
+          "mu": 26.80166738075675,
+          "sigma": 1.8298361249238704
+        },
+        "DishonestCooperator": {
+          "mu": 32.61828463703148,
+          "sigma": 1.8383521185975493
+        },
+        "Defensive": {
+          "mu": 11.437900686740871,
+          "sigma": 2.0034495825922978
+        },
+        "Random": {
+          "mu": 23.704394555392287,
+          "sigma": 1.841585900956008
+        },
+        "Sycophant": {
+          "mu": 26.353309245908243,
+          "sigma": 1.831605852456156
+        },
+        "Aggressive": {
+          "mu": 28.81098884061083,
+          "sigma": 1.8388869661557117
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 1.3
+    },
+    {
+      "seats": 4,
+      "turns": 12,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 4.9824087219101285,
+      "sep_pairs": 3,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.099,
+      "mean_turns": 12.0,
+      "ratings": {
+        "Greedy": {
+          "mu": 25.467153114669046,
+          "sigma": 1.6588233445016654
+        },
+        "DishonestCooperator": {
+          "mu": 38.10505531822887,
+          "sigma": 1.7434871647411538
+        },
+        "Defensive": {
+          "mu": 10.687901161282026,
+          "sigma": 1.8920277801527339
+        },
+        "Random": {
+          "mu": 21.440648994993882,
+          "sigma": 1.6683653693368214
+        },
+        "Aggressive": {
+          "mu": 31.688268870630893,
+          "sigma": 1.6742122081969866
+        },
+        "Sycophant": {
+          "mu": 22.817989232456185,
+          "sigma": 1.6632732813603297
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 1.4
+    },
+    {
+      "seats": 5,
+      "turns": 12,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 3.7266981788081943,
+      "sep_pairs": 2,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.19466666666666665,
+      "mean_turns": 12.0,
+      "ratings": {
+        "Greedy": {
+          "mu": 27.445585857434555,
+          "sigma": 1.7227724396052446
+        },
+        "DishonestCooperator": {
+          "mu": 33.0606322851895,
+          "sigma": 1.7542152739490058
+        },
+        "Defensive": {
+          "mu": 12.208890617383938,
+          "sigma": 1.8738295485568612
+        },
+        "Random": {
+          "mu": 22.648828310688724,
+          "sigma": 1.73765699764871
+        },
+        "Sycophant": {
+          "mu": 25.891046518852313,
+          "sigma": 1.7226617634015646
+        },
+        "Aggressive": {
+          "mu": 29.046802100881393,
+          "sigma": 1.7310231852362932
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 1.5
+    },
+    {
+      "seats": 6,
+      "turns": 12,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 3.299165902615775,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.32366666666666666,
+      "mean_turns": 12.0,
+      "ratings": {
+        "Greedy": {
+          "mu": 27.003191935833687,
+          "sigma": 1.8152732652605927
+        },
+        "DishonestCooperator": {
+          "mu": 32.14362284626093,
+          "sigma": 1.8219627303427448
+        },
+        "Defensive": {
+          "mu": 13.097542303309588,
+          "sigma": 1.943191866483702
+        },
+        "Random": {
+          "mu": 23.256232162963332,
+          "sigma": 1.814537807414155
+        },
+        "Sycophant": {
+          "mu": 25.403187597823557,
+          "sigma": 1.8075468315157377
+        },
+        "Aggressive": {
+          "mu": 29.550820216483842,
+          "sigma": 1.8247011900676882
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 1.8
+    },
+    {
+      "seats": 4,
+      "turns": 15,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 4.6993512518014855,
+      "sep_pairs": 3,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.14566666666666667,
+      "mean_turns": 14.999,
+      "ratings": {
+        "Greedy": {
+          "mu": 25.435020112418318,
+          "sigma": 1.6528398885181501
+        },
+        "DishonestCooperator": {
+          "mu": 36.46583668322409,
+          "sigma": 1.7196850205781578
+        },
+        "Defensive": {
+          "mu": 11.62697808796787,
+          "sigma": 1.8671791964739566
+        },
+        "Random": {
+          "mu": 21.193920916683346,
+          "sigma": 1.6646606654152247
+        },
+        "Aggressive": {
+          "mu": 32.635123117007645,
+          "sigma": 1.6723878235313376
+        },
+        "Sycophant": {
+          "mu": 23.689274196129247,
+          "sigma": 1.6481811292748854
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 1.7
+    },
+    {
+      "seats": 5,
+      "turns": 15,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 3.699078479422572,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.24633333333333332,
+      "mean_turns": 14.999333333333333,
+      "ratings": {
+        "Greedy": {
+          "mu": 27.785116519116702,
+          "sigma": 1.7187397330167067
+        },
+        "DishonestCooperator": {
+          "mu": 32.61037105986479,
+          "sigma": 1.7459757264741034
+        },
+        "Defensive": {
+          "mu": 12.292868592260838,
+          "sigma": 1.8619821421413822
+        },
+        "Random": {
+          "mu": 22.755950144206647,
+          "sigma": 1.7250591904160975
+        },
+        "Sycophant": {
+          "mu": 25.24461172770667,
+          "sigma": 1.7167963699327946
+        },
+        "Aggressive": {
+          "mu": 29.370594683894293,
+          "sigma": 1.7296603578279879
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 2.1
+    },
+    {
+      "seats": 6,
+      "turns": 15,
+      "radius": 2,
+      "games": 3000,
+      "discrimination": 3.1872702846313685,
+      "sep_pairs": 1,
+      "max_sep_pairs": 5,
+      "recovery_tau": 1.0,
+      "detente_rate": 0.0,
+      "elim_rate": 0.3973333333333333,
+      "mean_turns": 14.997666666666667,
+      "ratings": {
+        "Greedy": {
+          "mu": 26.641425013188655,
+          "sigma": 1.8072982188902642
+        },
+        "DishonestCooperator": {
+          "mu": 32.0303671550872,
+          "sigma": 1.8173336067275232
+        },
+        "Defensive": {
+          "mu": 13.589801794398921,
+          "sigma": 1.9247953061135845
+        },
+        "Random": {
+          "mu": 22.903819119424142,
+          "sigma": 1.7954023617043866
+        },
+        "Sycophant": {
+          "mu": 25.93480414354154,
+          "sigma": 1.8054937051268156
+        },
+        "Aggressive": {
+          "mu": 29.027753956406706,
+          "sigma": 1.821018598372059
+        }
+      },
+      "order": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "secs": 2.4
+    }
+  ],
+  "convergence": {
+    "4-spread-t12": {
+      "roster": [
+        "Defensive",
+        "Sycophant",
+        "Aggressive",
+        "DishonestCooperator"
+      ],
+      "seats": 4,
+      "turns": 12,
+      "radius": 2,
+      "reference": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Sycophant",
+        "Defensive"
+      ],
+      "game_counts": [
+        5,
+        10,
+        15,
+        20,
+        30,
+        40,
+        60,
+        80,
+        120,
+        160,
+        240,
+        320,
+        800
+      ],
+      "curve": {
+        "5": {
+          "mean_tau": 0.8333333333333333,
+          "frac_correct": 0.57,
+          "mean_sigma": 7.549244561927784
+        },
+        "10": {
+          "mean_tau": 0.9083333333333333,
+          "frac_correct": 0.745,
+          "mean_sigma": 6.938320504788508
+        },
+        "15": {
+          "mean_tau": 0.9416666666666668,
+          "frac_correct": 0.83,
+          "mean_sigma": 6.452070868571727
+        },
+        "20": {
+          "mean_tau": 0.96,
+          "frac_correct": 0.885,
+          "mean_sigma": 6.053235295755011
+        },
+        "30": {
+          "mean_tau": 0.97,
+          "frac_correct": 0.91,
+          "mean_sigma": 5.429358708747929
+        },
+        "40": {
+          "mean_tau": 0.9833333333333333,
+          "frac_correct": 0.95,
+          "mean_sigma": 4.976089646664583
+        },
+        "60": {
+          "mean_tau": 0.9866666666666667,
+          "frac_correct": 0.96,
+          "mean_sigma": 4.295633992185634
+        },
+        "80": {
+          "mean_tau": 0.985,
+          "frac_correct": 0.955,
+          "mean_sigma": 3.83570069809509
+        },
+        "120": {
+          "mean_tau": 0.995,
+          "frac_correct": 0.985,
+          "mean_sigma": 3.2170662904588863
+        },
+        "160": {
+          "mean_tau": 1.0,
+          "frac_correct": 1.0,
+          "mean_sigma": 2.8386195291260274
+        },
+        "240": {
+          "mean_tau": 1.0,
+          "frac_correct": 1.0,
+          "mean_sigma": 2.4014778840611735
+        },
+        "320": {
+          "mean_tau": 0.9983333333333333,
+          "frac_correct": 0.995,
+          "mean_sigma": 2.1643976497859114
+        },
+        "800": {
+          "mean_tau": 1.0,
+          "frac_correct": 1.0,
+          "mean_sigma": 1.803677574518943
+        }
+      },
+      "g95": 40
+    },
+    "5-spread-t12": {
+      "roster": [
+        "Defensive",
+        "Random",
+        "Sycophant",
+        "Aggressive",
+        "DishonestCooperator"
+      ],
+      "seats": 5,
+      "turns": 12,
+      "radius": 2,
+      "reference": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "game_counts": [
+        5,
+        10,
+        15,
+        20,
+        30,
+        40,
+        60,
+        80,
+        120,
+        160,
+        240,
+        320,
+        800
+      ],
+      "curve": {
+        "5": {
+          "mean_tau": 0.687,
+          "frac_correct": 0.155,
+          "mean_sigma": 7.71222843144894
+        },
+        "10": {
+          "mean_tau": 0.757,
+          "frac_correct": 0.265,
+          "mean_sigma": 7.193106079642979
+        },
+        "15": {
+          "mean_tau": 0.8360000000000001,
+          "frac_correct": 0.41,
+          "mean_sigma": 6.746965535056011
+        },
+        "20": {
+          "mean_tau": 0.843,
+          "frac_correct": 0.44,
+          "mean_sigma": 6.353432020900388
+        },
+        "30": {
+          "mean_tau": 0.895,
+          "frac_correct": 0.565,
+          "mean_sigma": 5.721928297477745
+        },
+        "40": {
+          "mean_tau": 0.9109999999999999,
+          "frac_correct": 0.615,
+          "mean_sigma": 5.209272950017115
+        },
+        "60": {
+          "mean_tau": 0.927,
+          "frac_correct": 0.68,
+          "mean_sigma": 4.474986485400443
+        },
+        "80": {
+          "mean_tau": 0.9329999999999999,
+          "frac_correct": 0.705,
+          "mean_sigma": 3.9498042596784693
+        },
+        "120": {
+          "mean_tau": 0.9620000000000001,
+          "frac_correct": 0.815,
+          "mean_sigma": 3.2740600719547395
+        },
+        "160": {
+          "mean_tau": 0.953,
+          "frac_correct": 0.77,
+          "mean_sigma": 2.8638231055198906
+        },
+        "240": {
+          "mean_tau": 0.9740000000000001,
+          "frac_correct": 0.875,
+          "mean_sigma": 2.405215595080556
+        },
+        "320": {
+          "mean_tau": 0.981,
+          "frac_correct": 0.905,
+          "mean_sigma": 2.1619821856749426
+        },
+        "800": {
+          "mean_tau": 0.9940000000000001,
+          "frac_correct": 0.97,
+          "mean_sigma": 1.8043091333578472
+        }
+      },
+      "g95": 800
+    },
+    "6-full-t12": {
+      "roster": [
+        "Defensive",
+        "Random",
+        "Sycophant",
+        "Greedy",
+        "Aggressive",
+        "DishonestCooperator"
+      ],
+      "seats": 6,
+      "turns": 12,
+      "radius": 2,
+      "reference": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant",
+        "Random",
+        "Defensive"
+      ],
+      "game_counts": [
+        5,
+        10,
+        15,
+        20,
+        30,
+        40,
+        60,
+        80,
+        120,
+        160,
+        240,
+        320,
+        800
+      ],
+      "curve": {
+        "5": {
+          "mean_tau": 0.45666666666666667,
+          "frac_correct": 0.01,
+          "mean_sigma": 7.844239726543197
+        },
+        "10": {
+          "mean_tau": 0.5579999999999999,
+          "frac_correct": 0.03,
+          "mean_sigma": 7.400726079517005
+        },
+        "15": {
+          "mean_tau": 0.616,
+          "frac_correct": 0.035,
+          "mean_sigma": 7.010786682447169
+        },
+        "20": {
+          "mean_tau": 0.6433333333333333,
+          "frac_correct": 0.06,
+          "mean_sigma": 6.66790010843961
+        },
+        "30": {
+          "mean_tau": 0.6473333333333333,
+          "frac_correct": 0.055,
+          "mean_sigma": 6.065488567857869
+        },
+        "40": {
+          "mean_tau": 0.6913333333333332,
+          "frac_correct": 0.075,
+          "mean_sigma": 5.572572444705072
+        },
+        "60": {
+          "mean_tau": 0.7133333333333333,
+          "frac_correct": 0.1,
+          "mean_sigma": 4.817656006615092
+        },
+        "80": {
+          "mean_tau": 0.728,
+          "frac_correct": 0.11,
+          "mean_sigma": 4.274866657030727
+        },
+        "120": {
+          "mean_tau": 0.758,
+          "frac_correct": 0.15,
+          "mean_sigma": 3.551989496254273
+        },
+        "160": {
+          "mean_tau": 0.77,
+          "frac_correct": 0.15,
+          "mean_sigma": 3.0946961223814293
+        },
+        "240": {
+          "mean_tau": 0.8193333333333334,
+          "frac_correct": 0.235,
+          "mean_sigma": 2.583283594260651
+        },
+        "320": {
+          "mean_tau": 0.836,
+          "frac_correct": 0.245,
+          "mean_sigma": 2.3069941226240633
+        },
+        "800": {
+          "mean_tau": 0.8693333333333334,
+          "frac_correct": 0.41,
+          "mean_sigma": 1.8813024279059798
+        }
+      },
+      "g95": null
+    },
+    "4-hard-tie": {
+      "roster": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant"
+      ],
+      "seats": 4,
+      "turns": 12,
+      "radius": 2,
+      "reference": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Greedy",
+        "Sycophant"
+      ],
+      "game_counts": [
+        5,
+        10,
+        15,
+        20,
+        30,
+        40,
+        60,
+        80,
+        120,
+        160,
+        240,
+        320,
+        800
+      ],
+      "curve": {
+        "5": {
+          "mean_tau": 0.435,
+          "frac_correct": 0.15,
+          "mean_sigma": 7.547344090293494
+        },
+        "10": {
+          "mean_tau": 0.5666666666666667,
+          "frac_correct": 0.235,
+          "mean_sigma": 6.8917842898632875
+        },
+        "15": {
+          "mean_tau": 0.5883333333333333,
+          "frac_correct": 0.255,
+          "mean_sigma": 6.357685348413878
+        },
+        "20": {
+          "mean_tau": 0.615,
+          "frac_correct": 0.27,
+          "mean_sigma": 5.899567157590036
+        },
+        "30": {
+          "mean_tau": 0.7033333333333333,
+          "frac_correct": 0.36,
+          "mean_sigma": 5.167511912285482
+        },
+        "40": {
+          "mean_tau": 0.7316666666666667,
+          "frac_correct": 0.37,
+          "mean_sigma": 4.6166903045297945
+        },
+        "60": {
+          "mean_tau": 0.73,
+          "frac_correct": 0.355,
+          "mean_sigma": 3.8382516797135775
+        },
+        "80": {
+          "mean_tau": 0.7833333333333333,
+          "frac_correct": 0.485,
+          "mean_sigma": 3.33406177052063
+        },
+        "120": {
+          "mean_tau": 0.8033333333333332,
+          "frac_correct": 0.5,
+          "mean_sigma": 2.7416587527231626
+        },
+        "160": {
+          "mean_tau": 0.8016666666666667,
+          "frac_correct": 0.48,
+          "mean_sigma": 2.4044935352849373
+        },
+        "240": {
+          "mean_tau": 0.8316666666666667,
+          "frac_correct": 0.53,
+          "mean_sigma": 2.0480121664821938
+        },
+        "320": {
+          "mean_tau": 0.84,
+          "frac_correct": 0.535,
+          "mean_sigma": 1.8738403390710412
+        },
+        "800": {
+          "mean_tau": 0.8683333333333333,
+          "frac_correct": 0.615,
+          "mean_sigma": 1.6466725073321553
+        }
+      },
+      "g95": null
+    },
+    "4-spread-t8": {
+      "roster": [
+        "Defensive",
+        "Sycophant",
+        "Aggressive",
+        "DishonestCooperator"
+      ],
+      "seats": 4,
+      "turns": 8,
+      "radius": 2,
+      "reference": [
+        "DishonestCooperator",
+        "Aggressive",
+        "Sycophant",
+        "Defensive"
+      ],
+      "game_counts": [
+        5,
+        10,
+        15,
+        20,
+        30,
+        40,
+        60,
+        80,
+        120,
+        160,
+        240,
+        320,
+        800
+      ],
+      "curve": {
+        "5": {
+          "mean_tau": 0.855,
+          "frac_correct": 0.59,
+          "mean_sigma": 7.560442837522212
+        },
+        "10": {
+          "mean_tau": 0.9116666666666667,
+          "frac_correct": 0.74,
+          "mean_sigma": 6.94937947465212
+        },
+        "15": {
+          "mean_tau": 0.95,
+          "frac_correct": 0.85,
+          "mean_sigma": 6.468347197744618
+        },
+        "20": {
+          "mean_tau": 0.9483333333333333,
+          "frac_correct": 0.845,
+          "mean_sigma": 6.074421842023705
+        },
+        "30": {
+          "mean_tau": 0.9716666666666667,
+          "frac_correct": 0.915,
+          "mean_sigma": 5.46872520737978
+        },
+        "40": {
+          "mean_tau": 0.95,
+          "frac_correct": 0.85,
+          "mean_sigma": 5.0053899339104655
+        },
+        "60": {
+          "mean_tau": 0.9933333333333333,
+          "frac_correct": 0.98,
+          "mean_sigma": 4.3469194981594
+        },
+        "80": {
+          "mean_tau": 0.9766666666666667,
+          "frac_correct": 0.93,
+          "mean_sigma": 3.887213233387345
+        },
+        "120": {
+          "mean_tau": 0.9983333333333333,
+          "frac_correct": 0.995,
+          "mean_sigma": 3.2722670140426415
+        },
+        "160": {
+          "mean_tau": 0.9916666666666667,
+          "frac_correct": 0.975,
+          "mean_sigma": 2.8883499841223634
+        },
+        "240": {
+          "mean_tau": 0.9983333333333333,
+          "frac_correct": 0.995,
+          "mean_sigma": 2.4399838282493143
+        },
+        "320": {
+          "mean_tau": 0.9966666666666667,
+          "frac_correct": 0.99,
+          "mean_sigma": 2.1992227744221298
+        },
+        "800": {
+          "mean_tau": 1.0,
+          "frac_correct": 1.0,
+          "mean_sigma": 1.822608600630937
+        }
+      },
+      "g95": 60
+    }
+  },
+  "detente": {
+    "8": {
+      "roster": [
+        "Cooperator",
+        "TrustfulCooperator",
+        "DishonestCooperator",
+        "Sycophant"
+      ],
+      "detente_rate": 0.7013333333333334,
+      "elim_rate": 0.07,
+      "mean_turns": 7.298666666666667
+    },
+    "12": {
+      "roster": [
+        "Cooperator",
+        "TrustfulCooperator",
+        "DishonestCooperator",
+        "Sycophant"
+      ],
+      "detente_rate": 0.664,
+      "elim_rate": 0.11133333333333334,
+      "mean_turns": 9.423333333333334
+    },
+    "15": {
+      "roster": [
+        "Cooperator",
+        "TrustfulCooperator",
+        "DishonestCooperator",
+        "Sycophant"
+      ],
+      "detente_rate": 0.8186666666666667,
+      "elim_rate": 0.116,
+      "mean_turns": 10.296
+    }
+  },
+  "elapsed_secs": 130.2
+}
