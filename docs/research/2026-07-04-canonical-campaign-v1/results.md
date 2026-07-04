@@ -34,7 +34,8 @@ The **first official match** in the ratified standard format
 | Seat rotation | cyclic Latin square (§7.4); the freerider rotates like everyone else |
 | Seeds | commit-reveal, SHA-256 sealed before / revealed after (§7.5) |
 | Rating | OpenSkill (Plackett-Luce), one identity per entrant, conservative μ − 3σ |
-| Games | `<N>` (8 = two full rotation cycles; or 4 = one cycle) |
+| Games | **8** (two full rotation cycles) |
+| Handles | Delta / Echo / Foxtrot (LLM entrants) · **Golf** (freerider house anchor) — neutral; the handle→role map is operator-side only |
 
 The memory-mode / game-count decision (see §3) is pinned at launch and recorded
 in `campaign_plan.json`.
@@ -56,7 +57,14 @@ is resolved**, and that resolution is pinned here before any data:
 - **No rotation:** seat-keyed memory is coherent; a real learning signal is
   possible at the cost of seat-balanced rating.
 
-> **Pinned for this run:** `<A / B / C>` — `<one-line rationale from Nova>`.
+> **Pinned for this run: Option B — identity-keyed memory (Ruleset v1.1).**
+> David approved 2026-07-04 (see the §12 amendment in the ruleset doc). Entrants
+> carry stable neutral handles; cross-game memory + self-notes + OpenSkill
+> identity key on the handle, so the freerider *can* be tracked across rotated
+> seats. This is the only option that serves all three duties and is the correct
+> arena design. The pre-registered expectation is therefore a **live** learning
+> signal (not a structural null): if the table can punish a persistent defector,
+> v1.1 is what lets it.
 
 ## 4. Pre-registered metrics (computed by `foedus_canonical_scorecard.py`)
 
