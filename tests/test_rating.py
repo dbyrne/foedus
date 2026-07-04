@@ -116,17 +116,18 @@ def test_duplicate_identity_within_match_loses_no_update() -> None:
     reference = RatingSystem()
     reference.update(match, identities=["seat0", "seat1", "seat2"])
     mu_by_seat = [reference.get(f"seat{i}").mu for i in range(3)]
+    sigma_by_seat = [reference.get(f"seat{i}").sigma for i in range(3)]
 
     rs = RatingSystem()
     rs.update(match, identities=["X", "X", "X"])
 
+    # Pin the fix's defined semantics exactly: the mean of every seat's
+    # individual per-seat update.
+    assert rs.get("X").mu == pytest.approx(sum(mu_by_seat) / 3)
+    assert rs.get("X").sigma == pytest.approx(sum(sigma_by_seat) / 3)
     # Last-write-wins (the bug) would make rs["X"] exactly equal seat 2's
     # (the last-place seat's) isolated update, discarding seats 0 and 1.
     assert rs.get("X").mu != pytest.approx(mu_by_seat[2])
-    # The combined rating must actually incorporate every seat's result --
-    # not just pick a different single seat either.
-    assert rs.get("X").mu != pytest.approx(mu_by_seat[0])
-    assert rs.get("X").mu != pytest.approx(mu_by_seat[1])
 
 
 def test_detente_uses_tied_top_ranks() -> None:
