@@ -38,3 +38,41 @@ def conflict_forcing_config(num_players: int = 4,
         archetype=Archetype.CONTINENTAL_SWEEP,
         map_radius=2,
     )
+
+
+def ruleset_v1(num_players: int = 4,
+               seed: int | None = None) -> GameConfig:
+    """The standard competition board (ruleset v1).
+
+    The single source of truth for the arena/gym board once ratified, so
+    every experiment and match accumulates on one ladder. Parameters were
+    picked empirically from cheap heuristic sweeps; see
+    docs/design/2026-07-04-ruleset-v1.md for the evidence and trade-offs.
+
+    - `num_players=4`: highest skill discrimination on the standard map and
+      the lowest elimination-variance; 5-6 seats measurably *lose*
+      discrimination to crowding at this radius (§6.2).
+    - `max_turns=12`: discrimination saturates by turn 8 (§6.3), but 12 is
+      the shortest length that keeps the détente/alliance win condition
+      live — `detente_threshold = 4 + num_players = 8` needs turns beyond it
+      to be reachable, giving a turns 8-12 race-to-peace window (§7.3).
+      15 turns adds cost and elimination noise but no discrimination.
+    - `map_radius=2` (19 hexes): decisive — radius 2 recovers the true skill
+      ladder perfectly (Kendall tau = 1.0); radius 1 (7 hexes) is
+      elimination-dominated and cannot (tau ~ 0) (§6.1).
+    - `archetype=CONTINENTAL_SWEEP`: dense connectivity so scarcity, not
+      terrain, drives contact — same rationale as `conflict_forcing_config`.
+
+    The détente threshold is left at the engine default (`4 + num_players`,
+    table-size-scaled) rather than overridden (§7.3). Match-level structure
+    (seat rotation, sealed seeds, games-per-match, roster, rating) is a
+    protocol layered *around* this config, not fields on it — the engine
+    stays a pure state-transition core.
+    """
+    return GameConfig(
+        num_players=num_players,
+        max_turns=12,
+        seed=seed,
+        archetype=Archetype.CONTINENTAL_SWEEP,
+        map_radius=2,
+    )
