@@ -83,6 +83,39 @@ def test_play_game_propagates_archetype_to_mapgen() -> None:
         )
 
 
+def test_play_game_on_turn_resolved_callback_fires_once_per_turn() -> None:
+    """Optional spectate-style hook: called once per turn immediately after
+    finalize_round, with (prev_state, orders_by_player, new_state)."""
+    cfg = GameConfig(num_players=2, seed=7, max_turns=3, build_period=999)
+    agents = {0: RandomAgent(seed=0), 1: RandomAgent(seed=1)}
+    calls = []
+
+    def on_turn_resolved(prev_state, orders_by_player, new_state):
+        calls.append((prev_state, orders_by_player, new_state))
+
+    final = play_game(agents, config=cfg, on_turn_resolved=on_turn_resolved)
+    assert len(calls) == 3
+    for prev_state, orders_by_player, new_state in calls:
+        assert new_state.turn == prev_state.turn + 1
+        assert isinstance(orders_by_player, dict)
+        assert set(orders_by_player) == {0, 1}
+    assert [new_state.turn for _, _, new_state in calls] == [1, 2, 3]
+    assert calls[-1][2].scores == final.scores
+
+
+def test_play_game_without_callback_is_unchanged() -> None:
+    """Omitting on_turn_resolved must leave play_game's behavior identical
+    (default None, zero overhead, byte-identical to the pre-hook loop)."""
+    cfg = GameConfig(num_players=3, seed=999, max_turns=8, build_period=3,
+                     stagnation_cost=0)
+    a1 = play_game({p: RandomAgent(seed=p) for p in range(3)}, config=cfg)
+    a2 = play_game({p: RandomAgent(seed=p) for p in range(3)}, config=cfg,
+                    on_turn_resolved=None)
+    assert {u.id: (u.owner, u.location) for u in a1.units.values()} == \
+           {u.id: (u.owner, u.location) for u in a2.units.values()}
+    assert a1.scores == a2.scores
+
+
 def test_play_game_propagates_map_radius() -> None:
     """Regression: play_game must pass config.map_radius to generate_map."""
     cfg_small = GameConfig(num_players=2, seed=42, max_turns=2, map_radius=2)

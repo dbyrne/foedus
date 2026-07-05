@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 from foedus.agents.base import Agent
 from foedus.core import GameConfig, GameState, Order, PlayerId, UnitId
 from foedus.mapgen import generate_map
@@ -15,11 +17,14 @@ from foedus.press import (
 )
 from foedus.resolve import initial_state
 
+OnTurnResolved = Callable[[GameState, "dict[PlayerId, dict[UnitId, Order]]", GameState], None]
+
 
 def play_game(
     agents: dict[PlayerId, Agent],
     config: GameConfig | None = None,
     state: GameState | None = None,
+    on_turn_resolved: OnTurnResolved | None = None,
 ) -> GameState:
     """Play a complete game and return the final GameState.
 
@@ -28,6 +33,11 @@ def play_game(
     optionally record chat (from agent.chat_drafts),
     signal done for all survivors,
     finalize_round with the orders from agent.choose_orders.
+
+    `on_turn_resolved`, if given, is called after each turn's finalize_round
+    as `on_turn_resolved(prev_state, orders_by_player, new_state)` -- an
+    optional observation hook (e.g. spectator streaming) with no effect on
+    engine behavior. Default None keeps the loop byte-identical.
     """
     if state is None:
         if config is None:
@@ -80,6 +90,9 @@ def play_game(
             orders_by_player[player_id] = agent.choose_orders(state, player_id)
 
         # 3. Finalize: locks press, runs resolution, archives, returns next-turn state.
+        prev_state = state
         state = finalize_round(state, orders_by_player)
+        if on_turn_resolved is not None:
+            on_turn_resolved(prev_state, orders_by_player, state)
 
     return state
