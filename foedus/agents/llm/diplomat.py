@@ -226,6 +226,19 @@ class LLMDiplomat:
             return []
         return self._campaign_memory.all()
 
+    def load_campaign_records(self, records: list[GameRecord]) -> None:
+        """Restore cross-game memory from persisted records (crash resume).
+
+        A campaign runs in one process, so cross-game memory is normally in-RAM;
+        if that process dies mid-match, the per-game `campaign_memory_*.json`
+        files are the durable copy. This replays them onto a fresh reused agent
+        so a resumed match continues with the same accumulated memory. No-op when
+        campaign mode is off."""
+        if self._campaign_memory is None:
+            return
+        for r in records:
+            self._campaign_memory.append(r)
+
     # --- internals ------------------------------------------------------
 
     def _negotiate(self, state: GameState, player: PlayerId) -> NegotiationDecision:

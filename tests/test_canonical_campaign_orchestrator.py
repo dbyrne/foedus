@@ -144,6 +144,59 @@ def test_end_to_end_stub_campaign_full_pipeline(tmp_path):
     assert all(t["freerider_seat"] is not None for t in rep["trajectory"])
 
 
+def test_resume_continues_from_crash(tmp_path):
+    """A crashed match resumes from the sealed secret + persisted memory:
+    continues on the SAME seeds, reloads cross-game memory, and completes the
+    commit-reveal (the nonce survived on disk)."""
+    from foedus.agents.llm.client import StubLLMClient
+    from foedus.agents.llm.diplomat import LLMDiplomat
+
+    out = tmp_path / "run"
+    argv = ["--match-id", "resume-test", "--num-games", "2", "--max-turns", "2",
+            "--seed-rng", "5", "--out-dir", str(out)]
+    orch.main(argv, agent_factory=_stub_factory(num_games=2, max_turns=2))
+    full = [json.loads(l) for l in (out / "sweep.jsonl").read_text().splitlines() if l.strip()]
+    assert len(full) == 2
+    assert (out / "seed_manifest.secret.json").exists()  # secret persisted pre-games
+
+    # simulate a crash AFTER game 0: keep game-0 artifacts + the secret, drop
+    # everything game 1 / final produced.
+    (out / "sweep.jsonl").write_text(json.dumps(full[0]) + "\n")
+    tel = [l for l in (out / "telemetry.jsonl").read_text().splitlines() if l.strip()]
+    (out / "telemetry.jsonl").write_text(tel[0] + "\n")
+    for pat in ("decisions_game1_*", "campaign_memory_game1_*", "transcript_game1.md",
+                "seed_manifest.revealed.json", "standings.json", "run_summary.json"):
+        for p in out.glob(pat):
+            p.unlink()
+
+    def resume_factory():  # fresh agents; game 0 is reloaded from disk
+        r = [_neg(), _orders()] * 2 + ["a resumed private note."]
+        return LLMDiplomat(client=StubLLMClient(r))
+
+    rc = orch.main(argv + ["--resume"], agent_factory=resume_factory)
+    assert rc == 0
+
+    sweeps = [json.loads(l) for l in (out / "sweep.jsonl").read_text().splitlines() if l.strip()]
+    assert len(sweeps) == 2                                   # game 1 appended
+    assert sweeps[1]["seed"] == full[1]["seed"]               # SAME seed (from secret)
+
+    # commit-reveal completed — the nonce survived the crash on disk
+    revealed = campaign.SeedManifest.from_dict(
+        json.loads((out / "seed_manifest.revealed.json").read_text()))
+    assert campaign.verify(revealed)
+
+    # standings cover both games (rating replayed game 0 + ran game 1)
+    standings = json.loads((out / "standings.json").read_text())["standings"]
+    assert {r["identity"] for r in standings} == {"Delta", "Echo", "Foxtrot", "Golf"}
+
+    # game 1 saw game 0's reloaded memory
+    seat = sweeps[1]["llm_seats"][0]
+    recs = [json.loads(x) for x in
+            (out / f"decisions_game1_seat{seat}.jsonl").read_text().splitlines()]
+    neg = next(r for r in recs if r["phase"] == "negotiate")
+    assert "PRIOR GAMES" in neg["prompt"]["user"]
+
+
 def test_dry_run_no_rotation_pins_freerider(tmp_path):
     out = tmp_path / "run"
     rc = orch.main([

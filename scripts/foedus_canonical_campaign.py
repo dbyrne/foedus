@@ -83,6 +83,35 @@ def _write_campaign_memory(out_dir: Path, agent, game_id: int, seat: int,
     )
 
 
+def _resume_state(out_dir: Path, completed: int, persistent: dict,
+                  llm_entrants: list, entrant_identities: list, rating) -> None:
+    """Restore in-RAM state a crashed match lost: each entrant's cross-game
+    memory (from the last completed game's per-seat files, matched by stable
+    identity since seats rotate) and the OpenSkill ratings (replayed from the
+    completed sweep rows)."""
+    from foedus.agents.llm.campaign_memory import GameRecord
+
+    last = completed - 1
+    by_identity: dict[str, list] = {}
+    for p in out_dir.glob(f"campaign_memory_game{last}_seat*.json"):
+        d = json.loads(p.read_text())
+        by_identity[d.get("entrant_identity")] = d.get("records", [])
+    for e in llm_entrants:
+        recs = [GameRecord.from_dict(r)
+                for r in by_identity.get(entrant_identities[e], [])]
+        persistent[e].load_campaign_records(recs)
+
+    if rating is not None:
+        from foedus.eval.ruleset import ranks_from_record
+        from foedus.scoring import MatchResult
+        with (out_dir / "sweep.jsonl").open() as f:
+            rows = [json.loads(x) for x in f if x.strip()][:completed]
+        for row in rows:
+            mr = MatchResult(rank=ranks_from_record(row), payout={},
+                             final_scores={}, detente=False, solo_winner=None)
+            rating.update(mr, identities=row["agents"])
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__,
@@ -130,6 +159,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true",
                    help="Emit the sealed manifest + per-game seating plan and "
                         "exit WITHOUT running any game (no LLM calls).")
+    p.add_argument("--resume", action="store_true",
+                   help="Resume a crashed match in --out-dir: reload the sealed "
+                        "secret + each entrant's persisted cross-game memory and "
+                        "continue from the first unfinished game (same seeds).")
     return p
 
 
@@ -158,12 +191,38 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
     max_turns = args.max_turns if args.max_turns is not None else cfg.max_turns
     map_radius = cfg.map_radius
 
-    # --- §7.5 commit: draw + seal the seed list, publish before any game -----
-    rng = random.Random(args.seed_rng) if args.seed_rng is not None else None
-    sealed, seeds, nonce = campaign.seal(args.match_id, args.num_games, rng=rng)
-    (out_dir / "seed_manifest.sealed.json").write_text(
-        json.dumps(sealed.to_dict(), indent=2)
-    )
+    # --- §7.5 commit: seal (or reload a crashed match's sealed secret) -------
+    secret_path = out_dir / "seed_manifest.secret.json"
+    completed = 0
+    resuming = (args.resume and not args.dry_run and secret_path.exists()
+                and (out_dir / "sweep.jsonl").exists())
+    if resuming:
+        secret = json.loads(secret_path.read_text())
+        if secret.get("num_games") != args.num_games:
+            build_parser().error(
+                f"--resume: --num-games {args.num_games} != the sealed match's "
+                f"{secret.get('num_games')}")
+        seeds = secret["seeds"]
+        nonce = secret["nonce"]
+        sealed = campaign.SeedManifest(
+            match_id=args.match_id, num_games=args.num_games,
+            domain=campaign.DOMAIN,
+            commit=campaign.seed_commitment(args.match_id, seeds, nonce))
+        with (out_dir / "sweep.jsonl").open() as f:
+            completed = sum(1 for line in f if line.strip())
+    else:
+        rng = random.Random(args.seed_rng) if args.seed_rng is not None else None
+        sealed, seeds, nonce = campaign.seal(args.match_id, args.num_games, rng=rng)
+        (out_dir / "seed_manifest.sealed.json").write_text(
+            json.dumps(sealed.to_dict(), indent=2)
+        )
+        # CRASH RECOVERY: persist the sealed secret (seeds + nonce) to disk NOW,
+        # before any game runs, so a crash before reveal loses neither the
+        # commit-reveal (the nonce) nor the ability to resume. Operator-private
+        # until reveal (it becomes seed_manifest.revealed.json at match end).
+        secret_path.write_text(json.dumps(
+            {"match_id": args.match_id, "num_games": args.num_games,
+             "seeds": seeds, "nonce": nonce}, indent=2))
 
     # --- per-game seating plan (audit + dry-run) -----------------------------
     seatings = [
@@ -241,14 +300,21 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
     rating = RatingSystem() if RatingSystem is not None else None
     transcripts = args.transcripts if args.transcripts is not None else args.num_games
 
+    if resuming:
+        _resume_state(out_dir, completed, persistent, llm_entrants,
+                      entrant_identities, rating)
+        print(f"[resume] {completed}/{args.num_games} games already done; "
+              f"reloaded memory + ratings; continuing from game {completed}.")
+
     match_start = time.time()
     per_game_wall: list[float] = []
     total_decisions = 0
     total_fell_back = 0
 
-    with (out_dir / "sweep.jsonl").open("w") as sweep_f, \
-         (out_dir / "telemetry.jsonl").open("w") as telemetry_f:
-        for g in range(args.num_games):
+    open_mode = "a" if resuming else "w"
+    with (out_dir / "sweep.jsonl").open(open_mode) as sweep_f, \
+         (out_dir / "telemetry.jsonl").open(open_mode) as telemetry_f:
+        for g in range(completed, args.num_games):
             gs = seatings[g]
             seed = seeds[g]
             # clear within-game caches on every reused agent (memory kept)
