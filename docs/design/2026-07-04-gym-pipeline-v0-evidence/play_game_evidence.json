@@ -1,0 +1,72 @@
+{
+  "model": "foedus-entrant-v0 (Qwen2.5-3B-Instruct + smoke QLoRA, q4_K_M via ollama)",
+  "backend": "existing foedus OllamaClient -> /api/chat on :11434",
+  "config": "1 game, 3 turns, 3 players, llm_seats=[0], heuristics=[GreedyHold,TitForTat]",
+  "sweep": {
+    "game_id": 0,
+    "seed": 0,
+    "agents": [
+      "LLMDiplomat",
+      "GreedyHold",
+      "TitForTat"
+    ],
+    "llm_seat": 0,
+    "llm_seats": [
+      0
+    ],
+    "total_turns": 3,
+    "final_scores": [
+      3.0,
+      5.0,
+      5.0
+    ],
+    "eliminated": [],
+    "winners": [],
+    "detente_reached": false
+  },
+  "seat0_parse_fail": "0/6",
+  "seat0_decisions": [
+    {
+      "turn": 0,
+      "phase": "negotiate",
+      "fell_back": false,
+      "json_ok": true,
+      "raw_response": "{\n  \"press\": {\n    \"stance\": {\"1\": \"neutral\", \"2\": \"neutral\"},\n    \"intents\": [\n      {\"unit_id\": 0, \"declared_order\": {\"type\": \"Hold\"}}\n    ]\n  },\n  \"pacts\": {}\n}"
+    },
+    {
+      "turn": 0,
+      "phase": "orders",
+      "fell_back": false,
+      "json_ok": true,
+      "raw_response": "{\"orders\": {\"u0\": {\"type\": \"Hold\"}}}"
+    },
+    {
+      "turn": 1,
+      "phase": "negotiate",
+      "fell_back": false,
+      "json_ok": true,
+      "raw_response": "{\n  \"press\": {\n    \"stance\": {\"1\": \"neutral\", \"2\": \"neutral\"},\n    \"intents\": [\n      {\"unit_id\": 0, \"declared_order\": {\"type\": \"Support\", \"target\": 1}}\n    ]\n  },\n  \"pacts\": {}\n}"
+    },
+    {
+      "turn": 1,
+      "phase": "orders",
+      "fell_back": false,
+      "json_ok": true,
+      "raw_response": "{\"orders\": {\"u0\": {\"type\": \"Support\", \"target\": 2}}}"
+    },
+    {
+      "turn": 2,
+      "phase": "negotiate",
+      "fell_back": false,
+      "json_ok": true,
+      "raw_response": "{\n  \"press\": {\n    \"stance\": {\"0\": \"ally\", \"1\": \"neutral\", \"2\": \"neutral\"},\n    \"intents\": [\n      {\"unit_id\": 0, \"declared_order\": {\"type\": \"Support\", \"target\": 1}, \"visible_to\": null}\n    ]\n  },\n  \"pacts\": {\n    \"propose\": [],\n    \"accept\": []\n  }\n}"
+    },
+    {
+      "turn": 2,
+      "phase": "orders",
+      "fell_back": false,
+      "json_ok": true,
+      "raw_response": "{\"orders\": {\"u0\": {\"type\": \"Support\", \"target\": 1}}}"
+    }
+  ]
+}
