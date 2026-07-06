@@ -1,0 +1,56 @@
+{
+  "game_index": 0,
+  "seat": 0,
+  "entrant_identity": "Delta",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 1139001886277480429,
+        "my_seat": 0,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 23.0,
+          "1": 32.0,
+          "2": 34.0,
+          "3": 22.0
+        },
+        "per_opponent": {
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 1,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Delta",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Foedus recap: Golf spammed ally declarations (11/11 turns) but never backed it with support or a pact\u2014treat Golf's alliance talk as noise, demand concrete pact/support before trusting. Echo barely engaged (1/11 ally signals), stayed neutral/opportunistic. Foxtrot never declared ally yet quietly won (34 pts)\u2014likely focuses on efficient solo play, watch them closely even without diplomatic overtures. No pacts formed, no breaches occurred. Lesson: push harder for actual pacts/support exchanges instead of relying on verbal alliance signals."
+    }
+  ]
+}

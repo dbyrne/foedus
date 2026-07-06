@@ -1,0 +1,198 @@
+{
+  "out_dir": "docs/research/2026-07-04-canonical-campaign-v1/run",
+  "aggregate": {
+    "n_games": 8,
+    "freerider_win_rate": 0.375,
+    "freerider_wins": 3,
+    "mean_margin": 2.624999999999999,
+    "total_subsidy": 3,
+    "mean_subsidy_per_game": 0.375,
+    "total_llm_llm_supports": 79,
+    "mean_llm_llm_supports_per_game": 9.875,
+    "parse_fail_rate": 0.08159722222222222
+  },
+  "trajectory": [
+    {
+      "game_id": 0,
+      "seed": 1139001886277480429,
+      "freerider_seat": 3,
+      "freerider_won": false,
+      "margin": -7.67,
+      "subsidy": 2,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.0,
+      "wall_clock_s": 6972.5
+    },
+    {
+      "game_id": 1,
+      "seed": 4586517569260278468,
+      "freerider_seat": 0,
+      "freerider_won": true,
+      "margin": 16.0,
+      "subsidy": 0,
+      "llm_llm_supports": 12,
+      "stance_hostility_frac": 0.45161290322580644,
+      "wall_clock_s": 8543.1
+    },
+    {
+      "game_id": 2,
+      "seed": 3287949421555357280,
+      "freerider_seat": 1,
+      "freerider_won": false,
+      "margin": -10.0,
+      "subsidy": 0,
+      "llm_llm_supports": 4,
+      "stance_hostility_frac": 0.5757575757575758,
+      "wall_clock_s": 5315.6
+    },
+    {
+      "game_id": 3,
+      "seed": 8911441032713762706,
+      "freerider_seat": 2,
+      "freerider_won": false,
+      "margin": 0.33,
+      "subsidy": 1,
+      "llm_llm_supports": 8,
+      "stance_hostility_frac": 0.42857142857142855,
+      "wall_clock_s": 6290.0
+    },
+    {
+      "game_id": 4,
+      "seed": 6540892972396956663,
+      "freerider_seat": 3,
+      "freerider_won": false,
+      "margin": 1.0,
+      "subsidy": 0,
+      "llm_llm_supports": 11,
+      "stance_hostility_frac": 0.5428571428571428,
+      "wall_clock_s": 7004.7
+    },
+    {
+      "game_id": 5,
+      "seed": 5518973295724712436,
+      "freerider_seat": 0,
+      "freerider_won": true,
+      "margin": 15.33,
+      "subsidy": 0,
+      "llm_llm_supports": 15,
+      "stance_hostility_frac": 0.17647058823529413,
+      "wall_clock_s": 6928.5
+    },
+    {
+      "game_id": 6,
+      "seed": 5725558501701130699,
+      "freerider_seat": 1,
+      "freerider_won": true,
+      "margin": 10.33,
+      "subsidy": 0,
+      "llm_llm_supports": 25,
+      "stance_hostility_frac": 0.48484848484848486,
+      "wall_clock_s": 7377.7
+    },
+    {
+      "game_id": 7,
+      "seed": 5227907280123223613,
+      "freerider_seat": 2,
+      "freerider_won": false,
+      "margin": -4.33,
+      "subsidy": 0,
+      "llm_llm_supports": 4,
+      "stance_hostility_frac": 0.37142857142857144,
+      "wall_clock_s": 6855.3
+    }
+  ],
+  "trend": {
+    "subsidy": {
+      "first_half_mean": 0.75,
+      "second_half_mean": 0.0,
+      "direction": "v down (-0.75)"
+    },
+    "llm_llm_supports": {
+      "first_half_mean": 6.0,
+      "second_half_mean": 13.75,
+      "direction": "^ up (+7.75)"
+    },
+    "margin": {
+      "first_half_mean": -0.335,
+      "second_half_mean": 5.582,
+      "direction": "^ up (+5.92)"
+    },
+    "stance_hostility_frac": {
+      "first_half_mean": 0.364,
+      "second_half_mean": 0.394,
+      "direction": "^ up (+0.03)"
+    }
+  },
+  "parse_fail_by_identity": {
+    "Delta": {
+      "decisions": 192,
+      "timeout": 7,
+      "transport": 0,
+      "parse": 7
+    },
+    "Echo": {
+      "decisions": 192,
+      "timeout": 7,
+      "transport": 0,
+      "parse": 7
+    },
+    "Foxtrot": {
+      "decisions": 192,
+      "timeout": 5,
+      "transport": 0,
+      "parse": 14
+    }
+  },
+  "standings": {
+    "match_id": "canonical-v1-2026-07-05",
+    "num_games": 8,
+    "rating": "OpenSkill PlackettLuce, mu-3sigma",
+    "standings": [
+      {
+        "identity": "Echo",
+        "mu": 27.71,
+        "sigma": 7.12,
+        "conservative": 6.349
+      },
+      {
+        "identity": "Golf",
+        "mu": 24.562,
+        "sigma": 7.169,
+        "conservative": 3.056
+      },
+      {
+        "identity": "Foxtrot",
+        "mu": 24.231,
+        "sigma": 7.139,
+        "conservative": 2.812
+      },
+      {
+        "identity": "Delta",
+        "mu": 23.01,
+        "sigma": 7.056,
+        "conservative": 1.842
+      }
+    ]
+  },
+  "run_summary": {
+    "match_id": "canonical-v1-2026-07-05",
+    "num_games": 8,
+    "match_wall_clock_s": 55287.4,
+    "mean_game_wall_clock_s": 6910.9,
+    "per_game_wall_clock_s": [
+      6972.5,
+      8543.1,
+      5315.6,
+      6290.0,
+      7004.7,
+      6928.5,
+      7377.7,
+      6855.3
+    ],
+    "total_decisions": 576,
+    "total_fell_back": 47,
+    "parse_fail_rate": 0.0816,
+    "seed_commitment": "115b99310c07f1f00bc4485f1ef44f02b6d7743eaf1eadc74bc923a86cafde2b",
+    "resumed": true
+  }
+}

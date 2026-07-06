@@ -1,0 +1,105 @@
+{
+  "game_index": 1,
+  "seat": 2,
+  "entrant_identity": "Echo",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 5410499336044490057,
+        "my_seat": 1,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 3.0,
+          "1": 4.0,
+          "2": 2.0,
+          "3": 3.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 1,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 1,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 1,
+            "ally_toward_me": 1,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Echo",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Foedus recap: finished 1st (Echo 4, Delta 3, Golf 3, Foxtrot 2). Sample tiny (1 turn observed) \u2014 don't over-index. Golf declared ally toward me once; I never reciprocated with Support. Watch if Golf keeps offering alliance cheaply \u2014 could be exploitable (accept early pacts, extract value, delay reciprocation). Delta and Foxtrot showed no alliance signals; treat as neutral/unknown until more data. No pacts formed, no breaches by anyone yet \u2014 clean slate for trust-building experiments next game."
+    },
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 5600722314162149726,
+        "my_seat": 2,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 3.0,
+          "1": 3.0,
+          "2": 4.0,
+          "3": 3.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 1,
+            "ally_toward_me": 1,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 1,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 1,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Echo",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Foedus recap (seed 5600722314162149726): won narrowly, 4-3-3-3. Golf declared ally toward me once but no pact formed and no real support exchanged - watch if this is a pattern of empty ally talk. Delta and Foxtrot stayed neutral/quiet, no aggression, no cooperation signals. No breaches from anyone this game, so no trust data yet on betrayal tendencies. Need more games before drawing firm conclusions on Golf/Delta/Foxtrot behavior patterns."
+    }
+  ]
+}

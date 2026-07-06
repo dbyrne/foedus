@@ -1,0 +1,105 @@
+{
+  "game_index": 1,
+  "seat": 2,
+  "entrant_identity": "Echo",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 1139001886277480429,
+        "my_seat": 1,
+        "my_rank": 2,
+        "n_players": 4,
+        "final_scores": {
+          "0": 23.0,
+          "1": 32.0,
+          "2": 34.0,
+          "3": 22.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 3,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Echo",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Foedus notes: Golf spams ally-talk (11/11 turns) but never converts to real support or pact\u2014treat as cheap talk, don't over-rely. Delta only claims ally sporadically (3/11), also no follow-through\u2014low reliability, low threat of betrayal too. Foxtrot stayed quiet, no ally declarations, no support either way, yet won outright (34 pts)\u2014likely a strong silent/independent player; watch their board state closely even without diplomatic signals. No breaches seen from any this game."
+    },
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 4586517569260278468,
+        "my_seat": 2,
+        "my_rank": 2,
+        "n_players": 4,
+        "final_scores": {
+          "0": 44.0,
+          "1": 19.0,
+          "2": 42.0,
+          "3": 23.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 3,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 1,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 8,
+            "my_supports_of_them": 5,
+            "their_support_intent_toward_me": 5,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Echo",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Foedus recap: Lost to Golf (44) despite finishing close (me 42). Golf talked ally 11/11 but never backed it with support or pact\u2014pure rhetoric, don't trust their alliance talk, treat as opportunistic leader to check early. Foxtrot was genuinely reliable: 8/11 ally declarations matched by 5 mutual support exchanges\u2014worth prioritizing as real coalition partner. Delta mostly disengaged/low-ally; low threat but also low value as partner. Next time: pressure Golf sooner, lean into Foxtrot pacts."
+    }
+  ]
+}

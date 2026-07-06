@@ -1,0 +1,21 @@
+{
+  "match_id": "canonical-v1-2026-07-05",
+  "num_games": 8,
+  "match_wall_clock_s": 55287.4,
+  "mean_game_wall_clock_s": 6910.9,
+  "per_game_wall_clock_s": [
+    6972.5,
+    8543.1,
+    5315.6,
+    6290.0,
+    7004.7,
+    6928.5,
+    7377.7,
+    6855.3
+  ],
+  "total_decisions": 576,
+  "total_fell_back": 47,
+  "parse_fail_rate": 0.0816,
+  "seed_commitment": "115b99310c07f1f00bc4485f1ef44f02b6d7743eaf1eadc74bc923a86cafde2b",
+  "resumed": true
+}

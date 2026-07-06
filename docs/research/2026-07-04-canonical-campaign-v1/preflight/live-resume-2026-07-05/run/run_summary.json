@@ -1,0 +1,13 @@
+{
+  "match_id": "smoke-live-resume-2026-07-05",
+  "num_games": 2,
+  "match_wall_clock_s": 210.7,
+  "mean_game_wall_clock_s": 197.1,
+  "per_game_wall_clock_s": [
+    197.1
+  ],
+  "total_decisions": 12,
+  "total_fell_back": 0,
+  "parse_fail_rate": 0.0,
+  "seed_commitment": "6badc35c6788fc4060ccbaadcd3928dc5ac4a827ac0644b96e555d0e9a28025d"
+}
