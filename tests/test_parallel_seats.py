@@ -146,6 +146,33 @@ def _issues_a_move(agents: dict) -> bool:
     return False
 
 
+def test_parallel_matches_sequential_with_real_heuristic_roster() -> None:
+    """Two LLM seats mixed with the REAL default heuristic roster -- the exact
+    shape the live campaign runs (LLM seats + GreedyHold/TitForTat). Exercises
+    2-way concurrency with real heuristics interleaved, and must still match."""
+    seats = [0, 1]
+    heuristics = ["GreedyHold", "TitForTat"]  # real foedus.agents.heuristics agents
+    num_players = len(seats) + len(heuristics)
+    seed, max_turns = 13, 4
+
+    def run(parallel: bool):
+        responses = {s: _scripted_responses(s, num_players, max_turns) for s in seats}
+        return harness.run_one_llm_game(
+            game_id=0, seed=seed, llm_seats=seats, heuristic_names=heuristics,
+            max_turns=max_turns, llm_agent_factory=_dispatch_factory(seats, responses),
+            parallel_seats=parallel,
+        )
+
+    seq_sweep, seq_tel, _sf, seq_agents = run(False)
+    par_sweep, par_tel, _pf, par_agents = run(True)
+
+    assert par_sweep == seq_sweep
+    assert par_tel == seq_tel
+    for s in seats:
+        assert _serialize_log(par_agents[s].decision_log) == \
+            _serialize_log(seq_agents[s].decision_log)
+
+
 def test_parallel_matches_sequential_with_movement() -> None:
     """Stronger variant: seats issue real legal Move orders on turn 0, so the
     resolution engine processes movement (not a vacuous all-Hold game) -- and
@@ -392,6 +419,17 @@ def test_default_max_workers_allows_all_seats_concurrent() -> None:
     cfg = GameConfig(num_players=3, max_turns=1, seed=3, map_radius=2)
     play_game(agents, config=cfg, parallel_seats=True)  # default bound = #opt-in seats
     assert mon.max_active == 3
+
+
+def test_shared_agent_instance_rejected_under_parallel() -> None:
+    """A distinct agent instance per seat is required under concurrency: a
+    single instance shared across seats would race its client/cache/decision_log
+    across threads, so play_game must fail loudly rather than corrupt the run."""
+    shared = _MonitoredSeat(_ConcurrencyMonitor())  # opt-in agent, one instance
+    agents = {0: shared, 1: shared}
+    cfg = GameConfig(num_players=2, max_turns=1, seed=3, map_radius=2)
+    with pytest.raises(ValueError, match="distinct agent instance per seat"):
+        play_game(agents, config=cfg, parallel_seats=True)
 
 
 # --------------------------------------------------------------------------

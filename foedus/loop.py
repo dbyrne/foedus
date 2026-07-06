@@ -59,6 +59,20 @@ def _prewarm_seats(
         for pid, agent in targets:
             agent.prewarm_phase(state, pid, phase)
         return
+    # Concurrency requires each seat to own a DISTINCT agent instance: two seats
+    # sharing one instance would race its client / caches / decision_log across
+    # threads (e.g. StubLLMClient.pop, list.append). The shipped harness always
+    # builds one instance per seat, so this fails loud only on future misuse
+    # rather than silently corrupting a run.
+    if len({id(agent) for _, agent in targets}) != len(targets):
+        raise ValueError(
+            "parallel_seats requires a distinct agent instance per seat: the "
+            "same object is registered for multiple seats, which would race "
+            "its client/cache/decision_log under concurrency"
+        )
+    # Default the bound to one worker per opt-in seat. On a single-subscription
+    # host a large fan-out can raise contention -- pass max_workers (e.g. 2) to
+    # throttle it without changing outcomes (see FOEDUS_PARALLEL_SEATS_WORKERS).
     workers = max_workers if (max_workers and max_workers > 0) else len(targets)
     with ThreadPoolExecutor(
         max_workers=workers, thread_name_prefix="foedus-seat"
@@ -67,10 +81,12 @@ def _prewarm_seats(
             pool.submit(agent.prewarm_phase, state, pid, phase)
             for pid, agent in targets
         ]
-        # Barrier: wait for all, and re-raise the first seat's exception, so a
-        # failure surfaces exactly as it would in the sequential pass (which
-        # would raise inline). LLMDiplomat already isolates transport/parse
-        # failures internally, so in practice this never raises.
+        # Barrier: wait for all, re-raising the first submitted future's
+        # exception. NB not literally identical to a sequential raise: the pool
+        # joins (shutdown(wait=True)), so the OTHER seats' prewarm side effects
+        # have already completed before this propagates. Benign for the intended
+        # agents -- LLMDiplomat._complete isolates transport/parse failures and
+        # never raises here -- and either way the game aborts.
         for fut in futures:
             fut.result()
 
