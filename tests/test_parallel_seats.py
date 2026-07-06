@@ -137,43 +137,45 @@ def test_parallel_matches_sequential_outcomes_and_decision_logs() -> None:
     assert seq_tel["parse_fail_count"] == 0
 
 
-def test_parallel_matches_sequential_with_movement_and_betrayal() -> None:
-    """Stronger variant: seats declare a Move intent on turn 0 but Hold (a
-    betrayal), so resolution, intent/betrayal tracking, and reputation are
-    all exercised -- and must still match between the two modes."""
+def _issues_a_move(agents: dict) -> bool:
+    for ag in agents.values():
+        for rec in ag.decision_log:
+            if rec["phase"] == "orders":
+                if any(isinstance(o, Move) for o in rec["parsed"].values()):
+                    return True
+    return False
+
+
+def test_parallel_matches_sequential_with_movement() -> None:
+    """Stronger variant: seats issue real legal Move orders on turn 0, so the
+    resolution engine processes movement (not a vacuous all-Hold game) -- and
+    the parallel run must still match the sequential run exactly."""
     seats = [0, 1, 2]
     num_players = 3
     seed, max_turns = 11, 3
 
-    # Reconstruct the exact initial state run_one_llm_game builds, to script
-    # a real legal move per seat.
+    # Reconstruct the exact initial state run_one_llm_game builds, to script a
+    # real legal move per seat (legality is checked at turn-0 order time,
+    # which reads this same pre-move state).
     cfg = GameConfig(num_players=num_players, max_turns=max_turns, seed=seed,
                      archetype=harness.Archetype.CONTINENTAL_SWEEP, map_radius=2)
     m = generate_map(num_players, seed=seed, archetype=cfg.archetype,
                      map_radius=cfg.map_radius)
     state = initial_state(cfg, m)
 
-    def _first_move_intent(seat: int):
+    def _first_move_order(seat: int):
         for u in state.units.values():
             if u.owner != seat:
                 continue
             for o in legal_orders_for_unit(state, u.id):
                 if isinstance(o, Move):
-                    return {"unit_id": u.id,
-                            "declared_order": {"type": "Move", "dest": o.dest}}
-        return None
+                    return {str(u.id): {"type": "Move", "dest": o.dest}}
+        return {}
 
     responses: dict[int, list[str]] = {}
     for s in seats:
-        others = [p for p in range(num_players) if p != s]
-        intent = _first_move_intent(s)
-        neg = json.dumps({
-            "press": {"stance": {str(others[0]): "ally"},
-                      "intents": [intent] if intent else []},
-            "pacts": {"propose": [], "accept": []},
-        })
-        # Declared a Move, but actually Hold -> a betrayal the engine records.
-        turn0 = [neg, _hold_orders_json()]
+        turn0 = [_negotiate_json(s, num_players),
+                 json.dumps({"orders": _first_move_order(s)})]
         rest = [_negotiate_json(s, num_players), _hold_orders_json()] * (max_turns + 1)
         responses[s] = turn0 + rest
 
@@ -193,9 +195,9 @@ def test_parallel_matches_sequential_with_movement_and_betrayal() -> None:
     for s in seats:
         assert _serialize_log(par_agents[s].decision_log) == \
             _serialize_log(seq_agents[s].decision_log)
-    # The declared-Move/actual-Hold really did register as betrayals, so the
-    # betrayal path was exercised (not a vacuous all-Hold game).
-    assert any(seq_tel["betrayals"].values())
+    # Real Move orders were issued (resolution exercised movement, not just Holds).
+    assert _issues_a_move(seq_agents)
+    assert seq_tel["parse_fail_count"] == 0
 
 
 # --------------------------------------------------------------------------

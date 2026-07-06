@@ -117,6 +117,15 @@ class LLMDiplomat:
         # game by the campaign orchestrator via set_identity_context().
         self._identity: IdentityContext | None = None
 
+    #: Opt-in marker read by foedus.loop.play_game: this agent is safe to
+    #: pre-compute concurrently from a read-only snapshot. The per-(turn,
+    #: player) negotiate/orders caches make prewarm_phase idempotent, so
+    #: warming the cache off-thread and then letting play_game's sequential
+    #: pass hit it is byte-identical to computing it inline. Heuristic agents
+    #: do NOT set this, so play_game never pre-warms them (their invocation
+    #: order -- and any RNG they draw -- stays exactly as today).
+    supports_parallel_prewarm = True
+
     # --- Agent protocol -----------------------------------------------
 
     def choose_press(self, state: GameState, player: PlayerId) -> Press:
@@ -166,6 +175,25 @@ class LLMDiplomat:
         """v0 locked decision: structured press (stance + intents), no
         free-text chat -- see the First Light design doc, §2."""
         return []
+
+    # --- parallel-seat pre-warm (opt-in; see supports_parallel_prewarm) ---
+
+    def prewarm_phase(self, state: GameState, player: PlayerId, phase: str) -> None:
+        """Populate this seat's decision cache for `phase` ("negotiate" or
+        "orders") from `state`, off play_game's critical path.
+
+        Idempotent by construction: it runs exactly the cached compute the
+        matching choose_* call would run, so the sequential pass that follows
+        returns the warmed value -- no second LLM call, no duplicate
+        decision-log entry, no repeated reciprocation-memory observation.
+        The "negotiate" cache also backs choose_pacts / accept_pacts.
+        """
+        if phase == "negotiate":
+            self._negotiate(state, player)
+        elif phase == "orders":
+            self.choose_orders(state, player)
+        else:
+            raise ValueError(f"unknown prewarm phase: {phase!r}")
 
     # --- campaign (cross-game) lifecycle --------------------------------
 
