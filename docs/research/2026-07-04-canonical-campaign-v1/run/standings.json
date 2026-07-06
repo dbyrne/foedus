@@ -1,0 +1,31 @@
+{
+  "match_id": "canonical-v1-2026-07-05",
+  "num_games": 8,
+  "rating": "OpenSkill PlackettLuce, mu-3sigma",
+  "standings": [
+    {
+      "identity": "Echo",
+      "mu": 27.71,
+      "sigma": 7.12,
+      "conservative": 6.349
+    },
+    {
+      "identity": "Golf",
+      "mu": 24.562,
+      "sigma": 7.169,
+      "conservative": 3.056
+    },
+    {
+      "identity": "Foxtrot",
+      "mu": 24.231,
+      "sigma": 7.139,
+      "conservative": 2.812
+    },
+    {
+      "identity": "Delta",
+      "mu": 23.01,
+      "sigma": 7.056,
+      "conservative": 1.842
+    }
+  ]
+}

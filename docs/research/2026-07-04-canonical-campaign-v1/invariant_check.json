@@ -1,0 +1,53 @@
+{
+  "n_seeds": 8,
+  "pairings_per_seed": 20,
+  "total_turn_checks": 1856,
+  "invariant_held": true,
+  "per_seed": [
+    {
+      "seed": 1139001886277480429,
+      "pairings": 20,
+      "turn_checks": 232
+    },
+    {
+      "seed": 4586517569260278468,
+      "pairings": 20,
+      "turn_checks": 228
+    },
+    {
+      "seed": 3287949421555357280,
+      "pairings": 20,
+      "turn_checks": 232
+    },
+    {
+      "seed": 8911441032713762706,
+      "pairings": 20,
+      "turn_checks": 232
+    },
+    {
+      "seed": 6540892972396956663,
+      "pairings": 20,
+      "turn_checks": 228
+    },
+    {
+      "seed": 5518973295724712436,
+      "pairings": 20,
+      "turn_checks": 236
+    },
+    {
+      "seed": 5725558501701130699,
+      "pairings": 20,
+      "turn_checks": 236
+    },
+    {
+      "seed": 5227907280123223613,
+      "pairings": 20,
+      "turn_checks": 232
+    }
+  ],
+  "seed_manifest": {
+    "revealed": true,
+    "verified": true,
+    "seeds_match_sweep": true
+  }
+}

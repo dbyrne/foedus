@@ -10,7 +10,9 @@ way for a human LLM driver, and this mirrors it.
 
 from __future__ import annotations
 
-from foedus.agents.llm.campaign_memory import CampaignMemory, GameFacts
+from foedus.agents.llm.campaign_memory import (
+    CampaignMemory, GameFacts, IdentityContext,
+)
 from foedus.agents.llm.memory import ReciprocationMemory
 from foedus.core import GameState, Intent, PlayerId
 from foedus.legal import legal_orders_for_unit
@@ -52,17 +54,64 @@ SELF_NOTE_SYSTEM_PROMPT = (
     "next time. The note is for your eyes only."
 )
 
+# Ruleset v1.1 identity-keyed variant: seats rotate between games, so the note
+# must reference opponents by their stable handle, not the seat they held.
+SELF_NOTE_SYSTEM_PROMPT_IDENTITY = (
+    "You just finished a game of Foedus. Across this campaign you keep facing "
+    "the same opponents; each is identified by a stable handle that does NOT "
+    "change between games, even though their seat numbers do. Write a brief "
+    "private note to your future self: at most 80 words, plain text only (no "
+    "markdown, no JSON, no headings). Capture whatever you judge useful for "
+    "playing these opponents (referred to by handle) next time. The note is for "
+    "your eyes only."
+)
 
-def _render_visible_units(view: dict, player: PlayerId) -> list[str]:
+
+def _hlabel(seat: PlayerId, identity: IdentityContext | None) -> str:
+    """Seat label, annotated with the entrant's stable handle when an identity
+    legend is active: ``p2 (Foxtrot)``; plain ``p2`` otherwise."""
+    if identity is not None and seat in identity.seat_to_handle:
+        return f"p{seat} ({identity.seat_to_handle[seat]})"
+    return f"p{seat}"
+
+
+def render_identity_legend(
+    identity: IdentityContext, player: PlayerId
+) -> list[str]:
+    """The per-game seat legend (Ruleset v1.1). Maps this game's seats to the
+    campaign-stable handles so the agent can connect handle-keyed cross-game
+    memory to the seats it acts on this game. Neutral text (counts/labels only,
+    passes the leading-words denylist)."""
+    lines = [
+        "PLAYER HANDLES THIS GAME (each handle is the same entrant every game "
+        "of this campaign; seat numbers change between games, handles do not):"
+    ]
+    for seat, handle in sorted(identity.seat_to_handle.items()):
+        me = " (you)" if seat == player else ""
+        lines.append(f"  p{seat} = {handle}{me}")
+    return lines
+
+
+def _render_visible_units(view: dict, player: PlayerId,
+                          identity: IdentityContext | None = None) -> list[str]:
     lines = ["VISIBLE UNITS:"]
     for u in view["visible_units"]:
-        marker = "(YOURS)" if u["owner"] == player else f"(player {u['owner']})"
+        if u["owner"] == player:
+            marker = "(YOURS)"
+        elif identity is not None:
+            # "(p2 (Foxtrot))": keeps the seat number (the metrics extractor +
+            # the engine work in seat space) and adds the stable handle.
+            marker = f"({_hlabel(u['owner'], identity)})"
+        else:
+            # No identity => byte-identical to the pre-v1.1 seat-keyed prompt.
+            marker = f"(player {u['owner']})"
         lines.append(f"  u{u['id']} at node {u['location']} {marker}")
     return lines
 
 
 def render_reciprocation_record(
-    memory: ReciprocationMemory, player: PlayerId
+    memory: ReciprocationMemory, player: PlayerId,
+    identity: IdentityContext | None = None,
 ) -> list[str]:
     """The agent-side reciprocation record for `player` (see
     foedus.agents.llm.memory). Purely factual bookkeeping: per opponent, how
@@ -89,7 +138,7 @@ def render_reciprocation_record(
         # All three stance counts are surfaced symmetrically (no single-lens
         # emphasis) — factual bookkeeping only, per the neutrality requirement.
         lines.append(
-            f"  p{p}: declared toward you across {rec.turns_observed} observed "
+            f"  {_hlabel(p, identity)}: declared toward you across {rec.turns_observed} observed "
             f"turns — ally {rec.ally_toward_me}, neutral {rec.neutral_toward_me}, "
             f"hostile {rec.hostile_toward_me}; you gave Support to their units on "
             f"{rec.turns_i_supported_them} turns; your prior stances toward them: "
@@ -110,17 +159,31 @@ def render_game_facts(facts: GameFacts, player: PlayerId) -> list[str]:
 
     `their_support_intent_toward_me` is labeled as a DECLARED intent, never as
     executed support, because executed support is not fog-observable.
+
+    When the record carries handles (Ruleset v1.1), opponents and scores are
+    rendered by the entrant's stable handle rather than the seat it held that
+    game, so a later game reads the record about the same entrant regardless of
+    seat rotation.
     """
+    def _label(seat: PlayerId) -> str:
+        if facts.handles and seat in facts.handles:
+            return facts.handles[seat]
+        return f"p{seat}"
+
     scores = "; ".join(
-        f"p{p}={_fmt_score(s)}" for p, s in sorted(facts.final_scores.items())
+        f"{_label(p)}={_fmt_score(s)}" for p, s in sorted(facts.final_scores.items())
     )
+    if facts.my_handle is not None:
+        who = f"you played as {facts.my_handle}"
+    else:
+        who = f"you were seat p{facts.my_seat}"
     lines = [
-        f"  Game (seed {facts.seed}): final scores {scores}; you were seat "
-        f"p{facts.my_seat}, finished rank {facts.my_rank} of {facts.n_players}."
+        f"  Game (seed {facts.seed}): final scores {scores}; {who}, "
+        f"finished rank {facts.my_rank} of {facts.n_players}."
     ]
     for p, of in sorted(facts.per_opponent.items()):
         lines.append(
-            f"    p{p}: declared ally toward you on {of.ally_toward_me} of "
+            f"    {_label(p)}: declared ally toward you on {of.ally_toward_me} of "
             f"{of.turns_observed} observed turns; you gave Support to their units "
             f"on {of.my_supports_of_them} turns; they declared Support intents "
             f"toward your units on {of.their_support_intent_toward_me} turns; "
@@ -158,8 +221,14 @@ def render_self_note_prompt(
     """The one post-game LLM call that asks a seat to write its own ≤80-word
     note to its future self. The neutral facts are handed to the model; the note
     it returns is stored verbatim (see campaign_memory)."""
+    if facts.my_handle is not None:
+        system = SELF_NOTE_SYSTEM_PROMPT_IDENTITY
+        header = f"You are {facts.my_handle}. The game just ended."
+    else:
+        system = SELF_NOTE_SYSTEM_PROMPT
+        header = f"You are Player {player}. The game just ended."
     lines = [
-        f"You are Player {player}. The game just ended.",
+        header,
         "",
         "FACTS FROM THE GAME YOU JUST PLAYED:",
     ]
@@ -168,16 +237,20 @@ def render_self_note_prompt(
     lines.append(
         "Write your note now: at most 80 words, plain text, no markdown."
     )
-    return SELF_NOTE_SYSTEM_PROMPT, "\n".join(lines)
+    return system, "\n".join(lines)
 
 
 def render_negotiation_prompt(
     state: GameState, view: dict, player: PlayerId,
     recip_memory: ReciprocationMemory | None = None,
     campaign_memory: CampaignMemory | None = None,
+    identity: IdentityContext | None = None,
 ) -> tuple[str, str]:
     lines: list[str] = []
     lines.append(f"You are Player {player}. " + render_turn_calendar(state))
+    if identity is not None:
+        lines.extend(render_identity_legend(identity, player))
+        lines.append("")
     lines.append(f"Scores: {view['scores']}")
     lines.append(f"Your supply count: {view['supply_count_you']}")
     lines.append("")
@@ -193,16 +266,16 @@ def render_negotiation_prompt(
     lines.append("")
     lines.append(render_adjacency_table(state, view["visible_nodes"]))
     lines.append("")
-    lines.extend(_render_visible_units(view, player))
+    lines.extend(_render_visible_units(view, player, identity))
     lines.append("")
 
     if view["public_stance_matrix"]:
         lines.append("PUBLIC STANCE MATRIX (last round):")
         for sender, stances in sorted(view["public_stance_matrix"].items()):
             entries = ", ".join(
-                f"p{tgt}={st}" for tgt, st in sorted(stances.items())
+                f"{_hlabel(tgt, identity)}={st}" for tgt, st in sorted(stances.items())
             )
-            lines.append(f"  p{sender}: {entries or '(none declared)'}")
+            lines.append(f"  {_hlabel(sender, identity)}: {entries or '(none declared)'}")
         lines.append("")
 
     if view["your_inbound_intents"]:
@@ -211,7 +284,7 @@ def render_negotiation_prompt(
             for it in intents:
                 vis = "public" if it.visible_to is None else sorted(it.visible_to)
                 lines.append(
-                    f"  p{sender} declared u{it.unit_id} -> "
+                    f"  {_hlabel(sender, identity)} declared u{it.unit_id} -> "
                     f"{order_to_str(it.declared_order, state)} (visible_to={vis})"
                 )
         lines.append("")
@@ -233,7 +306,7 @@ def render_negotiation_prompt(
         )
         for p, r in sorted(recip.items()):
             lines.append(
-                f"  p{p}: {r['given']}/{r['received']}/"
+                f"  {_hlabel(p, identity)}: {r['given']}/{r['received']}/"
                 f"{r['standing']:.2f}/{r['freeride_debt']}"
             )
         lines.append("")
@@ -250,7 +323,7 @@ def render_negotiation_prompt(
     # Optional agent-side reciprocation memory (default OFF -> nothing appended,
     # so the prompt is byte-identical to the no-ledger arm).
     if recip_memory is not None:
-        lines.extend(render_reciprocation_record(recip_memory, player))
+        lines.extend(render_reciprocation_record(recip_memory, player, identity))
         lines.append("")
 
     lines.append("YOUR UNITS (for declaring intents):")
@@ -318,10 +391,14 @@ def render_negotiation_prompt(
 
 
 def render_orders_prompt(
-    state: GameState, view: dict, player: PlayerId, own_intents: list[Intent]
+    state: GameState, view: dict, player: PlayerId, own_intents: list[Intent],
+    identity: IdentityContext | None = None,
 ) -> tuple[str, str]:
     lines: list[str] = []
     lines.append(f"You are Player {player}. " + render_turn_calendar(state))
+    if identity is not None:
+        lines.extend(render_identity_legend(identity, player))
+        lines.append("")
     lines.append(CAPTURE_RULE_TEXT)
     lines.append("")
     lines.append(
@@ -334,7 +411,7 @@ def render_orders_prompt(
     lines.append("")
     lines.append(render_income_ledger(state, player))
     lines.append("")
-    lines.extend(_render_visible_units(view, player))
+    lines.extend(_render_visible_units(view, player, identity))
     lines.append("")
 
     if own_intents:

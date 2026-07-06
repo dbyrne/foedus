@@ -1,0 +1,31 @@
+{
+  "match_id": "smoke-live-resume-2026-07-05",
+  "num_games": 2,
+  "rating": "OpenSkill PlackettLuce, mu-3sigma",
+  "standings": [
+    {
+      "identity": "Echo",
+      "mu": 30.432,
+      "sigma": 8.187,
+      "conservative": 5.872
+    },
+    {
+      "identity": "Delta",
+      "mu": 23.759,
+      "sigma": 8.031,
+      "conservative": -0.334
+    },
+    {
+      "identity": "Golf",
+      "mu": 23.759,
+      "sigma": 8.031,
+      "conservative": -0.334
+    },
+    {
+      "identity": "Foxtrot",
+      "mu": 22.102,
+      "sigma": 8.04,
+      "conservative": -2.017
+    }
+  ]
+}

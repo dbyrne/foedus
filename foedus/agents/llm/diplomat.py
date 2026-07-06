@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from foedus.agents.llm.campaign_memory import (
-    CampaignMemory, GameRecord, build_game_facts,
+    CampaignMemory, GameRecord, IdentityContext, build_game_facts,
 )
 from foedus.agents.llm.client import LLMClient, make_client_from_env
 from foedus.agents.llm.memory import ReciprocationMemory
@@ -112,6 +112,10 @@ class LLMDiplomat:
         self._campaign_memory: CampaignMemory | None = (
             CampaignMemory() if campaign else None
         )
+        # Ruleset v1.1 identity context (stable handles for this game). None =>
+        # seat-keyed rendering (single-game / pre-v1.1 arms unchanged). Set per
+        # game by the campaign orchestrator via set_identity_context().
+        self._identity: IdentityContext | None = None
 
     # --- Agent protocol -----------------------------------------------
 
@@ -132,7 +136,8 @@ class LLMDiplomat:
         view = visible_state_for(state, player)
         prior = self._negotiation_cache.get(key)
         own_intents = prior.press.intents if prior is not None else []
-        system, user = render_orders_prompt(state, view, player, own_intents)
+        system, user = render_orders_prompt(state, view, player, own_intents,
+                                            identity=self._identity)
 
         raw, error = self._complete(system, user)
         if error is not None:
@@ -164,6 +169,14 @@ class LLMDiplomat:
 
     # --- campaign (cross-game) lifecycle --------------------------------
 
+    def set_identity_context(self, identity: "IdentityContext | None") -> None:
+        """Set this game's stable-handle context (Ruleset v1.1). The campaign
+        orchestrator calls this once per game (after `reset_for_new_game`) with
+        the seat->handle map for the current rotation, so prompts show opponents
+        by handle + a seat legend and cross-game facts key on the handle. Pass
+        None to fall back to seat-keyed rendering."""
+        self._identity = identity
+
     def reset_for_new_game(self) -> None:
         """Clear all WITHIN-game state so a reused instance starts the next
         campaign game clean, while KEEPING the cross-game memory.
@@ -193,7 +206,8 @@ class LLMDiplomat:
             return
         view = visible_state_for(final_state, player)
         facts = build_game_facts(
-            self._memory, view, player, seed=seed, game_index=game_index
+            self._memory, view, player, seed=seed, game_index=game_index,
+            identity=self._identity,
         )
         note = self._write_self_note(facts, player)
         self._campaign_memory.append(GameRecord(facts=facts, self_note=note))
@@ -212,6 +226,19 @@ class LLMDiplomat:
             return []
         return self._campaign_memory.all()
 
+    def load_campaign_records(self, records: list[GameRecord]) -> None:
+        """Restore cross-game memory from persisted records (crash resume).
+
+        A campaign runs in one process, so cross-game memory is normally in-RAM;
+        if that process dies mid-match, the per-game `campaign_memory_*.json`
+        files are the durable copy. This replays them onto a fresh reused agent
+        so a resumed match continues with the same accumulated memory. No-op when
+        campaign mode is off."""
+        if self._campaign_memory is None:
+            return
+        for r in records:
+            self._campaign_memory.append(r)
+
     # --- internals ------------------------------------------------------
 
     def _negotiate(self, state: GameState, player: PlayerId) -> NegotiationDecision:
@@ -229,6 +256,7 @@ class LLMDiplomat:
             state, view, player,
             recip_memory=recip_for_prompt,
             campaign_memory=self._campaign_memory,
+            identity=self._identity,
         )
 
         raw, error = self._complete(system, user)
