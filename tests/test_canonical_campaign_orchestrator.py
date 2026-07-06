@@ -158,6 +158,9 @@ def test_resume_continues_from_crash(tmp_path):
     full = [json.loads(l) for l in (out / "sweep.jsonl").read_text().splitlines() if l.strip()]
     assert len(full) == 2
     assert (out / "seed_manifest.secret.json").exists()  # secret persisted pre-games
+    # capture the uninterrupted run's rating + summary to compare against resume
+    full_standings = json.loads((out / "standings.json").read_text())["standings"]
+    full_summary = json.loads((out / "run_summary.json").read_text())
 
     # simulate a crash AFTER game 0: keep game-0 artifacts + the secret, drop
     # everything game 1 / final produced.
@@ -188,6 +191,21 @@ def test_resume_continues_from_crash(tmp_path):
     # standings cover both games (rating replayed game 0 + ran game 1)
     standings = json.loads((out / "standings.json").read_text())["standings"]
     assert {r["identity"] for r in standings} == {"Delta", "Echo", "Foxtrot", "Golf"}
+
+    # NUMERIC PARITY: a resumed match must yield byte-identical OpenSkill ratings
+    # to an uninterrupted one (empty stub orders => identical game outcomes, so
+    # any divergence here is a resume-replay bug, not stub noise).
+    resumed_by_id = {r["identity"]: r for r in standings}
+    for fr in full_standings:
+        rr = resumed_by_id[fr["identity"]]
+        assert (rr["mu"], rr["sigma"]) == (fr["mu"], fr["sigma"]), (fr, rr)
+
+    # run_summary reports WHOLE-match totals after resume, not just the resume leg
+    resumed_summary = json.loads((out / "run_summary.json").read_text())
+    assert resumed_summary["total_decisions"] == full_summary["total_decisions"]
+    assert resumed_summary["total_fell_back"] == full_summary["total_fell_back"]
+    assert len(resumed_summary["per_game_wall_clock_s"]) == 2
+    assert resumed_summary["resumed"] is True
 
     # game 1 saw game 0's reloaded memory
     seat = sweeps[1]["llm_seats"][0]

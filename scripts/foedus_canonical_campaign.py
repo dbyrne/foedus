@@ -83,19 +83,60 @@ def _write_campaign_memory(out_dir: Path, agent, game_id: int, seat: int,
     )
 
 
-def _resume_state(out_dir: Path, completed: int, persistent: dict,
+def _read_jsonl_rows(path: Path) -> list[dict]:
+    """Parse a JSONL file into rows, failing LOUD + CLEAR on a torn final line.
+    A crash can leave a partial (non-JSON) last line; silently counting it as a
+    completed game would corrupt a resume (wrong `completed`, then a broken
+    append), so refuse with an actionable message rather than a raw traceback."""
+    rows = []
+    for i, line in enumerate(path.read_text().splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as ex:
+            raise SystemExit(
+                f"{path.name}: line {i} is not valid JSON ({ex}). A crash likely "
+                f"left a partial line; remove the trailing partial line and "
+                f"re-run --resume.")
+    return rows
+
+
+def _resume_state(out_dir: Path, completed_rows: list, persistent: dict,
                   llm_entrants: list, entrant_identities: list, rating) -> None:
     """Restore in-RAM state a crashed match lost: each entrant's cross-game
-    memory (from the last completed game's per-seat files, matched by stable
-    identity since seats rotate) and the OpenSkill ratings (replayed from the
-    completed sweep rows)."""
+    memory (matched by stable identity since seats rotate) and the OpenSkill
+    ratings (replayed from the completed sweep rows, in order)."""
     from foedus.agents.llm.campaign_memory import GameRecord
 
-    last = completed - 1
+    completed = len(completed_rows)
+    # Restore cross-game memory from the newest completed game that actually has
+    # per-seat memory files. Normally that's game completed-1, but a crash can
+    # land AFTER a game's sweep row is flushed but BEFORE its memory files are
+    # written (they trail behind an extra self-note LLM call); fall back to the
+    # newest earlier game that has them (memory is cumulative, so an earlier
+    # snapshot is a correct—if slightly staler—restore) instead of silently
+    # resuming with zero cross-game memory.
     by_identity: dict[str, list] = {}
-    for p in out_dir.glob(f"campaign_memory_game{last}_seat*.json"):
-        d = json.loads(p.read_text())
-        by_identity[d.get("entrant_identity")] = d.get("records", [])
+    mem_game = None
+    for g in range(completed - 1, -1, -1):
+        files = list(out_dir.glob(f"campaign_memory_game{g}_seat*.json"))
+        if files:
+            mem_game = g
+            for p in files:
+                d = json.loads(p.read_text())
+                by_identity[d.get("entrant_identity")] = d.get("records", [])
+            break
+    if completed > 0 and mem_game is None:
+        print("[resume] WARNING: no campaign_memory_game*_seat*.json found for "
+              f"{completed} completed game(s); resuming with EMPTY cross-game "
+              "memory.", file=sys.stderr)
+    elif mem_game is not None and mem_game != completed - 1:
+        print(f"[resume] note: newest persisted memory is game {mem_game} (not "
+              f"{completed - 1}); self-notes for games {mem_game + 1}.."
+              f"{completed - 1} were not written before the crash.",
+              file=sys.stderr)
     for e in llm_entrants:
         recs = [GameRecord.from_dict(r)
                 for r in by_identity.get(entrant_identities[e], [])]
@@ -104,9 +145,7 @@ def _resume_state(out_dir: Path, completed: int, persistent: dict,
     if rating is not None:
         from foedus.eval.ruleset import ranks_from_record
         from foedus.scoring import MatchResult
-        with (out_dir / "sweep.jsonl").open() as f:
-            rows = [json.loads(x) for x in f if x.strip()][:completed]
-        for row in rows:
+        for row in completed_rows:
             mr = MatchResult(rank=ranks_from_record(row), payout={},
                              final_scores={}, detente=False, solo_winner=None)
             rating.update(mr, identities=row["agents"])
@@ -193,35 +232,65 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
 
     # --- §7.5 commit: seal (or reload a crashed match's sealed secret) -------
     secret_path = out_dir / "seed_manifest.secret.json"
+    sweep_path = out_dir / "sweep.jsonl"
     completed = 0
-    resuming = (args.resume and not args.dry_run and secret_path.exists()
-                and (out_dir / "sweep.jsonl").exists())
+    completed_rows: list = []
+    resuming = args.resume and not args.dry_run
     if resuming:
-        secret = json.loads(secret_path.read_text())
-        if secret.get("num_games") != args.num_games:
+        # Fail LOUD rather than silently re-seal + truncate a sealed match: a
+        # --resume that can't find the operator-private secret + the sweep it
+        # resumes must NOT fall through to a fresh seal (that would overwrite the
+        # published commitment and clobber completed, real-cost games).
+        missing = [p.name for p in (secret_path, sweep_path) if not p.exists()]
+        if missing:
             build_parser().error(
-                f"--resume: --num-games {args.num_games} != the sealed match's "
-                f"{secret.get('num_games')}")
+                "--resume: required file(s) missing: " + ", ".join(missing) +
+                " — refusing to re-seal / overwrite a sealed match.")
+        secret = json.loads(secret_path.read_text())
+        # Everything folded into the seed commitment (match_id) or the identity
+        # keys (entrants, rotation) must match the sealed match, else the resume
+        # would silently fork it: a different match_id yields a different commit
+        # (a commit-reveal audit break that verify() still self-certifies), and
+        # different entrants/rotation change the OpenSkill identities + seatings
+        # mid-match. (`None` = an older secret that didn't record the field.)
+        mismatch = []
+        if secret.get("match_id") != args.match_id:
+            mismatch.append(f"match_id {args.match_id!r} != sealed "
+                            f"{secret.get('match_id')!r}")
+        if secret.get("num_games") != args.num_games:
+            mismatch.append(f"num_games {args.num_games} != sealed "
+                            f"{secret.get('num_games')}")
+        if secret.get("entrant_identities") not in (None, entrant_identities):
+            mismatch.append(f"entrants {entrant_identities} != sealed "
+                            f"{secret.get('entrant_identities')}")
+        if secret.get("rotation") not in (None, rotate):
+            mismatch.append(f"rotation {rotate} != sealed "
+                            f"{secret.get('rotation')}")
+        if mismatch:
+            build_parser().error(
+                "--resume: does not match the sealed match: " + "; ".join(mismatch))
         seeds = secret["seeds"]
         nonce = secret["nonce"]
         sealed = campaign.SeedManifest(
             match_id=args.match_id, num_games=args.num_games,
             domain=campaign.DOMAIN,
             commit=campaign.seed_commitment(args.match_id, seeds, nonce))
-        with (out_dir / "sweep.jsonl").open() as f:
-            completed = sum(1 for line in f if line.strip())
+        completed_rows = _read_jsonl_rows(sweep_path)
+        completed = len(completed_rows)
     else:
         rng = random.Random(args.seed_rng) if args.seed_rng is not None else None
         sealed, seeds, nonce = campaign.seal(args.match_id, args.num_games, rng=rng)
         (out_dir / "seed_manifest.sealed.json").write_text(
             json.dumps(sealed.to_dict(), indent=2)
         )
-        # CRASH RECOVERY: persist the sealed secret (seeds + nonce) to disk NOW,
-        # before any game runs, so a crash before reveal loses neither the
-        # commit-reveal (the nonce) nor the ability to resume. Operator-private
-        # until reveal (it becomes seed_manifest.revealed.json at match end).
+        # CRASH RECOVERY: persist the sealed secret (seeds + nonce + the identity
+        # config that keys memory/ratings) to disk NOW, before any game runs, so
+        # a crash before reveal loses neither the commit-reveal (the nonce) nor
+        # the ability to resume the exact same match. Operator-private until
+        # reveal (it becomes seed_manifest.revealed.json at match end).
         secret_path.write_text(json.dumps(
             {"match_id": args.match_id, "num_games": args.num_games,
+             "entrant_identities": entrant_identities, "rotation": rotate,
              "seeds": seeds, "nonce": nonce}, indent=2))
 
     # --- per-game seating plan (audit + dry-run) -----------------------------
@@ -300,16 +369,25 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
     rating = RatingSystem() if RatingSystem is not None else None
     transcripts = args.transcripts if args.transcripts is not None else args.num_games
 
-    if resuming:
-        _resume_state(out_dir, completed, persistent, llm_entrants,
-                      entrant_identities, rating)
-        print(f"[resume] {completed}/{args.num_games} games already done; "
-              f"reloaded memory + ratings; continuing from game {completed}.")
-
     match_start = time.time()
     per_game_wall: list[float] = []
     total_decisions = 0
     total_fell_back = 0
+
+    if resuming:
+        _resume_state(out_dir, completed_rows, persistent, llm_entrants,
+                      entrant_identities, rating)
+        # Seed the whole-match accumulators from the completed games on disk so
+        # run_summary.json reports true whole-match totals, not just the resume
+        # leg. (sweep wall_clock_s = per-game engine compute; telemetry carries
+        # the decision + parse-fail counts.)
+        for row in completed_rows:
+            per_game_wall.append(float(row.get("wall_clock_s") or 0.0))
+        for trow in _read_jsonl_rows(out_dir / "telemetry.jsonl"):
+            total_decisions += trow.get("n_decisions", 0) or 0
+            total_fell_back += trow.get("parse_fail_count", 0) or 0
+        print(f"[resume] {completed}/{args.num_games} games already done; "
+              f"reloaded memory + ratings; continuing from game {completed}.")
 
     open_mode = "a" if resuming else "w"
     with (out_dir / "sweep.jsonl").open(open_mode) as sweep_f, \
@@ -429,22 +507,31 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
             print(f"  {row['identity']:<22} mu={row['mu']:.2f} "
                   f"sigma={row['sigma']:.2f} cons={row['conservative']:.2f}")
 
-    match_wall = time.time() - match_start
+    # Engine compute = sum of per-game wall. Resume-safe by construction: a
+    # multi-hour reboot gap in the middle must not inflate it, and a resumed
+    # process's match_start covers only its own leg. per_game_wall + the totals
+    # are seeded from disk on resume (above), so this is the true whole-match
+    # figure. The live-process elapsed is reported separately (not persisted).
+    match_compute = sum(per_game_wall)
+    live_elapsed = time.time() - match_start
+    n = len(per_game_wall) or 1
     rate = (total_fell_back / total_decisions) if total_decisions else 0.0
     summary = {
         "match_id": args.match_id,
         "num_games": args.num_games,
-        "match_wall_clock_s": round(match_wall, 1),
-        "mean_game_wall_clock_s": round(sum(per_game_wall) / len(per_game_wall), 1),
+        "match_wall_clock_s": round(match_compute, 1),
+        "mean_game_wall_clock_s": round(match_compute / n, 1),
         "per_game_wall_clock_s": [round(x, 1) for x in per_game_wall],
         "total_decisions": total_decisions,
         "total_fell_back": total_fell_back,
         "parse_fail_rate": round(rate, 4),
         "seed_commitment": sealed.commit,
+        "resumed": resuming,
     }
     (out_dir / "run_summary.json").write_text(json.dumps(summary, indent=2))
-    print(f"\nmatch wall-clock: {match_wall/3600:.2f}h "
-          f"({summary['mean_game_wall_clock_s']/60:.1f}m/game mean)")
+    print(f"\nmatch engine-compute: {match_compute/3600:.2f}h "
+          f"({summary['mean_game_wall_clock_s']/60:.1f}m/game mean)"
+          + (f"  [this process leg: {live_elapsed/3600:.2f}h]" if resuming else ""))
     print(f"overall parse-fail: {total_fell_back}/{total_decisions} ({rate:.1%})")
     print(f"seeds revealed -> seed_manifest.revealed.json (verify OK)")
     return 0

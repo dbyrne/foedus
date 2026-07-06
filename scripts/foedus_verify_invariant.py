@@ -77,12 +77,18 @@ def _play_and_check(seed: int, cfg: GameConfig, rng: random.Random) -> int:
 def verify(out_dir: str, pairings: int = 20) -> dict:
     d = Path(out_dir)
     seeds = []
+    n_players = None
     with (d / "sweep.jsonl").open() as f:
         for line in f:
             if line.strip():
-                seeds.append(json.loads(line)["seed"])
+                row = json.loads(line)
+                seeds.append(row["seed"])
+                if n_players is None and row.get("agents"):
+                    n_players = len(row["agents"])
+    # Seat count comes from the sweep's own seating; minimal fixtures omit
+    # 'agents', and the canonical campaign is 4-seat, so fall back to 4.
+    n_players = n_players or 4
 
-    n_players = 4
     checks = 0
     per_seed = []
     for seed in seeds:
