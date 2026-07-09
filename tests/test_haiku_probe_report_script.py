@@ -71,8 +71,10 @@ def _write_run(tmp_path):
     (out / "campaign_memory_game1_seat1.json").write_text(json.dumps({
         "game_index": 1, "seat": 1, "entrant_identity": "Delta",
         "records": [
-            {"game_index": 0, "self_note": "Golf never pacts, watch actions not words."},
-            {"game_index": 1, "self_note": "Echo coordinated with me twice; trustworthy so far."},
+            {"facts": {"game_index": 0},
+             "self_note": "Golf never pacts, watch actions not words."},
+            {"facts": {"game_index": 1},
+             "self_note": "Echo coordinated with me twice; trustworthy so far."},
         ],
     }))
     return out

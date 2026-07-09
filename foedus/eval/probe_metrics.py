@@ -111,8 +111,8 @@ def self_notes_for_identity(out_dir: str | Path, identity: str) -> list[dict]:
         note = rec.get("self_note")
         if note:
             notes.append({
-                "game_index": rec.get("game_index"),
+                "game_index": (rec.get("facts") or {}).get("game_index"),
                 "entrant_identity": identity,
                 "self_note": note,
             })
-    return sorted(notes, key=lambda n: n["game_index"])
+    return sorted(notes, key=lambda n: (n["game_index"] is None, n["game_index"]))

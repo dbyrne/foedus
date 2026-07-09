@@ -101,20 +101,22 @@ class TestRepeatedIdenticalOrderRuns:
 
 class TestSelfNotesForIdentity:
     def test_reads_self_notes_from_highest_numbered_game_file(self, tmp_path):
+        # Real shape (foedus.agents.llm.campaign_memory.GameRecord.to_dict):
+        # game_index lives under "facts", not on the record itself.
         (tmp_path / "campaign_memory_game0_seat0.json").write_text(json.dumps({
             "game_index": 0, "seat": 0, "entrant_identity": "Delta",
-            "records": [{"game_index": 0, "self_note": "first game note"}],
+            "records": [{"facts": {"game_index": 0}, "self_note": "first game note"}],
         }))
         (tmp_path / "campaign_memory_game1_seat2.json").write_text(json.dumps({
             "game_index": 1, "seat": 2, "entrant_identity": "Delta",
             "records": [
-                {"game_index": 0, "self_note": "first game note"},
-                {"game_index": 1, "self_note": "second game note"},
+                {"facts": {"game_index": 0}, "self_note": "first game note"},
+                {"facts": {"game_index": 1}, "self_note": "second game note"},
             ],
         }))
         (tmp_path / "campaign_memory_game1_seat0.json").write_text(json.dumps({
             "game_index": 1, "seat": 0, "entrant_identity": "Echo",
-            "records": [{"game_index": 1, "self_note": "echo's note"}],
+            "records": [{"facts": {"game_index": 1}, "self_note": "echo's note"}],
         }))
 
         notes = self_notes_for_identity(tmp_path, "Delta")
@@ -127,6 +129,6 @@ class TestSelfNotesForIdentity:
     def test_missing_identity_returns_empty_list(self, tmp_path):
         (tmp_path / "campaign_memory_game0_seat0.json").write_text(json.dumps({
             "game_index": 0, "seat": 0, "entrant_identity": "Delta",
-            "records": [{"game_index": 0, "self_note": "note"}],
+            "records": [{"facts": {"game_index": 0}, "self_note": "note"}],
         }))
         assert self_notes_for_identity(tmp_path, "Foxtrot") == []
