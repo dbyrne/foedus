@@ -57,7 +57,7 @@ have changed the outcome.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from foedus.agents.heuristics import ROSTER
 from foedus.agents.llm.parse import (
@@ -108,6 +108,12 @@ class ReplayAgent:
     are pure functions of (raw_response, state, player), so replaying the
     recorded `raw_response` against the SAME state the original decision saw
     reproduces the SAME Press / orders -- see the module docstring.
+
+    Caches are keyed by turn only (not `(turn, player)`, unlike
+    `LLMDiplomat`'s cache) -- correct because `replay_game` always
+    constructs one `ReplayAgent` per seat, never shares an instance across
+    seats. Would need `(turn, player)` keys if ever reused for a multi-seat
+    instance the way `LLMDiplomat` supports.
     """
 
     def __init__(self, decisions: list[dict]) -> None:
@@ -188,11 +194,28 @@ def replay_game(
 ) -> tuple[GameState, list[TurnResolution]]:
     """Replay one sealed game from its seed + every seat's logged decisions.
 
-    Mirrors exactly how the canonical-campaign harness built the original
-    game (`scripts/foedus_llm_diplomat_run.py::run_one_llm_game`): a plain
+    Builds the same `GameConfig` shape the canonical-campaign harness did
+    (`scripts/foedus_llm_diplomat_run.py::run_one_llm_game`): a plain
     `GameConfig` (no preset -- the campaign runner doesn't apply
     `foedus.presets.ruleset_v1` to the per-game config either, only to derive
-    the board params it passes through) + `generate_map` from the same seed.
+    the board params it passes through) + `generate_map` from the same seed,
+    over the 5 fields the campaign always threads through explicitly. Fields
+    the campaign never overrode (e.g. `detente_threshold`, which defaults to
+    `4 + num_players` on both sides) are left at `GameConfig`'s own class
+    default on both the original run and here, so they agree by
+    construction -- not verified independently. `verify_replay_fidelity`
+    plus each game's final-score/turn/elimination match against the sealed
+    `sweep.jsonl` (see `scripts/foedus_s1_5_confound_check.py`) is the actual
+    end-to-end faithfulness guarantee; a future campaign run that passes
+    `config_overrides` to `run_one_llm_game` would silently desync from this
+    reconstruction, and only that check would catch it.
+
+    `agents` is built in strict seat order (0..num_players-1), matching
+    `run_one_llm_game`'s own `agents[i] = ... for i, name in
+    enumerate(agent_names)` -- `play_game` iterates `agents.items()` within
+    each phase, so this keeps per-phase call order identical to the original
+    run rather than relying on the engine's per-player resolution being
+    order-invariant (which it is, but this removes the need to rely on it).
 
     `freerider_seats` maps seat -> heuristic CLASS name (e.g.
     `{3: "DishonestCooperator"}`); a fresh instance is built per seat, exactly
@@ -207,15 +230,25 @@ def replay_game(
                      map_radius=cfg.map_radius)
     state = initial_state(cfg, m)
 
+    llm_seat_set = set(llm_seats)
     agents: dict[PlayerId, object] = {}
-    for seat in llm_seats:
-        agents[seat] = ReplayAgent(decisions_by_seat[seat])
-    for seat, heuristic_name in freerider_seats.items():
-        agents[seat] = ROSTER[heuristic_name]()
+    for seat in range(num_players):
+        if seat in llm_seat_set:
+            agents[seat] = ReplayAgent(decisions_by_seat[seat])
+        elif seat in freerider_seats:
+            agents[seat] = ROSTER[freerider_seats[seat]]()
 
     resolutions: list[TurnResolution] = []
 
     def on_turn_resolved(prev_state, orders_by_player, new_state):
+        # Recomputes the same resolution finalize_round already ran (see
+        # press.py's own `_resolve_orders_detailed(state, orders_by_player)`
+        # call) to recover its ResolutionDetail, rather than threading a
+        # capture hook through press.py. Safe only because
+        # _resolve_orders_detailed is a pure function of its two arguments
+        # (no RNG, no I/O) -- confirmed by reading resolve.py in full -- so
+        # this call is guaranteed to reproduce the exact detail finalize_round
+        # used, not just a plausible-looking recomputation.
         _s_after, detail = _resolve_orders_detailed(prev_state, orders_by_player)
         resolutions.append(TurnResolution(
             turn=prev_state.turn, prev_state=prev_state,

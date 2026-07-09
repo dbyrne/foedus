@@ -22,6 +22,7 @@ from foedus.eval.punishment_metrics import (
     classify_game_punishment,
     classify_negotiate_proposal,
     classify_orders_execution,
+    count_require_dest_declarations,
     golf_occupied_nodes,
     income_drop_turns,
     income_series,
@@ -498,3 +499,60 @@ def test_pearson_correlation_none_on_mismatched_length() -> None:
 
 def test_pearson_correlation_none_on_fewer_than_two_points() -> None:
     assert pearson_correlation([1], [1]) is None
+
+
+# --- count_require_dest_declarations (M-foedus-s1-5-confound-check) --------
+
+
+def test_count_require_dest_declarations_counts_all_three_surfaces() -> None:
+    decisions_by_seat = {
+        0: [
+            {"turn": 1, "phase": "orders", "raw_response": json.dumps({
+                "orders": {
+                    "1": {"type": "Support", "target": 2, "require_dest": 9},
+                    "2": {"type": "Move", "dest": 9},
+                    "3": {"type": "Support", "target": 2},  # bare -- not counted
+                },
+            })},
+            {"turn": 2, "phase": "negotiate", "raw_response": json.dumps({
+                "press": {"stance": {}, "intents": [
+                    {"unit_id": 1, "declared_order":
+                        {"type": "Support", "target": 2, "require_dest": 9},
+                     "visible_to": None},
+                    {"unit_id": 2, "declared_order": {"type": "Move", "dest": 9},
+                     "visible_to": None},
+                ]},
+                "pacts": {"propose": [
+                    {"counterparty": 1, "terms": [
+                        {"player": 0, "unit_id": 1, "declared_order":
+                            {"type": "Support", "target": 2, "require_dest": 9}},
+                        {"player": 1, "unit_id": 9, "declared_order": {"type": "Hold"}},
+                    ]},
+                ], "accept": []},
+            })},
+        ],
+    }
+    counts = count_require_dest_declarations(decisions_by_seat)
+    assert counts == {
+        "orders_phase": 1,
+        "negotiate_intents": 1,
+        "negotiate_pact_terms": 1,
+    }
+
+
+def test_count_require_dest_declarations_ignores_unparseable_and_fallback_records() -> None:
+    decisions_by_seat = {
+        0: [
+            {"turn": 1, "phase": "orders", "raw_response": "<client error: timeout>"},
+            {"turn": 2, "phase": "negotiate", "raw_response": "not json at all"},
+        ],
+    }
+    assert count_require_dest_declarations(decisions_by_seat) == {
+        "orders_phase": 0, "negotiate_intents": 0, "negotiate_pact_terms": 0,
+    }
+
+
+def test_count_require_dest_declarations_no_data_is_all_zero() -> None:
+    assert count_require_dest_declarations({}) == {
+        "orders_phase": 0, "negotiate_intents": 0, "negotiate_pact_terms": 0,
+    }

@@ -87,6 +87,60 @@ def parse_scores(prompt_user: str) -> dict[int, float] | None:
     return out
 
 
+def _is_require_dest_support(order: object) -> bool:
+    return (
+        isinstance(order, dict) and order.get("type") == "Support"
+        and order.get("require_dest") is not None
+    )
+
+
+def count_require_dest_declarations(decisions_by_seat: dict[int, list[dict]]) -> dict[str, int]:
+    """Corpus-wide sweep (freerider-agnostic, unlike the rest of this module)
+    for how many Support orders anywhere in the LOGGED decisions used the
+    `require_dest` pin variant: orders-phase submissions, negotiate-phase
+    declared Intents, and negotiate-phase pact-proposal terms.
+
+    M-foedus-s1-5-confound-check Check 3: every one of these three surfaces
+    is routed through `foedus.agents.llm.parse.parse_order`'s legality gate
+    (`parse_orders_response` for orders; `parse_intent`/`parse_pact_term` for
+    negotiate) -- which never accepts a `require_dest` Support, regardless of
+    geometry, because `foedus.legal.legal_orders_for_unit` never enumerates
+    that variant as a candidate (see
+    `foedus.eval.resolution_replay.geometric_legality`'s docstring). This is
+    the TRUE denominator for "how many declared orders this bug silently
+    discards" -- not just the subset that happened to target the freerider,
+    which is all `classify_orders_execution`/`classify_negotiate_proposal`
+    see.
+    """
+    counts = {"orders_phase": 0, "negotiate_intents": 0, "negotiate_pact_terms": 0}
+    for records in decisions_by_seat.values():
+        for rec in records:
+            data = _extract(rec.get("raw_response") or "")
+            if not isinstance(data, dict):
+                continue
+            if rec.get("phase") == "orders":
+                orders = data.get("orders")
+                if isinstance(orders, dict):
+                    counts["orders_phase"] += sum(
+                        1 for o in orders.values() if _is_require_dest_support(o)
+                    )
+            elif rec.get("phase") == "negotiate":
+                press = data.get("press")
+                if isinstance(press, dict):
+                    for it in press.get("intents") or []:
+                        if isinstance(it, dict) and _is_require_dest_support(it.get("declared_order")):
+                            counts["negotiate_intents"] += 1
+                pacts = data.get("pacts")
+                if isinstance(pacts, dict):
+                    for prop in pacts.get("propose") or []:
+                        if not isinstance(prop, dict):
+                            continue
+                        for term in prop.get("terms") or []:
+                            if isinstance(term, dict) and _is_require_dest_support(term.get("declared_order")):
+                                counts["negotiate_pact_terms"] += 1
+    return counts
+
+
 def classify_negotiate_proposal(
     raw_response: str, freerider_seats: set[int], golf_nodes: set[int]
 ) -> dict:

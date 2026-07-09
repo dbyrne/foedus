@@ -25,10 +25,24 @@ regardless of validity -- see that module's docstring). For orders caught by
 the parser gap, `counterfactual_reinstate_order` checks whether reinstating
 the order would actually have changed the outcome.
 
+Also sweeps the corpus (independent of the freerider/attack-execution set)
+for every `require_dest` Support declared anywhere -- orders-phase
+submissions, negotiate-phase declared Intents, and negotiate-phase
+pact-proposal terms -- since all three are routed through the same
+`foedus.agents.llm.parse.parse_order` legality gate
+(`foedus.eval.punishment_metrics.count_require_dest_declarations`). This is
+the true denominator for "how many declared orders this bug silently
+discards", not just the subset that happened to target the freerider.
+
+Exits non-zero (after still printing the full report, for debuggability) if
+any game's replayed final scores/turn count/eliminations don't match the
+sealed `sweep.jsonl` -- every number below assumes the replay is faithful,
+so a silent config/order divergence must not be allowed to produce
+plausible-looking confound numbers unnoticed.
+
 Usage:
     PYTHONPATH=. python3 scripts/foedus_s1_5_confound_check.py \
-        --out-dir docs/research/2026-07-04-canonical-campaign-v1/run \
-        --scorecard docs/research/2026-07-04-canonical-campaign-v1/scorecard.json
+        --out-dir docs/research/2026-07-04-canonical-campaign-v1/run
     PYTHONPATH=. python3 scripts/foedus_s1_5_confound_check.py --out-dir <dir> --json > report.json
 """
 
@@ -48,6 +62,7 @@ from foedus.eval.punishment_metrics import (  # noqa: E402
     classify_game_punishment,
     clean_call_subset,
     client_error_by_seat_turn,
+    count_require_dest_declarations,
     fell_back_by_seat_turn,
 )
 from foedus.eval.resolution_replay import (  # noqa: E402
@@ -183,6 +198,7 @@ def analyze_game(out_dir: Path, sweep_row: dict, plan: dict) -> dict:
     client_error = client_error_by_seat_turn(decisions_by_seat)
     clean_broad = clean_call_subset(report, fell_back)
     clean_strict = clean_call_subset(report, client_error)
+    require_dest_counts = count_require_dest_declarations(decisions_by_seat)
 
     return {
         "game_id": game_id,
@@ -203,6 +219,7 @@ def analyze_game(out_dir: Path, sweep_row: dict, plan: dict) -> dict:
         # "strict": excludes only a genuine client-error/timeout fallback.
         "clean_call_subset_broad": clean_broad,
         "clean_call_subset_strict": clean_strict,
+        "require_dest_counts": require_dest_counts,
     }
 
 
@@ -252,6 +269,12 @@ def build_report(out_dir: str) -> dict:
         "executed_count": sum(g["full_report"]["executed_count"] for g in per_game),
         "paid_count": sum(g["full_report"]["paid_count"] for g in per_game),
     }
+    require_dest_totals = {
+        "orders_phase": sum(g["require_dest_counts"]["orders_phase"] for g in per_game),
+        "negotiate_intents": sum(g["require_dest_counts"]["negotiate_intents"] for g in per_game),
+        "negotiate_pact_terms": sum(g["require_dest_counts"]["negotiate_pact_terms"] for g in per_game),
+    }
+    require_dest_totals["all_phases"] = sum(require_dest_totals.values())
 
     return {
         "out_dir": str(d),
@@ -259,6 +282,7 @@ def build_report(out_dir: str) -> dict:
             "all_games_score_turn_elimination_match": total_integrity_ok,
             "total_fidelity_mismatches": total_fidelity_mismatches,
         },
+        "require_dest_corpus_wide_sweep": require_dest_totals,
         "check1_legality_and_outcome": {
             "legality_counts": legality_counts,
             "attack_move_dislodge_count": dislodge_count,
@@ -284,6 +308,18 @@ def _print_report(rep: dict) -> None:
     print(f"replay integrity: all games' final scores/turns/eliminations match sealed "
           f"sweep.jsonl = {ri['all_games_score_turn_elimination_match']}   "
           f"fidelity mismatches (replay vs logged 'parsed') = {ri['total_fidelity_mismatches']}")
+    if not ri["all_games_score_turn_elimination_match"] or ri["total_fidelity_mismatches"]:
+        print("*** WARNING: replay integrity check FAILED -- every number below assumes a "
+              "faithful replay and should NOT be trusted until this is resolved. ***")
+    print()
+    rd = rep["require_dest_corpus_wide_sweep"]
+    print(f"require_dest Support declarations corpus-wide (orders-phase / negotiate-intents / "
+          f"negotiate-pact-terms / all-phases total): "
+          f"{rd['orders_phase']} / {rd['negotiate_intents']} / {rd['negotiate_pact_terms']} / "
+          f"{rd['all_phases']} -- every one is unconditionally coerced to Hold() by "
+          f"foedus.legal's candidate enumeration (see foedus.eval.resolution_replay."
+          f"geometric_legality's docstring); directly confirmed for the 12 backing an "
+          f"attack-execution below, not independently re-verified per declaration here")
     print()
     c1 = rep["check1_legality_and_outcome"]
     print("Check 1+3 -- legality survival & resolution truth (39 executed order-actions):")
@@ -314,6 +350,17 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(rep, indent=2, default=str))
     else:
         _print_report(rep)
+    ri = rep["replay_integrity"]
+    integrity_ok = ri["all_games_score_turn_elimination_match"] and not ri["total_fidelity_mismatches"]
+    if not integrity_ok:
+        print(
+            "ERROR: replay integrity check failed -- final scores/turns/eliminations did not "
+            "match the sealed sweep.jsonl for at least one game, or verify_replay_fidelity found "
+            "a mismatch. The report above was still printed for debugging, but none of its "
+            "confound-check numbers should be trusted until this is resolved.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

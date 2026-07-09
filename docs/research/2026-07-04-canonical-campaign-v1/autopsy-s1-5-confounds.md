@@ -16,7 +16,9 @@ resolves all three from data already on disk.
   including a full equivalence test that drives one game twice — live and
   replayed — and asserts byte-identical final state.
 - `foedus/eval/punishment_metrics.py` — extended with `clean_call_subset`,
-  `fell_back_by_seat_turn`, `client_error_by_seat_turn` (Check 2).
+  `fell_back_by_seat_turn`, `client_error_by_seat_turn` (Check 2), and
+  `count_require_dest_declarations` (the corpus-wide `require_dest` sweep
+  behind the 67-declaration total in Check 1+3, below).
 - `scripts/foedus_s1_5_confound_check.py` — orchestrates all three checks
   over the full 8-game corpus. Regenerate every number below with:
 
@@ -170,9 +172,16 @@ documented in the prompt's own "Order objects" schema section
 `{"type": "Support", "target": <unit_id>, "require_dest": <node_id>}`),
 right next to the per-unit "legal orders" list that never actually offers
 it. **A corpus-wide sweep (independent of the 39-execution set, covering
-every declared order in every phase of all 8 games) confirms this is not
-occasional: 29 of 29 `require_dest` Support orders declared anywhere in the
-sealed corpus were coerced to `Hold()`. Zero exceptions.**
+every `require_dest` Support declared anywhere in all 8 games — orders-phase
+submissions, negotiate-phase declared Intents, and negotiate-phase
+pact-proposal terms, since all three route through the same `parse_order`
+legality gate) confirms this is not occasional: 67 declarations total (29
+orders-phase / 28 negotiate-intents / 10 pact-terms), every one coerced to
+`Hold()` by the mechanism above. Zero exceptions.** This 67 is the true
+denominator for how many declared orders the bug silently discards — not
+just the 12 that happened to back an executed attack on Golf, which is the
+only subset independently re-verified end-to-end against the resolver
+below.
 
 Of the 12 parser-gap-dropped Support order-actions specifically backing an
 attack on Golf, reinstating the order (`counterfactual_reinstate_order`,
