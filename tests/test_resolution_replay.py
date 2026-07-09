@@ -104,6 +104,62 @@ def test_replay_agent_reproduces_the_same_legality_gate_as_the_live_run():
     assert orders[1] == Hold()  # coerced -- matches the real parse-time gate
 
 
+def _pin_negotiate_state():
+    # 0 attacks 2; 1 (also p0) can pin-support 0's move into 2 -- bare
+    # Support(target=0) and Move(dest=2) are both legal candidates for u1, so
+    # the now-FIXED parser accepts the pin. The replay must still drop it,
+    # reproducing the corpus-era gate.
+    edges = {0: {2}, 1: {2}, 2: {0, 1}}
+    return build_state_with_units(
+        layout={0: 0, 1: 1, 2: 2}, ownership={0: 0, 1: 0, 2: 1}, edges=edges,
+        home_assignments={0: 0, 1: 0}, num_players=2,
+    )
+
+
+def test_replay_agent_reproduces_the_pin_gate_for_negotiate_intents():
+    """A require_dest Support declared inside a negotiate-phase Intent routes
+    through the SAME parse_order gate (parse_intent), so the ORIGINAL run
+    dropped it to Hold. ReplayAgent must reproduce that, not reinstate it via
+    the now-fixed parser -- else the replayed negotiate decisions diverge from
+    the sealed run."""
+    st = _pin_negotiate_state()
+    raw = _negotiate_json(press={
+        "stance": {},
+        "intents": [
+            {"unit_id": 1,
+             "declared_order": {"type": "Support", "target": 0, "require_dest": 2},
+             "visible_to": None},
+        ],
+    })
+    agent = ReplayAgent([_negotiate_rec(0, raw)])
+    press = agent.choose_press(st, 0)
+    assert len(press.intents) == 1
+    assert press.intents[0].unit_id == 1
+    assert press.intents[0].declared_order == Hold()  # corpus-era gate
+
+
+def test_replay_agent_reproduces_the_pin_gate_for_pact_terms():
+    """Same corpus-era gate for a require_dest Support inside a pact-proposal
+    term (parse_pact_term also routes through parse_order)."""
+    st = _pin_negotiate_state()
+    raw = _negotiate_json(pacts={
+        "propose": [
+            {"counterparty": 1,
+             "terms": [
+                 {"player": 0, "unit_id": 1,
+                  "declared_order": {
+                      "type": "Support", "target": 0, "require_dest": 2}},
+             ]},
+        ],
+        "accept": [],
+    })
+    agent = ReplayAgent([_negotiate_rec(0, raw)])
+    proposals = agent.choose_pacts(st, 0)
+    assert len(proposals) == 1
+    assert len(proposals[0].terms) == 1
+    assert proposals[0].terms[0].declared_order == Hold()  # corpus-era gate
+
+
 def test_replay_agent_missing_decision_raises():
     m = triangle_map()
     st = make_state(m, [Unit(id=0, owner=0, location=0)], num_players=2)
