@@ -251,6 +251,80 @@ def income_drop_turns(series: dict[int, float]) -> list[int]:
     return drops
 
 
+def match_paid_execution_turns(
+    drop_turns: list[int], exec_turns: list[int]
+) -> tuple[set[int], set[int]]:
+    """Pair each income-drop turn with the LATEST qualifying execution turn
+    (an execution 1-2 turns before the drop). Returns (paid_drop_turns,
+    paid_execution_turns).
+
+    Each DROP is credited to at most one execution turn (the latest
+    qualifying one), not the other way around -- otherwise a single capture
+    with two nearby execution turns in its window would be double-counted as
+    two "paid" events. Shared by `classify_game_punishment` (the full
+    executed set) and `clean_call_subset` (M-foedus-s1-5-confound-check's
+    Check 2, the same pairing rule re-applied to a turn-filtered subset).
+    """
+    paid_drop_turns: set[int] = set()
+    paid_turns: set[int] = set()
+    for dt in drop_turns:
+        candidates = [et for et in exec_turns if dt in (et + 1, et + 2)]
+        if not candidates:
+            continue
+        paid_drop_turns.add(dt)
+        paid_turns.add(max(candidates))
+    return paid_drop_turns, paid_turns
+
+
+def fell_back_by_seat_turn(decisions_by_seat: dict[int, list[dict]]) -> dict[tuple[int, int], bool]:
+    """(seat, turn) -> True if EITHER that seat's negotiate OR orders call
+    that turn fell back (client error / timeout / parse-fail -- the
+    `fell_back` flag `LLMDiplomat._log` already records per decision). A
+    (seat, turn) with no logged phase at all is simply absent."""
+    out: dict[tuple[int, int], bool] = {}
+    for seat, records in decisions_by_seat.items():
+        for rec in records:
+            key = (seat, rec["turn"])
+            out[key] = out.get(key, False) or bool(rec.get("fell_back"))
+    return out
+
+
+def clean_call_subset(report: dict, fell_back: dict[tuple[int, int], bool]) -> dict:
+    """Restrict a `classify_game_punishment` report to "clean-call"
+    attack-turns (M-foedus-s1-5-confound-check Check 2 -- see
+    docs/research/2026-07-04-canonical-campaign-v1/autopsy-s1-5-confounds.md):
+    a turn is clean only if EVERY seat that appears in one of that turn's
+    execution entries (mover or supporter) had NO negotiate/orders fallback
+    (client error / timeout / parse-fail) that same turn.
+
+    Restricts EXECUTED (and re-derives PAID from the restricted set);
+    `proposed_count` is deliberately not restricted here -- Check 2 isolates
+    whether infra failures explain the executed-but-unpaid gap, which is
+    about what reached the engine, not what was declared in press.
+    """
+    turns_seats: dict[int, set[int]] = {}
+    for e in report["executions"]:
+        turns_seats.setdefault(e["game_turn"], set()).add(e["seat"])
+
+    clean_turns = {
+        turn for turn, seats in turns_seats.items()
+        if not any(fell_back.get((seat, turn), False) for seat in seats)
+    }
+    dirty_turns = sorted(set(turns_seats) - clean_turns)
+    clean_executions = [e for e in report["executions"] if e["game_turn"] in clean_turns]
+    exec_turns = sorted(clean_turns)
+    paid_drop_turns, paid_turns = match_paid_execution_turns(
+        report["golf_income_drop_turns"], exec_turns)
+
+    return {
+        "executed_count": len(clean_executions),
+        "paid_count": len(paid_drop_turns),
+        "executions": clean_executions,
+        "paid_execution_turns": sorted(paid_turns),
+        "dirty_turns_excluded": dirty_turns,
+    }
+
+
 def pearson_correlation(xs: list[float], ys: list[float]) -> float | None:
     """Pearson r between two equal-length numeric series. None if undefined:
     fewer than 2 points, mismatched lengths, or zero variance in either
@@ -380,18 +454,7 @@ def classify_game_punishment(
     if freerider_seat is not None and scores_by_turn:
         drop_turns = income_drop_turns(income_series(scores_by_turn, freerider_seat))
     exec_turns = sorted({e["game_turn"] for e in executions})
-    # Each DROP is credited to at most one execution turn (the latest
-    # qualifying one), not the other way around -- otherwise a single capture
-    # with two nearby execution turns in its window would be double-counted
-    # as two "paid" events.
-    paid_drop_turns = set()
-    paid_turns = set()
-    for dt in drop_turns:
-        candidates = [et for et in exec_turns if dt in (et + 1, et + 2)]
-        if not candidates:
-            continue
-        paid_drop_turns.add(dt)
-        paid_turns.add(max(candidates))
+    paid_drop_turns, paid_turns = match_paid_execution_turns(drop_turns, exec_turns)
 
     return {
         "proposed_count": len(proposals),
