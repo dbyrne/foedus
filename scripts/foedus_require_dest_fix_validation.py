@@ -43,7 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from foedus.core import Archetype, Hold, Support  # noqa: E402
+from foedus.core import Archetype, Support  # noqa: E402
 from foedus.eval.punishment_metrics import classify_game_punishment  # noqa: E402
 from foedus.eval.resolution_replay import (  # noqa: E402
     counterfactual_reinstate_order,
@@ -55,7 +55,7 @@ from foedus.agents.llm.parse import parse_order  # noqa: E402
 from foedus.resolve import _normalize_with_reason  # noqa: E402
 
 import foedus_s1_autopsy as autopsy  # noqa: E402
-from foedus_s1_5_confound_check import _order_from_dict, _raw_declared_order  # noqa: E402
+from foedus_s1_5_confound_check import _raw_declared_order  # noqa: E402
 
 
 def _order_to_dict(order) -> dict:

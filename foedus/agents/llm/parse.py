@@ -289,6 +289,18 @@ def _parse_require_dest_support(
     same-owner defender at D) are contextual -- they depend on what other
     units do this turn -- and are left to resolution, just as a bare reactive
     Support's contextual normalization is.
+
+    Note the `Support(target=T) in legal` clause makes this INTENTIONALLY a
+    hair stricter than the resolver for a "dead" pin -- one whose require_dest
+    is not adjacent to the TARGET, so the target can never legally move there.
+    That clause is automatically satisfied for any pin that could actually
+    land (a landable pin needs is_adjacent(T, D) and is_adjacent(S, D), which
+    makes D a common neighbor and puts the bare Support in the candidate list),
+    so it never rejects a pin with a real effect. It only excludes pins that
+    back a move the target cannot make -- which _normalize would "accept" but
+    which then back nothing (the target's own illegal Move normalizes to Hold).
+    Dropping this clause to match the resolver byte-for-byte on those dead pins
+    would only admit inert orders; keep it as the tighter, safer gate.
     """
     require_dest = coerce_id(require_dest_raw)
     if (
