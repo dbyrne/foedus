@@ -1,0 +1,31 @@
+{
+  "match_id": "haiku-fitness-probe-2026-07-09",
+  "num_games": 2,
+  "rating": "OpenSkill PlackettLuce, mu-3sigma",
+  "standings": [
+    {
+      "identity": "Echo",
+      "mu": 29.222,
+      "sigma": 8.108,
+      "conservative": 4.898
+    },
+    {
+      "identity": "Delta",
+      "mu": 26.954,
+      "sigma": 7.997,
+      "conservative": 2.964
+    },
+    {
+      "identity": "Golf",
+      "mu": 22.852,
+      "sigma": 7.959,
+      "conservative": -1.026
+    },
+    {
+      "identity": "Foxtrot",
+      "mu": 20.998,
+      "sigma": 7.854,
+      "conservative": -2.563
+    }
+  ]
+}

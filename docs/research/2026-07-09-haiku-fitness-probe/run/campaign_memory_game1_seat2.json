@@ -1,0 +1,105 @@
+{
+  "game_index": 1,
+  "seat": 2,
+  "entrant_identity": "Echo",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 3777311599615543607,
+        "my_seat": 1,
+        "my_rank": 2,
+        "n_players": 4,
+        "final_scores": {
+          "0": 34.0,
+          "1": 32.0,
+          "2": 26.0,
+          "3": 23.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Echo",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Delta: Competitive player who won (34pts). Stayed independent, no alliances. Mimic this aggressive approach.\n\nFoxtrot: Neutral throughout (26pts). Predictable, safe but unimpressive. Low threat.\n\nGolf: Declared ally every single turn but never backed it with actual support or pacts (23pts). Their constant friendliness was hollow posturing. Don't be fooled by verbal declarations without action.\n\nNext game: compete hard like Delta. Ignore false signals."
+    },
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 3676575910630153373,
+        "my_seat": 2,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 40.0,
+          "1": 28.0,
+          "2": 44.0,
+          "3": 26.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Echo",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Golf declared ally all 11 turns but never formalized a pact or gave support. They scored 40 (close to your 44). Consider whether to ignore their future declarations, accept selectively, or demand actual support. Delta and Foxtrot are weaker (28, 26). Your independent strategy worked well. Next time, test whether accepting Golf's pacts creates mutual advantage or just enables them."
+    }
+  ]
+}

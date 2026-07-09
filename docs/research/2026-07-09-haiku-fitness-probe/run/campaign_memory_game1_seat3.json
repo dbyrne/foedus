@@ -1,0 +1,105 @@
+{
+  "game_index": 1,
+  "seat": 3,
+  "entrant_identity": "Foxtrot",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 3777311599615543607,
+        "my_seat": 2,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 34.0,
+          "1": 32.0,
+          "2": 26.0,
+          "3": 23.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Golf declares ally every turn but never supports\u2014pure manipulation, finished last. Delta and Echo won through independent aggressive play. Your middle approach (26 pts, rank 3) didn't work. Next time: either commit to early alliances or play like Delta/Echo\u2014aggressive and independent. Don't waste moves on Golf's empty declarations or seeking pacts nobody will accept."
+    },
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 3676575910630153373,
+        "my_seat": 3,
+        "my_rank": 4,
+        "n_players": 4,
+        "final_scores": {
+          "0": 40.0,
+          "1": 28.0,
+          "2": 44.0,
+          "3": 26.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 1,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Golf: declared ally 11 turns, refused pact, gave zero support - pure deception. Delta took my support once, refused pact. Echo: independent, won. Pattern: these players won't commit to formal alliances. Never give support without signed mutual pact. Next game: demand pact before helping anyone, or stay independent like Echo. Stop wasting support on uncommitted players."
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "match_id": "haiku-fitness-probe-2026-07-09",
+  "num_games": 2,
+  "num_seats": 4,
+  "rotation": true,
+  "entrant_identities": [
+    "Delta",
+    "Echo",
+    "Foxtrot",
+    "Golf"
+  ],
+  "freerider_entrants": [
+    3
+  ],
+  "freerider_handles": [
+    "Golf"
+  ],
+  "freerider_class": "DishonestCooperator",
+  "handle_roles": {
+    "Delta": "llm-entrant",
+    "Echo": "llm-entrant",
+    "Foxtrot": "llm-entrant",
+    "Golf": "freerider"
+  },
+  "board": {
+    "num_players": 4,
+    "max_turns": 12,
+    "map_radius": 2,
+    "archetype": "continental_sweep",
+    "detente_threshold": 8
+  },
+  "seatings": [
+    {
+      "game_index": 0,
+      "seat_to_entrant": {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 3
+      },
+      "identity_by_seat": [
+        "Delta",
+        "Echo",
+        "Foxtrot",
+        "Golf"
+      ],
+      "llm_seats": [
+        0,
+        1,
+        2
+      ],
+      "freerider_seats": [
+        3
+      ]
+    },
+    {
+      "game_index": 1,
+      "seat_to_entrant": {
+        "0": 3,
+        "1": 0,
+        "2": 1,
+        "3": 2
+      },
+      "identity_by_seat": [
+        "Golf",
+        "Delta",
+        "Echo",
+        "Foxtrot"
+      ],
+      "llm_seats": [
+        1,
+        2,
+        3
+      ],
+      "freerider_seats": [
+        0
+      ]
+    }
+  ]
+}
