@@ -13,7 +13,9 @@ foedus.resolve._resolve_orders_detailed) reproduces the exact GameState
 sequence a live game produced -- see
 test_replay_game_matches_live_play_game_exactly, which drives one game twice
 (once live via StubLLMClient, once via replay from the captured decision log)
-and asserts byte-identical final state.
+and asserts an identical final turn/scores/units/ownership/eliminated --
+the outcome-bearing fields, not the entire GameState struct (history,
+press/chat logs, and pacts are not compared).
 """
 
 from __future__ import annotations
@@ -195,6 +197,78 @@ def test_replay_game_matches_live_play_game_exactly():
 
     mismatches = verify_replay_fidelity(decisions_by_seat, resolutions)
     assert mismatches == []
+
+
+def test_replay_game_builds_agents_in_strict_seat_order_not_llm_seats_order():
+    """`replay_game` must build its `agents` dict in strict seat order
+    (0..num_players-1) regardless of the order `llm_seats` lists them in --
+    matching the original campaign harness's own `enumerate(agent_names)`
+    construction (`scripts/foedus_llm_diplomat_run.py::run_one_llm_game`).
+
+    This matters because `play_game` (foedus/loop.py) iterates
+    `agents.items()` in insertion order for the same-turn pact-proposal pass,
+    and `propose_pact` (foedus/press.py) assigns `pact_id` sequentially by
+    proposal call order (`state.next_pact_id`) -- so a wrong insertion order
+    silently reassigns which same-turn proposer gets pact_id 0 vs 1.
+    Regression for a bug an earlier revision of `replay_game` had (building
+    `agents` as `for seat in llm_seats: ...` then `for seat in
+    freerider_seats: ...`, so an out-of-numeric-order `llm_seats` list --
+    exactly the shape `scripts/foedus_s1_5_confound_check.py` passes,
+    `list(sweep_row["llm_seats"])` straight from the sealed corpus --
+    desynced insertion order from the original run's strict seat order).
+    Empirically inert on the sealed 8-game corpus (checked by re-running the
+    confound-check script against the pre-fix code and diffing output), but
+    a real fidelity risk in general.
+    """
+    seed = 777
+    num_players = 3
+    max_turns = 1
+    archetype = Archetype.CONTINENTAL_SWEEP
+    map_radius = 2
+
+    cfg = GameConfig(num_players=num_players, max_turns=max_turns, seed=seed,
+                     archetype=archetype, map_radius=map_radius)
+    m = generate_map(num_players, seed=seed, archetype=archetype, map_radius=map_radius)
+    probe_state = initial_state(cfg, m)
+    unit_of = {
+        p: next(u.id for u in probe_state.units.values() if u.owner == p)
+        for p in range(num_players)
+    }
+
+    def _propose_json(proposer, counterparty):
+        return _negotiate_json(pacts={"propose": [{
+            "counterparty": counterparty,
+            "terms": [
+                {"player": proposer, "unit_id": unit_of[proposer],
+                 "declared_order": {"type": "Hold"}},
+                {"player": counterparty, "unit_id": unit_of[counterparty],
+                 "declared_order": {"type": "Hold"}},
+            ],
+        }], "accept": []})
+
+    # Seats 0 and 2 each propose a (self-consistent, two-sided) pact to seat 1
+    # on the same turn; seat 1 proposes nothing. llm_seats is deliberately
+    # listed out of numeric order -- exactly what would have desynced the
+    # pre-fix insertion order.
+    decisions_by_seat = {
+        0: [_negotiate_rec(0, _propose_json(0, 1)), _orders_rec(0, _orders_json({}))],
+        1: [_negotiate_rec(0, _negotiate_json()), _orders_rec(0, _orders_json({}))],
+        2: [_negotiate_rec(0, _propose_json(2, 1)), _orders_rec(0, _orders_json({}))],
+    }
+
+    _final_state, resolutions = replay_game(
+        seed=seed, num_players=num_players, max_turns=max_turns,
+        archetype=archetype, map_radius=map_radius,
+        llm_seats=[2, 0, 1], freerider_seats={},
+        decisions_by_seat=decisions_by_seat,
+    )
+
+    pacts = resolutions[0].prev_state.pacts
+    assert len(pacts) == 2
+    by_proposer = {p.proposer: p.pact_id for p in pacts}
+    # Strict seat order (0 before 1 before 2) means seat 0's proposal is
+    # called first in the pact-proposal pass and gets the lower pact_id.
+    assert by_proposer[0] < by_proposer[2]
 
 
 # --- verify_replay_fidelity: tamper detection ------------------------------

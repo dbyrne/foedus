@@ -14,7 +14,12 @@ resolves all three from data already on disk.
   that reproduces each seat's LOGGED decision for the live LLM call.
   Tested against synthetic fixtures (`tests/test_resolution_replay.py`),
   including a full equivalence test that drives one game twice — live and
-  replayed — and asserts byte-identical final state.
+  replayed — and asserts an identical final turn/scores/units/ownership/
+  eliminated (the outcome-bearing fields), plus a dedicated regression test
+  that the replay's per-seat agent construction preserves strict seat order
+  (0..N-1) rather than whatever order `llm_seats`/`freerider_seats` list
+  seats in — same-turn pact-proposal ordering depends on it (see that
+  test's docstring).
 - `foedus/eval/punishment_metrics.py` — extended with `clean_call_subset`,
   `fell_back_by_seat_turn`, `client_error_by_seat_turn` (Check 2), and
   `count_require_dest_declarations` (the corpus-wide `require_dest` sweep
@@ -137,6 +142,15 @@ reported), but it is invisible to both the full 39-count and this check's
 excluding. It is a single instance, not a pattern: even crediting it as an
 infra failure, that is 1 of 39, not enough to explain the aggregate gap.
 
+One more scoping note on the 34/39 strict figure: `client_error_by_seat_turn`
+folds a seat's negotiate-phase and orders-phase calls into one dirty/clean
+flag per (seat, turn) via OR, so a turn where only the *negotiate* call
+timed out but the *orders* call for that same seat succeeded is still
+excluded from the strict-clean set. This is conservative in the direction
+that matters (it can only shrink the clean subset, never inflate the
+reported coverage), so it does not threaten the RESOLVED verdict — noted
+here only so the 87% figure's exact scope is explicit.
+
 ## 3. Check 3 — legality survival
 
 **Verdict: FLIPS-to-combat-resolution/legality-parser-bug — this is the
@@ -175,13 +189,17 @@ it. **A corpus-wide sweep (independent of the 39-execution set, covering
 every `require_dest` Support declared anywhere in all 8 games — orders-phase
 submissions, negotiate-phase declared Intents, and negotiate-phase
 pact-proposal terms, since all three route through the same `parse_order`
-legality gate) confirms this is not occasional: 67 declarations total (29
-orders-phase / 28 negotiate-intents / 10 pact-terms), every one coerced to
-`Hold()` by the mechanism above. Zero exceptions.** This 67 is the true
-denominator for how many declared orders the bug silently discards — not
-just the 12 that happened to back an executed attack on Golf, which is the
-only subset independently re-verified end-to-end against the resolver
-below.
+legality gate) confirms this is not occasional: 67 declaration-events total
+(29 orders-phase / 28 negotiate-intents / 10 pact-terms), every one coerced
+to `Hold()` by the mechanism above. Zero exceptions.** ("Declaration-events"
+because the same underlying order can appear more than once across surfaces
+— e.g. declared as a negotiate-phase Intent at turn T, then submitted as the
+actual orders-phase order at that same turn T — so 67 is not a claim of 67
+*distinct* orders, it is 67 *times* the parser gate discarded a `require_dest`
+Support somewhere in the corpus.) This 67 is the true denominator for how
+often the bug silently discards a declared order — not just the 12 that
+happened to back an executed attack on Golf, which is the only subset
+independently re-verified end-to-end against the resolver below.
 
 Of the 12 parser-gap-dropped Support order-actions specifically backing an
 attack on Golf, reinstating the order (`counterfactual_reinstate_order`,
@@ -325,13 +343,15 @@ with it.
 
 ## Reproducibility
 
-All counts above are produced by `scripts/foedus_s1_5_confound_check.py`
-(modules: `foedus.eval.resolution_replay`, extensions to
-`foedus.eval.punishment_metrics`), covered by unit tests against synthetic
-fixtures only (`tests/test_resolution_replay.py`,
-`tests/test_clean_call_subset.py`,
-`tests/test_s1_5_confound_check_script.py`) — no test touches the sealed
-run artifacts. Re-run the command in the header to regenerate; pass `--json`
+All counts above are produced by regenerating with
+`scripts/foedus_s1_5_confound_check.py` (modules:
+`foedus.eval.resolution_replay`, extensions to
+`foedus.eval.punishment_metrics`), which reads the sealed `run/` directory —
+that is the only thing in this pass that touches it. The unit tests for
+those same modules (`tests/test_resolution_replay.py`,
+`tests/test_clean_call_subset.py`, `tests/test_s1_5_confound_check_script.py`)
+run against synthetic fixtures only; none of them touches the sealed run
+artifacts. Re-run the command in the header to regenerate; pass `--json`
 for the full per-game, per-execution classification (declared order, canon
 order post-resolution, outcome, and — for parser-gap cases — the
 counterfactual mover outcome).
