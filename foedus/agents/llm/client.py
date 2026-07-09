@@ -13,9 +13,11 @@ optional `FOEDUS_CLAUDE_CLI_BIN` override for the `claude` executable path.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from typing import Protocol, runtime_checkable
 
 
@@ -167,6 +169,17 @@ class ClaudeCLIClient:
     - cwd is a neutral temp dir, never the foedus repo, so even a
       misconfiguration can't surface repo context.
 
+    Concurrency isolation (parallel_seats): several seats' `claude -p`
+    subprocesses can run at the SAME time. Each `complete()` call therefore
+    runs in its OWN freshly-created temp dir (a unique subdir of the neutral
+    base, removed after the call) and carries its OWN unique ``--session-id``.
+    Two concurrent calls sharing a cwd would collide on the CLI's cwd-keyed
+    project state (``~/.claude/projects/<slug>/``); a shared session id would
+    collide on session identity. Per-call isolation removes both races. The
+    ``ANTHROPIC_API_KEY`` / provider-routing strip in ``_subprocess_env`` is
+    likewise recomputed per call, so subscription auth holds on every
+    concurrent path (nothing here is memoized on the shared instance).
+
     Backend/transport failures raise (timeout, non-zero exit, `claude`
     not on PATH). The LLMDiplomat's `_complete` catches those and degrades
     to a safe Hold fallback, so a flaky CLI never crashes a game.
@@ -194,9 +207,12 @@ class ClaudeCLIClient:
 
     @property
     def cwd(self) -> str:
+        """The neutral BASE dir. Each `complete()` call runs in a fresh unique
+        subdir of this (created + removed per call) so concurrent calls never
+        share a working directory."""
         return self._cwd or tempfile.gettempdir()
 
-    def _build_argv(self, system: str) -> list[str]:
+    def _build_argv(self, system: str, session_id: str) -> list[str]:
         return [
             self.binary,
             "-p",
@@ -211,6 +227,10 @@ class ClaudeCLIClient:
             # is stateless, and a many-call harness run would otherwise
             # accumulate unbounded ~/.claude/projects/*.jsonl files.
             "--no-session-persistence",
+            # A unique session id per call (the "client id"): even under
+            # concurrency no two invocations share a session identity.
+            "--session-id",
+            session_id,
             "--system-prompt",
             system,
         ]
@@ -229,27 +249,35 @@ class ClaudeCLIClient:
             env.pop(var, None)
         return env
 
-    def _log_invocation_once(self, cwd: str) -> None:
+    def _log_invocation_once(self, cwd_base: str) -> None:
         if self._argv_logged:
             return
         self._argv_logged = True
         # Log the invocation *shape* once per client (not per call) for
-        # reproducibility; the long, per-call system/user text is redacted.
+        # reproducibility; the long, per-call system/user text is redacted, and
+        # the per-call cwd subdir + session id are shown as placeholders (they
+        # vary per call, so the logged line stays call-invariant).
         # A multi-seat run has one client per seat, so it emits one line per
         # seat -- still "not per call", and it labels each seat's invocation.
-        template = self._build_argv("<SYSTEM_PROMPT>")
+        template = self._build_argv("<SYSTEM_PROMPT>", "<SESSION_ID>")
         print(
-            f"[ClaudeCLIClient] argv={template!r} cwd={cwd!r} timeout={self.timeout}s "
-            f"(user prompt via stdin; API-key/provider-routing env stripped "
+            f"[ClaudeCLIClient] argv={template!r} cwd_base={cwd_base!r} "
+            f"timeout={self.timeout}s (per call: unique cwd subdir + session id; "
+            f"user prompt via stdin; API-key/provider-routing env stripped "
             f"-> subscription auth)",
             file=sys.stderr,
             flush=True,
         )
 
     def complete(self, system: str, user: str) -> str:
-        argv = self._build_argv(system)
-        cwd = self.cwd
-        self._log_invocation_once(cwd)
+        # A unique session id ("client id") and a fresh isolated working dir per
+        # call, so concurrent `claude -p` invocations never share session
+        # identity or cwd-keyed CLI state (see the class docstring).
+        session_id = str(uuid.uuid4())
+        argv = self._build_argv(system, session_id)
+        base = self.cwd
+        self._log_invocation_once(base)
+        call_cwd = tempfile.mkdtemp(prefix="foedus-seat-", dir=base)
         try:
             result = subprocess.run(
                 argv,
@@ -258,13 +286,16 @@ class ClaudeCLIClient:
                 encoding="utf-8",
                 errors="replace",
                 timeout=self.timeout,
-                cwd=cwd,
+                cwd=call_cwd,
                 env=self._subprocess_env(),
             )
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(
                 f"claude -p timed out after {self.timeout}s"
             ) from e
+        finally:
+            # Never leak a temp dir per call, even on timeout / error.
+            shutil.rmtree(call_cwd, ignore_errors=True)
         if result.returncode != 0:
             stderr = (result.stderr or "").strip()
             raise RuntimeError(
