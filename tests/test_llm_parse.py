@@ -22,6 +22,8 @@ from foedus.agents.llm.parse import (
     parse_pact_term,
     parse_stance,
 )
+from foedus.legal import legal_orders_for_unit
+from foedus.resolve import _normalize_with_reason
 
 from tests.helpers import line_map, make_state, triangle_map
 
@@ -208,7 +210,14 @@ def test_parse_order_support_with_coerced_unit_id() -> None:
 
 
 def test_parse_order_support_with_require_dest() -> None:
-    legal = [Hold(), Support(target=1, require_dest=2)]
+    # legal_orders_for_unit never enumerates the pin ("require_dest") variant
+    # (see its docstring), so a REALISTIC candidate list contains only the bare
+    # Support plus the Move to the pinned destination -- never the pin itself.
+    # The parser accepts the pin as an opt-in refinement of the legal bare
+    # Support, matching what foedus.resolve._normalize already accepts. (Before
+    # the require_dest legality fix this fixture injected the pin variant
+    # directly into `legal`, an impossible candidate list that masked the bug.)
+    legal = [Hold(), Move(dest=2), Support(target=1)]
     order, was_legal = parse_order(
         {"type": "Support", "target": 1, "require_dest": 2}, legal
     )
@@ -232,6 +241,160 @@ def test_parse_order_missing_type_falls_back() -> None:
     order, was_legal = parse_order({"dest": 1}, [Hold(), Move(dest=1)])
     assert order == Hold()
     assert was_legal is False
+
+
+# --- require_dest ("pin") Support legality parity --------------------------
+#
+# legal_orders_for_unit never enumerates the require_dest ("pin") variant of
+# Support (opt-in refinement, per its docstring), yet foedus.resolve._normalize
+# accepts a geometrically-valid pin and the LLM prompt schema documents it.
+# The parser's legality gate must therefore accept a pin iff (a) the BARE
+# Support is a legal candidate AND (b) the supporter is adjacent to
+# require_dest -- encoded as Move(dest=require_dest) being in the candidate
+# list, which is exactly the geometry the resolver's _normalize checks. The
+# remaining resolver checks (target actually moving to require_dest; no
+# self-dislodge) are contextual and left to resolution, exactly as they are
+# for a bare reactive Support. These tests pin that parser<->resolver
+# acceptance equivalence for the pin shape, on realistic candidate lists built
+# by legal_orders_for_unit.
+
+
+def _pin_support_state():
+    """Line 0-1-2. supporter u0 (p0) at n0; mover u1 (p0) at n2; enemy u2 (p1)
+    at n1. u0 can support u1's move into n1 -- u0 is adjacent to n1, and n1 is
+    a neighbor of u1's n2 -- i.e. exactly a Support(target=1, require_dest=1)
+    pin, which the resolver's _normalize accepts."""
+    m = line_map(3)
+    units = [Unit(0, 0, 0), Unit(1, 0, 2), Unit(2, 1, 1)]
+    return make_state(m, units, num_players=2)
+
+
+def test_parse_order_require_dest_support_accepted_verbatim() -> None:
+    state = _pin_support_state()
+    legal = legal_orders_for_unit(state, 0)
+    # The realistic candidate list has the bare Support and the Move to the pin
+    # dest, but NOT the pin variant itself.
+    assert Support(target=1) in legal
+    assert Move(dest=1) in legal
+    assert Support(target=1, require_dest=1) not in legal
+    order, was_legal = parse_order(
+        {"type": "Support", "target": 1, "require_dest": 1}, legal
+    )
+    assert order == Support(target=1, require_dest=1)
+    assert was_legal is True
+
+
+def test_parse_order_require_dest_matches_resolver_acceptance() -> None:
+    # The decisive parity assertion: the parser accepts exactly the pin that
+    # foedus.resolve's own normalization accepts, given the mover's real order.
+    state = _pin_support_state()
+    legal = legal_orders_for_unit(state, 0)
+    pin = Support(target=1, require_dest=1)
+    order, was_legal = parse_order(
+        {"type": "Support", "target": 1, "require_dest": 1}, legal
+    )
+    all_orders = {0: pin, 1: Move(dest=1), 2: Hold()}
+    canon, reason = _normalize_with_reason(state, 0, pin, all_orders)
+    assert (order, was_legal) == (pin, True)
+    assert (canon, reason) == (pin, None)  # resolver accepts it too
+
+
+def test_parse_order_require_dest_none_is_bare_support() -> None:
+    # require_dest explicitly null must behave exactly like a bare Support
+    # (regression guard: the None branch is unchanged by the fix).
+    state = _pin_support_state()
+    legal = legal_orders_for_unit(state, 0)
+    order, was_legal = parse_order(
+        {"type": "Support", "target": 1, "require_dest": None}, legal
+    )
+    assert order == Support(target=1)
+    assert was_legal is True
+
+
+def test_parse_order_require_dest_bare_illegal_still_rejected() -> None:
+    # Over-acceptance guard: supporter u0 (n0) cannot support the faraway u1
+    # (n4) at all on line 0-1-2-3-4 -- the bare Support is not a legal
+    # candidate, so the pin is a genuine geometric error and stays rejected,
+    # even though the pin dest (n1) IS adjacent to the supporter.
+    m = line_map(5)
+    units = [Unit(0, 0, 0), Unit(1, 0, 4)]
+    state = make_state(m, units, num_players=2)
+    legal = legal_orders_for_unit(state, 0)
+    assert Support(target=1) not in legal
+    assert Move(dest=1) in legal
+    order, was_legal = parse_order(
+        {"type": "Support", "target": 1, "require_dest": 1}, legal
+    )
+    assert order == Hold()
+    assert was_legal is False
+
+
+def test_parse_order_require_dest_non_adjacent_rejected() -> None:
+    # Over-acceptance guard + resolver parity: supporter u0 (n0) CAN support u1
+    # (n2) on line 0-1-2-3, but require_dest=3 is not adjacent to the supporter,
+    # so the resolver would geometry_break it -- the parser must reject it too.
+    m = line_map(4)
+    units = [Unit(0, 0, 0), Unit(1, 0, 2)]
+    state = make_state(m, units, num_players=2)
+    legal = legal_orders_for_unit(state, 0)
+    assert Support(target=1) in legal
+    assert Move(dest=3) not in legal
+    order, was_legal = parse_order(
+        {"type": "Support", "target": 1, "require_dest": 3}, legal
+    )
+    assert order == Hold()
+    assert was_legal is False
+    # resolver parity: the resolver geometry_breaks the identical pin.
+    canon, reason = _normalize_with_reason(
+        state, 0, Support(target=1, require_dest=3),
+        {0: Support(target=1, require_dest=3), 1: Move(dest=3)},
+    )
+    assert canon == Hold()
+    assert reason == "geometry_break"
+
+
+def test_parse_order_require_dest_malformed_node_id_rejected() -> None:
+    # A require_dest that can't be coerced to a node id is malformed -> Hold.
+    state = _pin_support_state()
+    legal = legal_orders_for_unit(state, 0)
+    order, was_legal = parse_order(
+        {"type": "Support", "target": 1, "require_dest": "not-a-node"}, legal
+    )
+    assert order == Hold()
+    assert was_legal is False
+
+
+def test_parse_orders_response_accepts_require_dest_support() -> None:
+    # Surface 1 of 3 (orders-phase): a valid pin parses as legal, no fell_back.
+    state = _pin_support_state()
+    raw = json.dumps(
+        {"orders": {"0": {"type": "Support", "target": 1, "require_dest": 1}}}
+    )
+    parsed, fell_back, n_coerced = parse_orders_response(raw, state, player=0)
+    assert parsed[0] == Support(target=1, require_dest=1)
+    assert fell_back is False
+    assert n_coerced == 0
+
+
+def test_parse_intent_accepts_require_dest_support() -> None:
+    # Surface 2 of 3 (negotiate-phase declared Intent).
+    state = _pin_support_state()
+    d = {"unit_id": 0,
+         "declared_order": {"type": "Support", "target": 1, "require_dest": 1},
+         "visible_to": None}
+    intent = parse_intent(d, state, player=0)
+    assert intent is not None
+    assert intent.declared_order == Support(target=1, require_dest=1)
+
+
+def test_parse_pact_term_accepts_require_dest_support() -> None:
+    # Surface 3 of 3 (negotiate-phase pact-proposal term).
+    state = _pin_support_state()
+    d = {"player": 0, "unit_id": 0,
+         "declared_order": {"type": "Support", "target": 1, "require_dest": 1}}
+    term = parse_pact_term(d, state)
+    assert term is not None
+    assert term.declared_order == Support(target=1, require_dest=1)
 
 
 # --- parse_stance ----------------------------------------------------------
