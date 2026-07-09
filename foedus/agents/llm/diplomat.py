@@ -326,6 +326,11 @@ class LLMDiplomat:
         }
         self.decision_log.append(record)
         if self._log_dir is not None:
+            # Under parallel_seats every seat's thread may hit this shared
+            # FOEDUS_LLM_LOG_DIR concurrently; the mkdir is race-safe
+            # (exist_ok=True) and each seat writes a DISTINCT player{p}.jsonl,
+            # so this is the one shared-filesystem op on the concurrent path and
+            # is intentionally concurrency-safe (no cross-seat file collision).
             self._log_dir.mkdir(parents=True, exist_ok=True)
             path = self._log_dir / f"player{player}.jsonl"
             with path.open("a") as f:

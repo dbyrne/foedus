@@ -256,6 +256,31 @@ def test_per_call_cwd_is_removed_even_on_failure(monkeypatch) -> None:
     assert not os.path.isdir(records[0]["cwd"])
 
 
+def test_per_call_cwd_is_removed_on_timeout(monkeypatch) -> None:
+    """...and on the timeout path specifically (the `finally` runs before the
+    RuntimeError re-raise) — 'removed on every path incl. timeout'."""
+    captured: dict = {}
+    _patch_run(monkeypatch, captured,
+               side_effect=subprocess.TimeoutExpired(cmd=["claude"], timeout=1))
+    with pytest.raises(RuntimeError):
+        ClaudeCLIClient(timeout=1).complete("s", "u")
+    assert not os.path.isdir(captured["kwargs"]["cwd"])  # cleaned up on timeout
+
+
+def test_missing_explicit_cwd_base_is_created_not_silently_degraded(
+    monkeypatch, tmp_path
+) -> None:
+    """A configured-but-not-yet-existing cwd base is created, so a misconfig
+    can't degrade every call to a swallowed FileNotFoundError -> all-Hold seat."""
+    captured: dict = {}
+    _patch_run(monkeypatch, captured, _completed(stdout="ok"))
+    base = tmp_path / "does" / "not" / "exist" / "yet"
+    assert not base.exists()
+    ClaudeCLIClient(cwd=str(base)).complete("s", "u")
+    assert base.is_dir()  # created rather than raising FileNotFoundError
+    assert captured["kwargs"]["cwd"].startswith(str(base))  # per-call subdir
+
+
 def test_concurrent_calls_are_fully_isolated(monkeypatch) -> None:
     """THE shared-state isolation proof: N seats' calls run genuinely at once
     (a Barrier forces true overlap), and each gets a DISTINCT cwd + session id,

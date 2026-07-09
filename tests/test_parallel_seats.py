@@ -610,6 +610,24 @@ def test_shared_agent_instance_rejected_under_parallel() -> None:
         play_game(agents, config=cfg, parallel_seats=True)
 
 
+def test_shared_llm_client_across_seats_rejected_under_parallel() -> None:
+    """DISTINCT LLMDiplomat instances that nonetheless share ONE underlying LLM
+    client also race that client's mutable buffers across threads (e.g.
+    StubLLMClient.pop / .calls.append). The id(agent) guard alone would miss
+    this, so play_game must reject a shared client too rather than silently hand
+    seat A's scripted response to seat B."""
+    shared_client = StubLLMClient(
+        [_negotiate_json(0, 2), _hold_orders_json()] * 6
+    )
+    agents = {
+        0: LLMDiplomat(client=shared_client),
+        1: LLMDiplomat(client=shared_client),  # distinct instance, SAME client
+    }
+    cfg = GameConfig(num_players=2, max_turns=1, seed=3, map_radius=2)
+    with pytest.raises(ValueError, match="LLM client per seat"):
+        play_game(agents, config=cfg, parallel_seats=True)
+
+
 # --------------------------------------------------------------------------
 # 6. Harness flag plumbing (env + kwarg).
 # --------------------------------------------------------------------------

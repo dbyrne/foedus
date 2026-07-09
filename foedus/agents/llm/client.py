@@ -277,6 +277,11 @@ class ClaudeCLIClient:
         argv = self._build_argv(system, session_id)
         base = self.cwd
         self._log_invocation_once(base)
+        # The base must exist for per-call mkdtemp. The default base (system
+        # tempdir) always does; create an explicitly-configured base if missing
+        # so a misconfigured cwd fails loud here rather than silently degrading
+        # every call to a swallowed FileNotFoundError -> an all-Hold seat.
+        os.makedirs(base, exist_ok=True)
         call_cwd = tempfile.mkdtemp(prefix="foedus-seat-", dir=base)
         try:
             result = subprocess.run(

@@ -59,16 +59,30 @@ def _prewarm_seats(
         for pid, agent in targets:
             agent.prewarm_phase(state, pid, phase)
         return
-    # Concurrency requires each seat to own a DISTINCT agent instance: two seats
-    # sharing one instance would race its client / caches / decision_log across
-    # threads (e.g. StubLLMClient.pop, list.append). The shipped harness always
-    # builds one instance per seat, so this fails loud only on future misuse
-    # rather than silently corrupting a run.
+    # Concurrency requires each seat to own DISTINCT mutable state: two seats
+    # sharing one agent instance -- OR two distinct instances sharing one
+    # underlying LLM client (LLMDiplomat accepts an injected `client=`) -- would
+    # race that state (client buffers like StubLLMClient.pop/.calls.append,
+    # caches, decision_log) across threads. The shipped harness always builds one
+    # instance AND one client per seat (make_client_from_env per seat), so this
+    # fails loud only on future misuse rather than silently corrupting a run.
     if len({id(agent) for _, agent in targets}) != len(targets):
         raise ValueError(
             "parallel_seats requires a distinct agent instance per seat: the "
             "same object is registered for multiple seats, which would race "
             "its client/cache/decision_log under concurrency"
+        )
+    client_ids = [
+        id(client)
+        for _, agent in targets
+        if (client := getattr(agent, "_client", None)) is not None
+    ]
+    if len(set(client_ids)) != len(client_ids):
+        raise ValueError(
+            "parallel_seats requires a distinct LLM client per seat: two seats "
+            "share one client object, which would race its mutable buffers "
+            "under concurrency (build one client per seat, e.g. via "
+            "make_client_from_env)"
         )
     # Default the bound to one worker per opt-in seat. On a single-subscription
     # host a large fan-out can raise contention -- pass max_workers (e.g. 2) to

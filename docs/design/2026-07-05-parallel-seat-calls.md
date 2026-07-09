@@ -66,6 +66,15 @@ The engine (`press.py`, `resolve.py`) stays single-threaded: concurrency only
 changes when each seat's decision is computed, never the order in which
 `submit_press_tokens` / `finalize_round` fold results into `state`.
 
+**Engine-purity invariant (CLAUDE.md).** "Don't introduce async, threads, or
+implicit timers into the engine" targets the pure state-transition functions
+(`press.py`, `resolve.py`, `fog.py`, `core.py`) — all of which this change
+leaves byte-for-byte untouched. The `ThreadPoolExecutor` lives only in the
+**driver** (`foedus/loop.py`'s `play_game`), wraps only *agent-side* compute
+(the seat's own LLM call), is **off by default**, and never touches engine RNG
+or state folding — consistent with the invariant's intent that the engine itself
+remain a deterministic, single-threaded pure function of its inputs.
+
 ### Per-call isolation for concurrent `claude -p` (`ClaudeCLIClient`)
 
 Overlapping seats each shell out to `claude -p`. Two concurrent invocations must
@@ -128,8 +137,11 @@ cwd or session id. So per-call isolation is invisible to the equivalence proof
   (`cached_property`/`lru_cache`/`object.__setattr__`) on the path, so
   concurrent snapshot reads are race-free. Each seat writes only its own
   disjoint cache / decision log / reciprocation memory (one `LLMDiplomat`
-  instance per seat — `_prewarm_seats` raises if the same instance is registered
-  for multiple seats, rather than silently racing its client/cache/log). The
+  instance per seat — `_prewarm_seats` raises if the same instance **or the same
+  underlying `_client` object** is registered for multiple seats, rather than
+  silently racing its client buffers / cache / log; because a shared client is
+  rejected, a single client is never called concurrently, so its `_argv_logged`
+  one-shot flag is never raced either). The
   `claude -p` subprocesses are isolated per call (unique cwd + session id + a
   per-call auth-stripped env — see *Per-call isolation* above). Per-seat
   decision-log *files* are written by the harness single-threaded, after the
