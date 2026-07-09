@@ -51,6 +51,22 @@ from foedus.loop import play_game
 from foedus.resolve import initial_state
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_int(name: str) -> int | None:
+    """Parse a positive int env var; None (use default) on missing/blank/invalid."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        val = int(raw)
+    except ValueError:
+        return None
+    return val if val > 0 else None
+
+
 def _order_to_dict(order) -> dict:
     if isinstance(order, Hold):
         return {"type": "Hold"}
@@ -112,6 +128,8 @@ def run_one_llm_game(
     llm_agent_factory=LLMDiplomat,
     config_overrides: dict | None = None,
     agents_by_seat: dict[int, object] | None = None,
+    parallel_seats: bool | None = None,
+    max_workers: int | None = None,
 ):
     """Run one game with one or more LLMDiplomat seats vs the given
     heuristic roster.
@@ -196,7 +214,17 @@ def run_one_llm_game(
         from foedus.spectate.emit import spectate_turn_emitter
         on_turn_resolved = spectate_turn_emitter(spectate_dir, game_id)
 
-    final = play_game(agents, state=state, on_turn_resolved=on_turn_resolved)
+    # Parallel per-phase seat calls: explicit arg wins; else FOEDUS_PARALLEL_SEATS
+    # env (the seamless hot-swap knob -- the campaign call site is unchanged).
+    if parallel_seats is None:
+        parallel_seats = _env_flag("FOEDUS_PARALLEL_SEATS")
+    if max_workers is None:
+        max_workers = _env_int("FOEDUS_PARALLEL_SEATS_WORKERS")
+
+    final = play_game(
+        agents, state=state, on_turn_resolved=on_turn_resolved,
+        parallel_seats=parallel_seats, max_workers=max_workers,
+    )
 
     sweep = {
         "game_id": game_id,
@@ -394,6 +422,19 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
                              "between games. Sets FOEDUS_LLM_CAMPAIGN=1; persists "
                              "each seat's cross-game memory per game to the "
                              "out-dir. Default OFF (independent games).")
+    parser.add_argument("--parallel-seats", action="store_true",
+                        help="Sets FOEDUS_PARALLEL_SEATS=1: run each phase's "
+                             "per-seat LLM calls CONCURRENTLY (a bounded thread "
+                             "pool over the subprocess/HTTP calls) instead of "
+                             "sequentially -- ~3x wall-clock cut for LLM matches. "
+                             "Outcomes are unchanged (seats decide from the same "
+                             "prior-turn snapshot; the engine folds results "
+                             "single-threaded). Default OFF -> byte-identical.")
+    parser.add_argument("--parallel-seats-workers", type=int, default=None,
+                        help="Bounds --parallel-seats concurrency (sets "
+                             "FOEDUS_PARALLEL_SEATS_WORKERS). Default = number of "
+                             "LLM seats. Use e.g. 2 if 3-way subscription "
+                             "contention worsens the parse-fail/timeout rate.")
     parser.add_argument("--spectate-dir", type=str, default=None,
                         help="Sets FOEDUS_SPECTATE_DIR: opt-in per-turn "
                              "spectate stream. When set, each resolved turn "
@@ -413,6 +454,10 @@ def main(argv: list[str] | None = None, llm_agent_factory=None) -> int:
         os.environ["FOEDUS_LLM_CAMPAIGN"] = "1"
     if args.spectate_dir:
         os.environ["FOEDUS_SPECTATE_DIR"] = args.spectate_dir
+    if args.parallel_seats:
+        os.environ["FOEDUS_PARALLEL_SEATS"] = "1"
+    if args.parallel_seats_workers is not None:
+        os.environ["FOEDUS_PARALLEL_SEATS_WORKERS"] = str(args.parallel_seats_workers)
 
     factory = llm_agent_factory or LLMDiplomat
     archetype = Archetype(args.archetype)
