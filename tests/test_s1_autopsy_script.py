@@ -97,8 +97,10 @@ def test_build_report_structural_subsidy_test_uses_scorecard(tmp_path):
     scorecard = tmp_path / "scorecard.json"
     scorecard.write_text(json.dumps({
         "trajectory": [
-            {"game_id": 0, "llm_llm_supports": 5},
-            {"game_id": 1, "llm_llm_supports": 10},
+            {"game_id": 0, "llm_llm_supports": 5, "margin": -1.0, "subsidy": 2,
+             "stance_hostility_frac": 0.5},
+            {"game_id": 1, "llm_llm_supports": 10, "margin": 3.0, "subsidy": 0,
+             "stance_hostility_frac": 0.1},
         ],
     }))
     rep = autopsy.build_report(str(out), str(scorecard))
@@ -106,6 +108,13 @@ def test_build_report_structural_subsidy_test_uses_scorecard(tmp_path):
     assert ss["n_games"] == 2
     assert ss["coalition_per_game"] == [5, 10]
     assert ss["resistance_per_game"] == [1, 0]
+    # every correlation the doc cites is reproducible from this one report,
+    # not hand-derived out-of-band
+    assert set(ss["correlations"]) == {
+        "coalition_vs_resistance", "coalition_vs_margin", "coalition_vs_subsidy",
+        "hostility_vs_executed", "hostility_vs_proposed",
+    }
+    assert ss["correlations"]["coalition_vs_resistance"] == ss["pearson_r"]
 
 
 def test_build_report_omits_structural_subsidy_test_without_scorecard(tmp_path):

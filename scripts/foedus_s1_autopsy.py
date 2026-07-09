@@ -77,19 +77,34 @@ def build_report(out_dir: str, scorecard_path: str | None = None) -> dict:
     if scorecard_path and Path(scorecard_path).exists():
         sc = json.loads(Path(scorecard_path).read_text())
         traj_by_game = {t["game_id"]: t for t in sc.get("trajectory", [])}
-        coalitions = []
-        resistance = []
+        series = {"coalition": [], "margin": [], "subsidy": [], "hostility": [],
+                  "resistance": [], "proposed": []}
         for g in per_game:
             t = traj_by_game.get(g["game_id"])
-            if t is None:
+            if t is None or t.get("stance_hostility_frac") is None:
                 continue
-            coalitions.append(t["llm_llm_supports"])
-            resistance.append(g["executed_count"])
+            series["coalition"].append(t["llm_llm_supports"])
+            series["margin"].append(t["margin"])
+            series["subsidy"].append(t["subsidy"])
+            series["hostility"].append(t["stance_hostility_frac"])
+            series["resistance"].append(g["executed_count"])
+            series["proposed"].append(g["proposed_count"])
         structural_subsidy = {
-            "n_games": len(coalitions),
-            "coalition_per_game": coalitions,
-            "resistance_per_game": resistance,
-            "pearson_r": pearson_correlation(coalitions, resistance),
+            "n_games": len(series["coalition"]),
+            "coalition_per_game": series["coalition"],
+            "resistance_per_game": series["resistance"],
+            "pearson_r": pearson_correlation(series["coalition"], series["resistance"]),
+            "correlations": {
+                "coalition_vs_resistance": pearson_correlation(
+                    series["coalition"], series["resistance"]),
+                "coalition_vs_margin": pearson_correlation(series["coalition"], series["margin"]),
+                "coalition_vs_subsidy": pearson_correlation(
+                    series["coalition"], series["subsidy"]),
+                "hostility_vs_executed": pearson_correlation(
+                    series["hostility"], series["resistance"]),
+                "hostility_vs_proposed": pearson_correlation(
+                    series["hostility"], series["proposed"]),
+            },
         }
 
     return {
@@ -133,8 +148,19 @@ def _print_report(rep: dict) -> None:
         print("structural-subsidy test (coalition vs. resistance-to-freerider, per game):")
         print(f"  coalition (LLM<->LLM supports): {ss['coalition_per_game']}")
         print(f"  resistance (executed attack actions vs freerider): {ss['resistance_per_game']}")
-        r = ss["pearson_r"]
-        print(f"  pearson r: {r:.3f}" if r is not None else "  pearson r: n/a (no variance)")
+        print()
+        print("mechanism-decomposition correlations (n = "
+              f"{ss['n_games']} games; descriptive, not confirmatory):")
+        for key, label in [
+            ("coalition_vs_resistance", "coalition vs. resistance (executed attacks)"),
+            ("coalition_vs_margin", "coalition vs. Golf's margin"),
+            ("coalition_vs_subsidy", "coalition vs. subsidy"),
+            ("hostility_vs_executed", "hostility vs. executed attacks"),
+            ("hostility_vs_proposed", "hostility vs. proposed attacks"),
+        ]:
+            r = ss["correlations"][key]
+            print(f"  r({label}): "
+                  + (f"{r:.3f}" if r is not None else "n/a (no variance)"))
 
 
 def main(argv: list[str] | None = None) -> int:

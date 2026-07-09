@@ -406,6 +406,70 @@ def test_classify_game_punishment_coordinated_support_execution_cross_seat() -> 
     assert kinds == ["attack_move", "attack_support"]
 
 
+def test_classify_game_punishment_paid_count_dedups_one_drop_to_one_execution() -> None:
+    # Two execution turns (6 and 7) both fall within the (et+1, et+2) window
+    # of the SAME single income drop at turn 8 -- this must be counted as
+    # ONE paid event, not two, even though two execution turns qualify.
+    vis = _visible_units_prompt([(5, 11, 3, 0)])
+    decisions_by_seat = {
+        0: [
+            _negotiate_rec(6, 0, "{}", prompt_user="Scores: {0: 1.0, 1: 1.0, 2: 1.0, 3: 10.0}\n"),
+            _orders_rec(6, 0, json.dumps({"orders": {"1": {"type": "Move", "dest": 11}}}),
+                        prompt_user=vis),
+            _negotiate_rec(7, 0, "{}", prompt_user="Scores: {0: 3.0, 1: 3.0, 2: 4.0, 3: 13.0}\n"),
+            _orders_rec(7, 0, json.dumps({"orders": {"4": {"type": "Move", "dest": 11}}}),
+                        prompt_user=vis),
+            _negotiate_rec(8, 0, "{}", prompt_user="Scores: {0: 5.0, 1: 5.0, 2: 7.0, 3: 14.0}\n"),
+        ],
+    }
+    report = classify_game_punishment(
+        decisions_by_seat=decisions_by_seat, llm_seats=[0], freerider_seats={3})
+    assert report["executed_count"] == 2
+    assert report["golf_income_drop_turns"] == [8]
+    assert report["paid_count"] == 1
+
+
+def test_classify_game_punishment_links_declared_intent_to_matching_execution() -> None:
+    # unit 1 declares an attack-move intent at turn 4 AND executes exactly
+    # that order that turn -> a direct (not merely aggregate-count) link.
+    vis = _visible_units_prompt([(1, 7, 0, 0), (5, 11, 3, 0)])
+    decisions_by_seat = {
+        0: [
+            _negotiate_rec(4, 0, json.dumps({
+                "press": {"stance": {}, "intents": [
+                    {"unit_id": 1, "declared_order": {"type": "Move", "dest": 11},
+                     "visible_to": None},
+                ]}, "pacts": {"propose": [], "accept": []},
+            }), prompt_user=vis),
+            _orders_rec(4, 0, json.dumps({"orders": {"1": {"type": "Move", "dest": 11}}}),
+                        prompt_user=vis),
+        ],
+    }
+    report = classify_game_punishment(
+        decisions_by_seat=decisions_by_seat, llm_seats=[0], freerider_seats={3})
+    assert report["attack_move_intents_total"] == 1
+    assert report["attack_move_intents_matched_by_execution"] == 1
+
+
+def test_classify_game_punishment_undeclared_execution_not_counted_as_linked() -> None:
+    # unit 1 executes an attack-move with NO prior declared intent that turn
+    # -> executed_count reflects it, but the linkage stat does not claim a
+    # (nonexistent) declared proposal converted.
+    vis = _visible_units_prompt([(1, 7, 0, 0), (5, 11, 3, 0)])
+    decisions_by_seat = {
+        0: [
+            _negotiate_rec(4, 0, "{}", prompt_user=vis),
+            _orders_rec(4, 0, json.dumps({"orders": {"1": {"type": "Move", "dest": 11}}}),
+                        prompt_user=vis),
+        ],
+    }
+    report = classify_game_punishment(
+        decisions_by_seat=decisions_by_seat, llm_seats=[0], freerider_seats={3})
+    assert report["executed_count"] == 1
+    assert report["attack_move_intents_total"] == 0
+    assert report["attack_move_intents_matched_by_execution"] == 0
+
+
 def test_classify_game_punishment_no_data_is_all_zero() -> None:
     report = classify_game_punishment(decisions_by_seat={}, llm_seats=[], freerider_seats={3})
     assert report["proposed_count"] == 0

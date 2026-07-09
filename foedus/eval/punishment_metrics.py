@@ -361,27 +361,46 @@ def classify_game_punishment(
                         "unit_id": uid, "target_unit_id": target,
                     })
 
+    # -- direct linkage: did a declared attack-move intent actually convert
+    # into that SAME (seat, turn, unit) executing an attack-move, rather than
+    # inferring conversion from aggregate proposed/executed totals alone? ---
+    declared_attack_moves = {
+        (p["seat"], p["game_turn"], p["unit_id"])
+        for p in proposals if p["kind"] == "attack_move_intent"
+    }
+    executed_attack_moves = {
+        (e["seat"], e["game_turn"], e["unit_id"])
+        for e in executions if e["kind"] == "attack_move"
+    }
+    attack_move_intents_matched = declared_attack_moves & executed_attack_moves
+
     # -- paid: did the freerider's income drop after an execution? ----------
-    (freerider_seat,) = sorted(freerider_seats)[:1] or (None,)
+    freerider_seat = next(iter(sorted(freerider_seats)), None)
     drop_turns: list[int] = []
     if freerider_seat is not None and scores_by_turn:
         drop_turns = income_drop_turns(income_series(scores_by_turn, freerider_seat))
     exec_turns = sorted({e["game_turn"] for e in executions})
+    # Each DROP is credited to at most one execution turn (the latest
+    # qualifying one), not the other way around -- otherwise a single capture
+    # with two nearby execution turns in its window would be double-counted
+    # as two "paid" events.
+    paid_drop_turns = set()
     paid_turns = set()
-    for et in exec_turns:
-        # a drop observed at et, et+1, or et+2 is attributed to the execution
-        # at et (the drop is only ever OBSERVED at the next turn boundary or
-        # later, since income for turn t reflects ownership as of turn t-1's
-        # resolution).
-        if any(dt in (et + 1, et + 2) for dt in drop_turns):
-            paid_turns.add(et)
+    for dt in drop_turns:
+        candidates = [et for et in exec_turns if dt in (et + 1, et + 2)]
+        if not candidates:
+            continue
+        paid_drop_turns.add(dt)
+        paid_turns.add(max(candidates))
 
     return {
         "proposed_count": len(proposals),
         "executed_count": len(executions),
-        "paid_count": len(paid_turns),
+        "paid_count": len(paid_drop_turns),
         "proposals": proposals,
         "executions": executions,
         "golf_income_drop_turns": drop_turns,
         "paid_execution_turns": sorted(paid_turns),
+        "attack_move_intents_total": len(declared_attack_moves),
+        "attack_move_intents_matched_by_execution": len(attack_move_intents_matched),
     }

@@ -37,14 +37,23 @@ each already emitted per decision in `decisions_game{g}_seat{s}.jsonl`:
   target is *any* seat's executed attack-move that turn. This is what was
   actually **sent to the engine**, not necessarily what the engine's
   geometry/strength check let land — see the limitation in §4.
-- **PAID** — Golf's own per-turn income (its owned-center count, derivable
-  from the public, unfogged `Scores: {...}` dict every negotiate prompt
-  carries) **dropped** within 1–2 turns of an execution, i.e. a center was
-  actually captured away from it. This is an outcome-level proxy: the corpus
-  does not retain a turn-by-turn resolution/dislodge log (by design — see
-  `CLAUDE.md`'s wire-protocol note), so "paid" cannot always be pinned to the
-  exact combat that caused it; it can only say *whether Golf's standing
-  actually moved* near an attack. See §4 for a case where this matters.
+- **PAID** — Golf's own per-turn income, read from the public, unfogged
+  `Scores: {...}` dict every negotiate prompt carries, **dropped** within 1–2
+  turns of an execution. This income is **not** literally "owned-center
+  count" — per `foedus/resolve.py`, a turn's score delta is supply value net
+  of upkeep tax, plus a one-off alliance bonus and a one-off
+  `combat_reward` for whoever dislodges someone that turn (none of these
+  knobs are overridden in `campaign_plan.json`, so all are live at their
+  defaults). A drop is therefore *consistent with* a lost center but not
+  logically equivalent to one from the Scores dict alone — the corpus does
+  not retain a turn-by-turn resolution/dislodge log (by design — see
+  `CLAUDE.md`'s wire-protocol note), so in general "paid" is an
+  **outcome-level proxy**, not ground truth. Where the corpus lets it be
+  checked directly (the MAP block's `[node-mark:owner]` marks — see §1.2),
+  this autopsy does so and says so explicitly; elsewhere, treat "paid" as
+  "Golf's standing moved in the right direction near an attack," not as a
+  confirmed capture. See §4 for a case where the proxy and direct evidence
+  would plausibly disagree.
 
 Node occupancy is judged from the **acting seat's own fogged snapshot** at
 decision time (not a merged all-seeing view) — a seat can only deliberately
@@ -57,9 +66,13 @@ linkage (a genuine multi-party attack) is exact, not an approximation.
 |---|---|---|---|
 | **total (8 games)** | **32** | **39** | **1** |
 
-**39 real attack orders were submitted against Golf across the campaign, and
-exactly one of them produced an observable capture (2.6%).** That is the
-single most load-bearing number in this autopsy.
+**39 order-actions (Moves and Supports, combined) were submitted in service of
+an attack on Golf across the campaign, spread over 23 distinct game-turns in
+6 of 8 games — and exactly one of those attack-turns produced an observable
+income drop.** That single conversion, 1-of-23 attack-turns (1-of-8 engaged
+games; 1-of-39 individual order-actions if counted at that finer grain), is
+the single most load-bearing number in this autopsy — read whichever
+denominator you prefer, the rate is in the low single digits.
 
 ### 1.1 Per game
 
@@ -78,29 +91,53 @@ Six of eight games show genuine, repeated attempts to punish Golf (proposed
 **and** executed > 0); two show none at all. **Executed ≥ proposed in every
 game but g1 and g7**, and totals across the campaign run executed(39) >
 proposed(32) — attacks are being *launched* more often than they are
-formally *pre-declared*, so the shortfall is not "the table talks about
-punishing Golf and then chickens out at the orders phase." That rules out the
-literal reading of the Commitment-arm trigger (see §3).
+formally *pre-declared*. This isn't just an aggregate-count coincidence: of
+the **17 declared attack-move intents** in the whole corpus, **all 17 (100%)**
+were followed by that exact same (seat, turn, unit) submitting a matching
+attack-move order in that turn's orders phase — a direct per-declaration
+link, not an inference from totals. So the shortfall is not "the table talks
+about punishing Golf and then chickens out at the orders phase" in any
+sense — that rules out the literal reading of the Commitment-arm trigger (see
+§3).
 
-### 1.2 Case study — the one payoff (g4, turn 8)
+### 1.2 Case study — the one payoff (g4, turn 7)
 
-Foxtrot (seat2) attacked the same Golf unit at node 11 on turns 3, 4, 7 and 11
-(`decisions_game4_seat2.jsonl`), self-supporting with its own second unit each
-time (`u2`/`u6` alternating mover/supporter — a textbook 2-vs-1). Golf's public
-`Scores` income (visible in every seat's negotiate prompt, unfogged) for seat3
-across turns 0–11: `0,1,3,5,8,11,14,18,21,24,27,30` → per-turn deltas
-`1,2,2,3,3,3,4,3,3,3,3` (turns 1-11) — income steps to **3/turn (turns 4-6),
-up to 4/turn (turn 7), then drops back to and holds at 3/turn from turn 8
-onward**. That
-permanent step-down lands exactly one turn after the turn-7 execution — the
-cleanest, most defensible "paid" instance in the corpus. Final margin for g4
-was still only **+1.0** (Golf) — a genuine but marginal containment, not a
-rout.
+Foxtrot (seat2) attacked the same Golf unit (`u0`) at node 11 on turns 3, 4
+and 7 (`decisions_game4_seat2.jsonl`), a consistent 2-vs-1 each time: `u2`
+Move(dest=11) + `u6` Support(target=2, require_dest=11). Golf's public
+`Scores` income (visible in every seat's negotiate prompt, unfogged) for
+seat3 across turns 0–11: `0,1,3,5,8,11,14,18,21,24,27,30` → per-turn deltas
+`1,2,2,3,3,3,4,3,3,3,3` (turns 1-11) — income steps to 3/turn (turns 4-6), up
+to 4/turn (turn 7), then drops back to and holds at 3/turn from turn 8
+onward.
+
+This is the one place in the corpus where the score-delta proxy (§0) can be
+checked directly against the MAP block's `[node-mark:owner]` marks, which
+this seat's own prompt carries every turn regardless of phase: at turns 5 and
+6, node 11 reads `11$1:3` (owned by seat3 = Golf); by turn 8 it reads
+`11$1:2` (owned by seat2 = Foxtrot) — confirmed again at turn 11, where
+Foxtrot's own `VISIBLE UNITS` block shows `u2 at node 11 (YOURS)`. Golf
+walked `u0` into node 11 and completed a walk-in capture around turn 6 (the
+turn-7 income spike to 4), and Foxtrot's turn-7 attack **instantly
+dislodged it that same turn**, converting node 11 to Foxtrot's ownership —
+which is exactly why Golf's income reverts to 3 entering turn 8. This is
+independent, direct ownership evidence, not just an inferred score-delta
+coincidence, and it is the one instance in this corpus where "paid" is
+fully confirmed rather than merely proxied. Final margin for g4 was still
+only **+1.0** (Golf) — a genuine but marginal containment, not a rout.
+
+(At turn 11 Foxtrot also attacks a *different* Golf unit, `u11`, that has
+since appeared at node 6 — an unsupported single Move, not a continuation of
+the node-11 pattern; it is not part of the payoff above.)
 
 ### 1.3 Case study — a formal pact broken by infrastructure, not resolve (g1)
 
 g1 is the richest engagement in the corpus (proposed=9, executed=6, and the
-only two **formal two-party attack pacts** in the whole campaign): at turn 6,
+only two **coordinated** two-party attack-pact *proposals* in the whole
+campaign — a third proposal exists, g7 turn 7, but its terms lack a matching
+Support and so is not flagged `coordinated`; "coordinated" here describes the
+proposal's terms, not whether the counterparty went on to accept it, which
+this classifier does not check): at turn 6,
 Delta (seat1) proposes to Echo (seat2) — Delta's u5 Move(dest=8), Echo's u2
 Support(target=5, require_dest=8); at turn 8, Foxtrot (seat3) proposes to Echo
 — Foxtrot's u0 Move(dest=4), Echo's u2 Support(target=0, require_dest=4). Both
@@ -113,8 +150,12 @@ promised Support never reached the engine; the fallback silently substituted
 for it. Foxtrot's Move landed **alone**, at base strength 1 against Golf's
 unsupported base hold-strength of 1 (Golf's scripted `DishonestCooperator`
 never self-supports — `foedus/agents/heuristics/dishonest_cooperator.py`
-delegates orders to plain `GreedyHold`, which never issues `Support`). A tie
-bounces per `foedus/resolve.py`'s head-to-head rule. No income drop is
+delegates orders to plain `GreedyHold`, which never issues `Support`). An
+unsupported attacker facing a static defender of equal strength fails to
+dislodge per `foedus/resolve.py`'s move-resolution rule (the attacker-vs-
+static-defender branch in `_resolve_moves`, not the mutual-swap `_resolve_h2h`
+path — the two are distinct code paths for a reason worth citing correctly).
+No income drop is
 recorded for g1 (`golf_income_drop_turns: []`), and Golf **won** g1 outright
 (margin +16.0, the largest of the campaign). Coordination was proposed and
 half-executed; the campaign's own ~8.2% overall parse/timeout-fail rate
@@ -247,20 +288,24 @@ Against the data:
 - **Never proposed**: true for 2/8 games (25%) — and in both, Golf was
   plainly visible for most of the game, so it is not an artifact of fog. This
   is a real, minority pattern (§1.5), not the dominant one.
-- **Proposed but not executed**: not supported in aggregate — executed(39) >
-  proposed(32) campaign-wide, and both formal two-party pacts that ever
-  formed (g1) were followed by an execution attempt the same turn. Where
-  coordination is explicitly proposed, it is attempted.
+- **Proposed but not executed**: not supported, and not just in aggregate —
+  all **17 of 17** declared attack-move intents in the corpus were followed
+  by that exact same (seat, turn, unit) submitting a matching order (§1.1),
+  and both `coordinated=True` two-party pact proposals (g1) were followed by
+  an execution attempt the same turn. Where coordination is explicitly
+  proposed, it is attempted, essentially without exception.
 - **Executed but didn't pay**: the dominant, corpus-wide pattern — 39
-  executed attacks, 6/8 games with real attempts, **1 payoff (2.6%)**. This
-  is true even for attacks that look mechanically sound on paper (§1.4) and
-  even for a formally negotiated two-party pact (§1.3).
+  order-actions across 23 distinct attack-turns, 6/8 games with real
+  attempts, **1 converted attack-turn** (§1). This is true even for attacks
+  that look mechanically sound on paper (§1.4) and even for a negotiated
+  two-party pact proposal (§1.3).
 
 **Recommended arm for run #2: ECONOMICS.**
 
 The table is not blind to Golf (majority of games engage it; the two
-non-engaging games still see it), and it is not failing to commit (pacts form
-and get attempted). What breaks is the **conversion of an attempted
+non-engaging games still see it), and it is not failing to commit (declared
+attack intents and proposed coordination pacts are attempted essentially
+every time). What breaks is the **conversion of an attempted
 punishment into an actual loss for Golf**: base-strength ties bounce by
 default (Golf never self-supports, so this should be the easy case), a
 two-party pact's payoff is fragile to a single dropped call, and even a
@@ -275,10 +320,12 @@ targets the stage where this campaign's data shows the actual breakdown.
 
 **Confidence: moderate-high** that Economics is the right arm over
 Commitment or Awareness, given (a) the never-proposed rate is a 25% minority
-and not fog-driven, (b) proposed ≤ executed campaign-wide with both real
-pacts followed through, and (c) the executed→paid conversion rate is 2.6%
-across every game that engaged Golf at all, including cases with textbook
-combat math and a formally negotiated pact.
+and not fog-driven, (b) all 17 declared attack-move intents converted to a
+matching order and both `coordinated=True` pacts were attempted, and (c) the
+executed→paid conversion rate is roughly 1-in-20 by any denominator (1 of 23
+attack-turns, 1 of 8 engaged games) across every game that engaged Golf at
+all, including cases with textbook combat math (§1.4) and a negotiated pact
+(§1.3).
 
 **What would change my mind:**
 
@@ -309,7 +356,7 @@ combat math and a formally negotiated pact.
   `CLAUDE.md`). If a meaningful share of the 39 "executed" attack-supports
   turn out to be geometrically illegal (dropped before resolution), the true
   executed→paid denominator is smaller and the effective failure rate is
-  *higher* than 2.6% — which would only reinforce Economics, but for a
+  *higher* than reported — which would only reinforce Economics, but for a
   partly different reason (models mis-reasoning geometry, not the payoff
   structure itself being weak) — and would argue for pairing the ruleset-v2
   economics change with better in-prompt legality feedback.
@@ -321,10 +368,15 @@ combat math and a formally negotiated pact.
 
 ## Reproducibility
 
-All counts above are produced by `scripts/foedus_s1_autopsy.py` (module:
-`foedus/eval/punishment_metrics.py`), covered by 37 unit tests
+All counts and correlations above — including every §2.2 correlation, not
+just coalition-vs-resistance — are produced by `scripts/foedus_s1_autopsy.py`
+(module: `foedus/eval/punishment_metrics.py`), covered by 40 unit tests
 (`tests/test_punishment_metrics.py`) and 3 integration tests
 (`tests/test_s1_autopsy_script.py`) against synthetic fixtures — no test
 touches the sealed run artifacts, which are read-only inputs. Re-run the
 command in the header to regenerate; the full per-game/turn/seat citation
-list is available via `--json`.
+list, the `attack_move_intents_matched_by_execution` linkage stat, and the
+`correlations` dict are all available via `--json`. The one exception is the
+§1.2 g4 MAP-ownership cross-check, which is a manual read against the raw
+JSONL (the classifier does not parse the MAP block) — cited with the exact
+turn numbers and node marks so it can be re-verified by hand.
