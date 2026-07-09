@@ -230,6 +230,18 @@ def parse_order(d: object, legal: list[Order]) -> tuple[Order, bool]:
     order coerces to Hold() with was_legal=False -- the engine already
     normalizes illegal orders silently, but coercing here lets the
     caller report it instead of the failure vanishing at finalize time.
+
+    require_dest ("pin") Support is a special case: `legal_orders_for_unit`
+    never enumerates pin variants (opt-in refinement, per its docstring), so
+    the plain `order in legal` membership gate below would ALWAYS reject a
+    pin -- even a geometrically-valid one that `foedus.resolve._normalize`
+    would accept and that the LLM prompt schema documents. The parser must
+    not be stricter than the resolver for an order shape the prompt offers,
+    so a pin is accepted here iff it passes the exact geometric checks the
+    resolver applies (see `_parse_require_dest_support`). Contextual checks
+    the resolver also does (target actually moving to require_dest; no
+    self-dislodge) are deferred to resolution, exactly as they are for a
+    bare reactive Support.
     """
     if not isinstance(d, dict):
         return Hold(), False
@@ -248,12 +260,56 @@ def parse_order(d: object, legal: list[Order]) -> tuple[Order, bool]:
             if require_dest_raw is None:
                 order = Support(target=target)
             else:
-                require_dest = coerce_id(require_dest_raw)
-                if require_dest is not None:
-                    order = Support(target=target, require_dest=require_dest)
+                return _parse_require_dest_support(target, require_dest_raw, legal)
     if order is None or order not in legal:
         return Hold(), False
     return order, True
+
+
+def _parse_require_dest_support(
+    target: UnitId, require_dest_raw: object, legal: list[Order]
+) -> tuple[Order, bool]:
+    """Legality-gate a require_dest ("pin") Support to match the resolver.
+
+    A pin `Support(target=T, require_dest=D)` is accepted (was_legal=True) iff:
+
+    * `require_dest` coerces to a valid node id, AND
+    * the BARE `Support(target=T)` is a legal candidate -- i.e. the supporter
+      can support T at all (a pin whose bare form is illegal is a genuine
+      geometric error and stays rejected), AND
+    * `Move(dest=D)` is a legal candidate -- which holds iff the supporter is
+      adjacent to D, since `legal_orders_for_unit` enumerates exactly one Move
+      per neighbor of the supporter's location. This is the identical geometry
+      `foedus.resolve._normalize` requires for a pin (`is_adjacent(supporter,
+      require_dest)`); using the candidate list keeps the parser stateless
+      while matching the resolver exactly.
+
+    Anything else coerces to Hold() with was_legal=False. The remaining
+    resolver checks (target's canon order actually being Move(dest=D); no
+    same-owner defender at D) are contextual -- they depend on what other
+    units do this turn -- and are left to resolution, just as a bare reactive
+    Support's contextual normalization is.
+
+    Note the `Support(target=T) in legal` clause makes this INTENTIONALLY a
+    hair stricter than the resolver for a "dead" pin -- one whose require_dest
+    is not adjacent to the TARGET, so the target can never legally move there.
+    That clause is automatically satisfied for any pin that could actually
+    land (a landable pin needs is_adjacent(T, D) and is_adjacent(S, D), which
+    makes D a common neighbor and puts the bare Support in the candidate list),
+    so it never rejects a pin with a real effect. It only excludes pins that
+    back a move the target cannot make -- which _normalize would "accept" but
+    which then back nothing (the target's own illegal Move normalizes to Hold).
+    Dropping this clause to match the resolver byte-for-byte on those dead pins
+    would only admit inert orders; keep it as the tighter, safer gate.
+    """
+    require_dest = coerce_id(require_dest_raw)
+    if (
+        require_dest is not None
+        and Support(target=target) in legal
+        and Move(dest=require_dest) in legal
+    ):
+        return Support(target=target, require_dest=require_dest), True
+    return Hold(), False
 
 
 def parse_stance(d: object) -> dict[PlayerId, Stance]:

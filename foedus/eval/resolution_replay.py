@@ -71,8 +71,10 @@ from foedus.core import (
     GameConfig,
     GameState,
     Hold,
+    Intent,
     Order,
     PactProposal,
+    PactTerm,
     PlayerId,
     Press,
     Support,
@@ -98,6 +100,93 @@ class MissingDecisionError(LookupError):
     surfaces loudly (a wrong replay result would otherwise look identical to
     a correct one).
     """
+
+
+def _drop_pin_support(order: Order) -> Order:
+    """Coerce a require_dest ("pin") Support back to Hold(); pass anything else
+    through unchanged. The single primitive behind the corpus-era gate."""
+    if isinstance(order, Support) and order.require_dest is not None:
+        return Hold()
+    return order
+
+
+def _reapply_corpus_era_pin_gate(orders: dict[UnitId, Order]) -> dict[UnitId, Order]:
+    """Reproduce the corpus-generation-time legality gate for require_dest
+    ("pin") Supports in an orders-phase submission, coercing every one to Hold.
+
+    WHY THIS EXISTS. The sealed corpus
+    (`docs/research/2026-07-04-canonical-campaign-v1/`) was generated when
+    `parse_order`'s legality gate rejected EVERY `require_dest` Support -- the
+    candidate list from `foedus.legal.legal_orders_for_unit` never enumerates
+    pin variants, so the `order in legal` membership check dropped all of them
+    to Hold (the S1.5 confound). That gap has since been FIXED in `parse_order`
+    (a pin that passes the resolver's geometry is now accepted), which is
+    correct for live and future play.
+
+    But THIS module replays a sealed HISTORICAL run and must reproduce exactly
+    what the original run submitted to the engine. Re-parsing the logged
+    raw_responses with the fixed parser would reinstate the 67 corpus-wide
+    pins, which (a) diverges the replay from the sealed `sweep.jsonl` (units
+    that were never dislodged now are, changing the whole trajectory) and (b)
+    destroys the counterfactual measurement the S1.5 analysis depends on -- if
+    the replay itself reinstates the pins, the paired movers already succeed in
+    the "actual" replay, so `counterfactual_reinstate_order` finds nothing left
+    to flip. The FIX's effect on this corpus is measured by that counterfactual
+    machinery (parser-independent, holds every other order fixed), NOT by
+    letting the replay reinstate orders. So we re-apply the historical coercion
+    here, at the replay boundary, keeping the reconstruction faithful to the
+    evidence while production `parse_order` stays correct.
+    """
+    return {uid: _drop_pin_support(o) for uid, o in orders.items()}
+
+
+def _reapply_corpus_era_pin_gate_to_negotiation(
+    decision: NegotiationDecision,
+) -> NegotiationDecision:
+    """Same corpus-era gate as `_reapply_corpus_era_pin_gate`, for the
+    negotiate phase: a `require_dest` Support declared inside a Press intent or
+    a pact-proposal term went through the SAME `parse_order` gate at
+    corpus-generation time (see `parse_intent` / `parse_pact_term`), so the
+    original run dropped those to Hold too. Coercing them here keeps the
+    replayed negotiate-phase decisions faithful to the original run, not just
+    the orders-phase submission -- even though on this corpus the difference is
+    inert for final scores/turns/eliminations (the replay reproduces the sealed
+    sweep.jsonl either way), reproducing the whole run rather than only its
+    outcome-bearing subset keeps the harness robust to any future scoring
+    change that would make a declared pin matter.
+    """
+    press = Press(
+        stance=decision.press.stance,
+        intents=[
+            Intent(
+                unit_id=it.unit_id,
+                declared_order=_drop_pin_support(it.declared_order),
+                visible_to=it.visible_to,
+            )
+            for it in decision.press.intents
+        ],
+    )
+    proposals = [
+        PactProposal(
+            counterparty=p.counterparty,
+            terms=tuple(
+                PactTerm(
+                    player=t.player,
+                    unit_id=t.unit_id,
+                    declared_order=_drop_pin_support(t.declared_order),
+                )
+                for t in p.terms
+            ),
+        )
+        for p in decision.proposals
+    ]
+    return NegotiationDecision(
+        press=press,
+        proposals=proposals,
+        accept_ids=decision.accept_ids,
+        fell_back=decision.fell_back,
+        n_coerced=decision.n_coerced,
+    )
 
 
 class ReplayAgent:
@@ -138,6 +227,10 @@ class ReplayAgent:
             return cached
         rec = self._record(state.turn, "negotiate")
         decision = parse_negotiation_response(rec["raw_response"], state, player)
+        # Faithfully reproduce the corpus-era gate for negotiate-phase pins too
+        # (intents + pact terms route through the same parse_order gate). See
+        # _reapply_corpus_era_pin_gate_to_negotiation for the rationale.
+        decision = _reapply_corpus_era_pin_gate_to_negotiation(decision)
         self._negotiation_cache[state.turn] = decision
         return decision
 
@@ -158,6 +251,11 @@ class ReplayAgent:
         orders, _fell_back, _n_coerced = parse_orders_response(
             rec["raw_response"], state, player
         )
+        # Faithfully reproduce the corpus-era legality gate: the original run
+        # dropped every require_dest ("pin") Support to Hold, and the now-fixed
+        # parse_order would reinstate them, diverging the replay from the sealed
+        # corpus. See _reapply_corpus_era_pin_gate for the full rationale.
+        orders = _reapply_corpus_era_pin_gate(orders)
         self._orders_cache[state.turn] = orders
         return orders
 
