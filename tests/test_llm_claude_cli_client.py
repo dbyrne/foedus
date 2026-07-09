@@ -19,8 +19,11 @@ The load-bearing behaviours these tests pin:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
+import threading
+import uuid
 
 import pytest
 
@@ -86,7 +89,7 @@ def test_argv_is_headless_text_pinned_and_toolless(monkeypatch) -> None:
     captured: dict = {}
     _patch_run(monkeypatch, captured, _completed(stdout="ok"))
 
-    client = ClaudeCLIClient(cwd="/tmp/neutral-dir")
+    client = ClaudeCLIClient()  # default neutral base; argv is cwd-independent
     out = client.complete("SYSTEM_TEXT", "USER_TEXT")
 
     argv = captured["argv"]
@@ -148,11 +151,18 @@ def test_binary_reads_from_env(monkeypatch) -> None:
 # --- neutral cwd (no repo-context / engine-source leak) -------------------
 
 
-def test_explicit_cwd_is_passed_to_subprocess(monkeypatch) -> None:
+def test_explicit_cwd_is_used_as_the_base_for_a_per_call_subdir(
+    monkeypatch, tmp_path
+) -> None:
+    # An explicit cwd is now the BASE under which each call gets its OWN fresh
+    # subdir (concurrency isolation), rather than the shared cwd itself.
     captured: dict = {}
     _patch_run(monkeypatch, captured, _completed(stdout="ok"))
-    ClaudeCLIClient(cwd="/tmp/neutral-dir").complete("s", "u")
-    assert captured["kwargs"]["cwd"] == "/tmp/neutral-dir"
+    base = str(tmp_path)
+    ClaudeCLIClient(cwd=base).complete("s", "u")
+    cwd = captured["kwargs"]["cwd"]
+    assert cwd.startswith(base)  # under the configured base
+    assert cwd != base           # ...but its own isolated subdir, not the base
 
 
 def test_default_cwd_is_a_neutral_tempdir_never_the_repo(monkeypatch) -> None:
@@ -161,9 +171,125 @@ def test_default_cwd_is_a_neutral_tempdir_never_the_repo(monkeypatch) -> None:
     ClaudeCLIClient().complete("s", "u")  # cwd defaulted
     cwd = captured["kwargs"]["cwd"]
     assert cwd  # set, never None
-    # A neutral system temp dir — not the foedus repo, so no repo CLAUDE.md
-    # and no engine source is reachable from the seat.
-    assert cwd == tempfile.gettempdir()
+    # A fresh per-call subdir of the system temp dir — never the foedus repo, so
+    # no repo CLAUDE.md / engine source is reachable, and (see the isolation
+    # tests below) two concurrent calls never share a cwd.
+    assert cwd.startswith(tempfile.gettempdir())
+    assert cwd != tempfile.gettempdir()
+
+
+# --- per-call isolation so concurrent `claude -p` calls never collide -------
+#
+# Under parallel_seats several seats' `claude -p` subprocesses run at the SAME
+# time. Two concurrent invocations that shared a cwd would collide on the CLI's
+# cwd-keyed project state (~/.claude/projects/<slug>/), and a shared session id
+# would collide on session identity. So every `complete()` call must run in its
+# OWN fresh temp dir and carry its OWN unique --session-id (the "client id").
+
+
+def _patch_run_record_all(monkeypatch, records, *, barrier=None, result=None):
+    """Patch subprocess.run to append one record per call: argv, kwargs, the
+    cwd, and whether that cwd existed as a real dir AT call time. An optional
+    Barrier releases only when every concurrent caller is inside its call —
+    proving real overlap rather than accidental serialization."""
+    lock = threading.Lock()
+
+    def fake_run(argv, **kwargs):
+        cwd = kwargs.get("cwd")
+        cwd_existed = bool(cwd) and os.path.isdir(cwd)
+        if barrier is not None:
+            barrier.wait()
+        with lock:
+            records.append(
+                {"argv": argv, "kwargs": kwargs, "cwd": cwd,
+                 "cwd_existed": cwd_existed}
+            )
+        return result if result is not None else _completed(stdout="ok")
+
+    monkeypatch.setattr(client_module.subprocess, "run", fake_run)
+
+
+def _session_id(argv) -> str:
+    return argv[argv.index("--session-id") + 1]
+
+
+def test_each_call_carries_a_unique_valid_session_id(monkeypatch) -> None:
+    records: list = []
+    _patch_run_record_all(monkeypatch, records)
+    c = ClaudeCLIClient()
+    c.complete("s", "u1")
+    c.complete("s", "u2")
+    ids = [_session_id(r["argv"]) for r in records]
+    assert ids[0] != ids[1]         # a distinct client id per call
+    for sid in ids:
+        uuid.UUID(sid)              # a real UUID (raises ValueError otherwise)
+
+
+def test_each_call_runs_in_its_own_isolated_cwd(monkeypatch) -> None:
+    records: list = []
+    _patch_run_record_all(monkeypatch, records)
+    c = ClaudeCLIClient()
+    c.complete("s", "u1")
+    c.complete("s", "u2")
+    cwds = [r["cwd"] for r in records]
+    assert cwds[0] != cwds[1]                       # a fresh dir per call
+    assert all(r["cwd_existed"] for r in records)   # it really existed at call time
+    for cwd in cwds:
+        assert cwd.startswith(tempfile.gettempdir())  # neutral, never the repo
+
+
+def test_per_call_cwd_is_removed_after_the_call(monkeypatch) -> None:
+    """A many-call harness run must not leak one temp dir per call."""
+    records: list = []
+    _patch_run_record_all(monkeypatch, records)
+    ClaudeCLIClient().complete("s", "u")
+    assert not os.path.isdir(records[0]["cwd"])  # cleaned up
+
+
+def test_per_call_cwd_is_removed_even_on_failure(monkeypatch) -> None:
+    """The per-call temp dir is cleaned up even when the call raises."""
+    records: list = []
+    _patch_run_record_all(monkeypatch, records,
+                          result=_completed(returncode=2, stderr="boom"))
+    with pytest.raises(RuntimeError):
+        ClaudeCLIClient().complete("s", "u")
+    assert not os.path.isdir(records[0]["cwd"])
+
+
+def test_concurrent_calls_are_fully_isolated(monkeypatch) -> None:
+    """THE shared-state isolation proof: N seats' calls run genuinely at once
+    (a Barrier forces true overlap), and each gets a DISTINCT cwd + session id,
+    a per-call env with the credit-less API key stripped, and its temp dir
+    really coexisting during the overlap — no cross-call clobbering."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-credit-less")
+    n = 4
+    records: list = []
+    barrier = threading.Barrier(n, timeout=10)
+    _patch_run_record_all(monkeypatch, records, barrier=barrier)
+    clients = [ClaudeCLIClient() for _ in range(n)]  # one client per seat
+
+    errors: list = []
+
+    def call(c, i):
+        try:
+            c.complete("sys", f"user-{i}")
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=call, args=(c, i))
+               for i, c in enumerate(clients)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors                                    # all released -> real overlap
+    assert len(records) == n
+    assert len({r["cwd"] for r in records}) == n         # each call its OWN cwd
+    assert len({_session_id(r["argv"]) for r in records}) == n  # ...and session id
+    assert all(r["cwd_existed"] for r in records)        # dirs coexisted concurrently
+    for r in records:
+        assert "ANTHROPIC_API_KEY" not in r["kwargs"]["env"]  # stripped per call
 
 
 # --- subscription auth (strip the credit-less API key) --------------------

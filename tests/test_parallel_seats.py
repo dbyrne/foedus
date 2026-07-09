@@ -27,12 +27,19 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
+from foedus.agents.llm.campaign_memory import (
+    GameFacts,
+    GameRecord,
+    IdentityContext,
+    OpponentGameFacts,
+)
 from foedus.agents.llm.client import StubLLMClient
 from foedus.agents.llm.diplomat import LLMDiplomat
 from foedus.core import GameConfig, Move, Press
@@ -225,6 +232,177 @@ def test_parallel_matches_sequential_with_movement() -> None:
     # Real Move orders were issued (resolution exercised movement, not just Holds).
     assert _issues_a_move(seq_agents)
     assert seq_tel["parse_fail_count"] == 0
+
+
+# --------------------------------------------------------------------------
+# 1b. Equivalence against the REAL Ruleset-v1.1 diplomat -- identity context
+#     + campaign memory + reciprocation ledger ACTIVE (not a stripped-down
+#     agent). This is the re-dispatch's central demand: the equivalence proof
+#     must hold against v1.1's identity/memory machinery, since parallel prewarm
+#     now composes with _negotiate/choose_orders that read self._identity and
+#     mutate self._memory.
+# --------------------------------------------------------------------------
+
+_HANDLES = {0: "Alfa", 1: "Bravo", 2: "Charlie"}
+
+
+def _prior_record(my_seat: int) -> GameRecord:
+    """A valid cross-game record for `my_seat` so the negotiate prompt renders a
+    PRIOR GAMES block (exercises the campaign-memory render path under both
+    modes). per_opponent is keyed by the OTHER seats; handles are stable."""
+    per_opp = {
+        opp: OpponentGameFacts(2, 1, 0, 0, False, False)
+        for opp in _HANDLES if opp != my_seat
+    }
+    facts = GameFacts(
+        game_index=0, seed=99, my_seat=my_seat, my_rank=2, n_players=3,
+        final_scores={0: 5.0, 1: 6.0, 2: 4.0},
+        per_opponent=per_opp,
+        my_handle=_HANDLES[my_seat], handles=dict(_HANDLES),
+    )
+    return GameRecord(facts=facts, self_note="Held the center.")
+
+
+def _identity_campaign_factory(seats, responses_by_seat):
+    """Hand each seat its own scripted client AND turn on the full v1.1 machinery:
+    identity context (stable handles), campaign memory (a loaded prior record),
+    and the reciprocation ledger (so accumulated within-game memory renders into
+    each later turn's prompt). Built in ascending seat order, matching
+    run_one_llm_game's construction order."""
+    order = iter(sorted(seats))
+
+    def factory():
+        s = next(order)
+        agent = LLMDiplomat(
+            client=StubLLMClient(list(responses_by_seat[s])),
+            recip_ledger=True, campaign=True,
+        )
+        agent.set_identity_context(
+            IdentityContext(my_handle=_HANDLES[s], seat_to_handle=dict(_HANDLES))
+        )
+        agent.load_campaign_records([_prior_record(s)])
+        return agent
+
+    return factory
+
+
+def _recip_snapshot(agent) -> dict:
+    """The seat's full accumulated within-game reciprocation state (OpponentRecord
+    is a dataclass -> compares by value), including the turns-observed guards."""
+    m = agent._memory
+    return {
+        "records": dict(m._records),
+        "stance_turns": set(m._stance_turns_seen),
+        "order_turns": set(m._order_turns_seen),
+    }
+
+
+def test_parallel_matches_sequential_with_identity_and_campaign_active() -> None:
+    """Re-prove byte-identical equivalence against the REAL v1.1 diplomat with
+    identity context set, campaign memory loaded, and the reciprocation ledger
+    ON. Because recip_ledger renders the WITHIN-game memory (which accumulates
+    across turns) into each later turn's negotiate prompt, any parallel-vs-
+    sequential divergence in that accumulation -- or in identity / campaign
+    rendering -- surfaces in the byte-level decision-log diff. The explicit
+    reciprocation-state compare additionally pins the LAST turn's memory (never
+    rendered into a subsequent prompt)."""
+    seats = [0, 1, 2]
+    num_players = 3
+    seed, max_turns = 21, 4
+
+    def run(parallel: bool):
+        responses = {s: _scripted_responses(s, num_players, max_turns) for s in seats}
+        return harness.run_one_llm_game(
+            game_id=0, seed=seed, llm_seats=seats, heuristic_names=[],
+            max_turns=max_turns,
+            llm_agent_factory=_identity_campaign_factory(seats, responses),
+            parallel_seats=parallel,
+        )
+
+    seq_sweep, seq_tel, _sf, seq_agents = run(False)
+    par_sweep, par_tel, _pf, par_agents = run(True)
+
+    assert par_sweep == seq_sweep
+    assert par_tel == seq_tel
+    for s in seats:
+        assert _serialize_log(par_agents[s].decision_log) == \
+            _serialize_log(seq_agents[s].decision_log), f"seat {s} log diverged"
+    for s in seats:
+        assert _recip_snapshot(par_agents[s]) == _recip_snapshot(seq_agents[s]), \
+            f"seat {s} reciprocation memory diverged"
+    # Guard against a silent no-op: identity + campaign were genuinely active.
+    assert seq_agents[0]._identity is not None
+    assert seq_agents[0]._campaign_memory is not None
+    assert len(seq_agents[0]._campaign_memory) == 1  # the loaded prior record
+    assert seq_agents[0]._memory is not None          # reciprocation ledger on
+    # The PRIOR GAMES block actually rendered into the negotiate prompt.
+    assert "PRIOR GAMES" in seq_agents[0].decision_log[0]["prompt"]["user"]
+    assert seq_tel["parse_fail_count"] == 0
+
+
+# --------------------------------------------------------------------------
+# 1c. Wall-clock: overlapping the slow seat calls cuts wall-clock while keeping
+#     outcomes byte-identical. Deterministic latency (a fixed per-call sleep)
+#     stands in for `claude -p`, so this is hermetic + reproducible -- the real
+#     `claude -p` ~3x number lives in the design doc's contention section.
+# --------------------------------------------------------------------------
+
+
+class _SleepyStubClient:
+    """Deterministic scripted client that also sleeps per call, simulating a
+    slow `claude -p`. Responses (hence outcomes) are identical to StubLLMClient;
+    only wall-clock differs between sequential and parallel."""
+
+    def __init__(self, responses: list[str], delay: float) -> None:
+        self._responses = list(responses)
+        self._delay = delay
+        self.calls: list[tuple[str, str]] = []
+
+    def complete(self, system: str, user: str) -> str:
+        self.calls.append((system, user))
+        time.sleep(self._delay)
+        if not self._responses:
+            raise RuntimeError("_SleepyStubClient: no scripted response left")
+        return self._responses.pop(0)
+
+
+def test_parallel_seats_cuts_wall_clock_with_identical_outcomes() -> None:
+    seats = [0, 1, 2]
+    num_players = 3
+    seed, max_turns, delay = 31, 2, 0.15
+
+    def run(parallel: bool):
+        order = iter(sorted(seats))
+        resp = {s: _scripted_responses(s, num_players, max_turns) for s in seats}
+
+        def factory():
+            s = next(order)
+            return LLMDiplomat(client=_SleepyStubClient(resp[s], delay))
+
+        t0 = time.perf_counter()
+        out = harness.run_one_llm_game(
+            game_id=0, seed=seed, llm_seats=seats, heuristic_names=[],
+            max_turns=max_turns, llm_agent_factory=factory,
+            parallel_seats=parallel,
+        )
+        return out, time.perf_counter() - t0
+
+    (seq_sweep, seq_tel, _sf, seq_ag), seq_wall = run(False)
+    (par_sweep, par_tel, _pf, par_ag), par_wall = run(True)
+
+    # Concurrency did not change the game.
+    assert par_sweep == seq_sweep
+    assert par_tel == seq_tel
+    for s in seats:
+        assert _serialize_log(par_ag[s].decision_log) == \
+            _serialize_log(seq_ag[s].decision_log)
+    # ...but overlapping the 3 seats' slow calls cut wall-clock. The ideal with
+    # 3 seats is ~3x; assert a very loose >1.4x (par < seq*0.7) so this proves
+    # the calls genuinely overlap without flaking under CI load.
+    assert par_wall < seq_wall * 0.7, (
+        f"expected parallel to overlap seat calls: seq={seq_wall:.3f}s "
+        f"par={par_wall:.3f}s (ratio {seq_wall / par_wall:.2f}x)"
+    )
 
 
 # --------------------------------------------------------------------------
