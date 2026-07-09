@@ -17,6 +17,7 @@ import json
 from foedus.eval.punishment_metrics import (
     classify_game_punishment,
     clean_call_subset,
+    client_error_by_seat_turn,
     fell_back_by_seat_turn,
     match_paid_execution_turns,
 )
@@ -78,6 +79,23 @@ def test_fell_back_by_seat_turn_true_if_either_phase_fell_back() -> None:
     assert lookup[(0, 5)] is True
     assert lookup[(0, 6)] is False
     assert (0, 7) not in lookup
+
+
+def test_client_error_by_seat_turn_ignores_sanitizer_only_fallback() -> None:
+    """fell_back=True from a successful sanitizer recovery (real JSON, just
+    needed a node-label fix) is NOT a client error; only a literal
+    `<client error: ...>` raw_response counts."""
+    decisions_by_seat = {
+        0: [
+            _orders_rec(5, 0, json.dumps({"orders": {"1": {"type": "Hold"}}}),
+                        fell_back=True),  # sanitizer-recovered, not a transport failure
+            _orders_rec(6, 0, "<client error: RuntimeError('timed out')>",
+                        fell_back=True),
+        ],
+    }
+    lookup = client_error_by_seat_turn(decisions_by_seat)
+    assert lookup[(0, 5)] is False
+    assert lookup[(0, 6)] is True
 
 
 # --- clean_call_subset -------------------------------------------------------

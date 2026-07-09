@@ -289,6 +289,27 @@ def fell_back_by_seat_turn(decisions_by_seat: dict[int, list[dict]]) -> dict[tup
     return out
 
 
+def client_error_by_seat_turn(decisions_by_seat: dict[int, list[dict]]) -> dict[tuple[int, int], bool]:
+    """(seat, turn) -> True only if a negotiate/orders call that turn was a
+    genuine transport failure (`raw_response` literally the `<client error:
+    ...>` fallback string LLMDiplomat._complete logs on a timeout/exception --
+    see LLMDiplomat._complete). Narrower than `fell_back_by_seat_turn`: the
+    corpus's `fell_back` flag ALSO covers a call that succeeded but needed
+    the label sanitizer to recover otherwise-malformed JSON (e.g. a stray
+    "7$1" node label copied from the prompt -- see
+    foedus.agents.llm.parse._sanitize_node_labels), which is a parse-quality
+    signal, not a reliability failure. `clean_call_subset` accepts either
+    lookup, so pass this one for a stricter "genuinely broken call" cut of
+    Check 2 alongside the broader `fell_back_by_seat_turn` one."""
+    out: dict[tuple[int, int], bool] = {}
+    for seat, records in decisions_by_seat.items():
+        for rec in records:
+            key = (seat, rec["turn"])
+            is_client_error = (rec.get("raw_response") or "").startswith("<client error")
+            out[key] = out.get(key, False) or is_client_error
+    return out
+
+
 def clean_call_subset(report: dict, fell_back: dict[tuple[int, int], bool]) -> dict:
     """Restrict a `classify_game_punishment` report to "clean-call"
     attack-turns (M-foedus-s1-5-confound-check Check 2 -- see
