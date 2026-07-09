@@ -20,11 +20,14 @@ from foedus.eval.probe_metrics import (
 )
 
 
-def _orders(turn, orders_dict):
+def _orders(turn, orders_dict, fenced=False):
+    raw = json.dumps({"orders": orders_dict})
+    if fenced:
+        raw = f"```json\n{raw}\n```"
     return {
         "turn": turn,
         "phase": "orders",
-        "raw_response": json.dumps({"orders": orders_dict}),
+        "raw_response": raw,
     }
 
 
@@ -58,6 +61,17 @@ class TestAllHoldTurns:
             _orders(3, {}),
         ]
         assert all_hold_turns(decisions) == [1, 3]
+
+    def test_flags_all_hold_turns_in_markdown_fenced_responses(self):
+        # Real foedus_llm_diplomat_run.py responses are always fenced
+        # (```json ... ```), never bare JSON -- a metric that only handles
+        # bare JSON silently sees every real turn as unparseable and
+        # vacuously reports zero degeneracy.
+        decisions = [
+            _orders(1, {"1": {"type": "Hold"}}, fenced=True),
+            _orders(2, {"1": {"type": "Move", "dest": 4}}, fenced=True),
+        ]
+        assert all_hold_turns(decisions) == [1]
 
     def test_no_all_hold_turns_returns_empty_list(self):
         decisions = [_orders(1, {"1": {"type": "Move", "dest": 4}})]

@@ -13,11 +13,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from foedus.agents.llm.parse import extract_json_with_recovery
+
 
 def _orders_dict(raw_response: str) -> dict | None:
+    """Parse a decision's raw_response the same way the diplomat / the rest
+    of the eval tooling does (foedus.eval.punishment_metrics._extract):
+    real responses are always markdown-fenced (```json ... ```), never bare
+    JSON, so a bare json.loads silently fails on every real record."""
     try:
-        data = json.loads(raw_response)
-    except (json.JSONDecodeError, TypeError):
+        data, _ = extract_json_with_recovery(raw_response or "")
+    except Exception:  # noqa: BLE001 - untrusted logged text, never crash a report
         return None
     orders = data.get("orders") if isinstance(data, dict) else None
     return orders if isinstance(orders, dict) else None
