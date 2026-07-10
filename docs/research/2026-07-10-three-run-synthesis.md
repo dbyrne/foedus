@@ -43,25 +43,31 @@ for most in the field) and 2nd of 4 on the OpenSkill leaderboard (source 1
 §7–§8).
 
 A follow-up autopsy (source 1a) traced this to the **punishment-conversion
-pipeline**: across the campaign, 32 attacks on Golf were proposed and 39
-order-actions executed against it, but only **1** produced an observable
-income drop (2.6%, source 1a §1). The autopsy ruled out awareness (Golf was
-plainly visible in both zero-engagement games) and commitment (all 17
-declared attack-move intents converted to a matching submitted order) as the
-bottleneck, and recommended an "Economics" fix — arguing the payoff structure
-under-rewards the supporting unit.
+pipeline**: across the campaign, 32 punishment-pipeline actions against Golf
+were proposed (declared attack-move intents, attack-backing Support intents,
+and attack-bearing pact-proposal terms — source 1a §0) and 39 order-actions
+executed against it, but only **1** produced an observable income drop
+(source 1a §1; expressed as a rate, 2.6%, in source 5 §5). The autopsy ruled
+out awareness (Golf was plainly visible in both zero-engagement games) and
+commitment (all 17 declared attack-move intents converted to a matching
+submitted order) as the bottleneck, and recommended an "Economics" fix —
+arguing the payoff structure under-rewards the supporting unit.
 
-**Before that fix shipped**, a confound-resolution pass (source 1b) checked
-two structural confounds first, using a turn-by-turn replay of the sealed
+**Before that fix shipped**, a confound-resolution pass (source 1b) resolved
+all three confounds it had flagged, using a turn-by-turn replay of the sealed
 corpus through the real engine (`foedus.eval.resolution_replay`), verified to
 reproduce all 8 games' final scores, turns, and eliminations exactly with
 zero mismatches against the original logged orders (source 1b §0):
 
-- **Infra reliability was not the driver.** Restricting to a strict clean
-  subset (34 of 39 executions, 87% coverage, excluding only genuine
+- **Check 1 (ground-truth replay) corrected the S1 headline itself.** The
+  real dislodge count was **2**, not 1 — the score-delta proxy missed a
+  final-turn dislodge with no next-turn prompt to observe it in (source 1b
+  §1).
+- **Check 2: infra reliability was not the driver.** Restricting to a strict
+  clean subset (34 of 39 executions, 87% coverage, excluding only genuine
   transport/timeout failures) left the conversion rate unchanged (source 1b
   §2).
-- **The real bottleneck was a parser/legality bug, not economics.**
+- **Check 3: the real bottleneck was a parser/legality bug, not economics.**
   `foedus.legal.legal_orders_for_unit` never enumerates the `require_dest`
   ("pin") variant of `Support` — by design, per its own docstring, as an
   opt-in refinement — but `foedus.agents.llm.parse.parse_order` legality-gated
@@ -74,10 +80,7 @@ zero mismatches against the original logged orders (source 1b §0):
   terms), of which **12** backed an attack on Golf specifically — **0 of the
   12 were geometrically illegal** — and counterfactually reinstating them
   (holding every other unit's order fixed) flipped the paired attacker from
-  `fail` to `success` in **9 of 12** cases (source 1b §3). Ground-truth
-  replay also corrected the S1 headline itself: the real dislodge count was
-  **2**, not 1 (the score-delta proxy missed a final-turn dislodge with no
-  next-turn prompt to observe it in — source 1b §1).
+  `fail` to `success` in **9 of 12** cases (source 1b §3).
 
 **PR #47** shipped the fix (accept a `require_dest` pin iff its bare
 `Support(target=T)` and the implied `Move(dest=D)` are both legal candidates
@@ -118,8 +121,10 @@ play, to decide which model to burn the 8-game re-run budget on. It cleared
 decisively on the mechanical axis (0/144 parse-fail vs. Sonnet's 8.2%
 baseline) and "not degenerate, but thin" on coordination (2/24 Support orders
 cross-player, 2/72 pact proposals, correct freerider identification in every
-self-note) — verdict **HAIKU FIT**, with the coordination thinness flagged as
-a caveat rather than resolved (source 3, "Verdict").
+self-note) — verdict **HAIKU FIT**. The probe's own verdict section is
+explicit that this was a live judgment call, not a clean threshold-clear: "a
+reader could reasonably read it as BORDERLINE rather than FIT" if weighting
+the thin coordination evidence more heavily (source 3, "Verdict").
 
 ### Three-way outcome comparison (source 5 §4, the canonical citation)
 
@@ -170,9 +175,11 @@ runs to date.
 Two of the four games ended in an actual **elimination**, not just a scoring
 loss. In game 2, **Golf itself was eliminated outright** (`sweep.jsonl`
 `eliminated: [1]`) around turns 8–9 — the same turns as this run's only two
-"paid" punishment events — the single most decisive containment event across
-all three runs (source 5 §3). (Game 3's elimination was Echo, an LLM entrant,
-not Golf — see §5 below.)
+"paid" punishment events — the single most decisive containment event in the
+corpus (source 5 §3), and, since neither run #1 nor the Haiku re-run reports
+any elimination at all, the single most decisive containment event across
+all three runs to date (PR #50 body). (Game 3's elimination was Echo, an LLM
+entrant, not Golf — a table dynamic unrelated to punishing the freerider.)
 
 The Haiku re-run, by contrast, is a **null-ish** result on the same fixed
 engine: two outcome measures moved in the containment direction (win-rate,
@@ -293,20 +300,21 @@ recomputing the commitment from the reveal. All three verified:
 | Sonnet arm | `d4f9a014…b7ff8` |
 
 **Two-reviewer + independent audit gate.** Starting with the Haiku fitness
-probe (PR #48) and continuing through the Haiku re-run (PR #49) and Sonnet
-arm (PR #50), every results doc was independently re-derived from raw
-committed artifacts by two separate reviewer agents (Sonnet + Opus) before
-merge, with the dispatching session (Nova) notified for a further
+probe (PR #48 body) and continuing through the Haiku re-run (PR #49 body) and
+Sonnet arm (PR #50 body), every results doc was independently re-derived from
+raw committed artifacts by two separate reviewer agents (Sonnet + Opus)
+before merge, with the dispatching session (Nova) notified for a further
 independent audit and none of the three self-merged. This gate caught real
 issues, not just rubber-stamped: PR #48's first draft had a markdown-fence
 parsing bug that silently zeroed a degeneracy metric ("zero all-Hold turns"
 was a parser artifact, not a verified finding) and a factually wrong
-coordination anecdote, both caught and fixed pre-merge; PR #50's reviewers
-found the results doc hadn't disclosed two in-run eliminations, which
-changed the "worst in 3 of 4 games" framing to what's reported in §4–§5
-above. PR #47 (the fix itself) predates this formalized two-reviewer gate and
-instead used TDD RED→GREEN tests plus a full-suite run (1274 passed, one
-known pre-existing unrelated failure) as its verification path.
+coordination anecdote, both caught and fixed pre-merge (PR #48 body; source 3
+itself documents the correction inline). PR #50's reviewers found the results
+doc hadn't disclosed two in-run eliminations, which changed the "worst in 3
+of 4 games" framing to what's reported in §4–§5 above (PR #50 body). PR #47
+(the fix itself) predates this formalized two-reviewer gate and instead used
+TDD RED→GREEN tests plus a full-suite run (1274 passed, one known
+pre-existing unrelated failure) as its verification path (source 2).
 
 **Coverage-guarded analysis.** `foedus.eval._coverage.assert_coverage` raises
 `CoverageError` if an analysis tool reads zero records, parses zero of its
@@ -322,7 +330,7 @@ explicit):
 
 | figure | numerator / denominator | source |
 |---|---|---|
-| run #1 parse-fail | 47 / 576 = 8.16% | source 1 §7.4 |
+| run #1 parse-fail | 47 / 576 = 8.16% (source 1 §7.4 rounds this 8.2%) | source 4 §4 / source 5 §4 |
 | Haiku re-run parse-fail | 6 / 576 = 1.04% | source 4 §7 |
 | Sonnet arm parse-fail | 4 / 286 = 1.40% | source 5 §8 |
 | Haiku probe parse-fail | 0 / 144 = 0.0% | source 3 |
@@ -336,6 +344,11 @@ explicit):
 | pin-Support usage, run #1 / Haiku re-run / Sonnet arm | 0/413 / 40/185 / 32/233 parsed Support orders | source 5 §5 |
 | LLM↔LLM Supports, run #1 / Haiku re-run / Sonnet arm | 79/8 / 2/8 / 31/4 games | source 5 §4; source 4 §5 |
 
-Every figure in §1–§7 above is either quoted directly from one of these five
-source documents or is a trivial arithmetic derivation from numbers they
-report (e.g. ratios, percentage differences) — none is a new measurement.
+Every quantitative figure in §1–§7 above is either quoted directly from one
+of the five numbered source documents or is a trivial arithmetic derivation
+from numbers they report (e.g. ratios, percentage differences) — none is a
+new measurement. A handful of process/methods claims (the two-reviewer gate
+in §8, the elimination-disclosure catch, the "across all three runs" framing
+in §4) are additionally cited to the underlying PR bodies (#47–#50) — all
+merged, publicly readable via `gh pr view <n>`, and the primary source for
+those specific claims, which the five numbered docs don't themselves cover.
