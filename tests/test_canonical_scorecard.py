@@ -8,8 +8,11 @@ first-half/second-half trend helpers.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+
+import pytest
 
 _SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "scripts")
@@ -17,6 +20,7 @@ if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
 import foedus_canonical_scorecard as sc  # noqa: E402
+from foedus.eval._coverage import CoverageError  # noqa: E402
 
 
 class TestClassifyFellBack:
@@ -76,3 +80,40 @@ class TestTrendHelpers:
         assert "up" in sc._delta_arrow(1.0, 2.0)
         assert "down" in sc._delta_arrow(2.0, 1.0)
         assert "flat" in sc._delta_arrow(2.0, 2.0)
+
+
+def _write_minimal_out(tmp_path, decisions_g0_s0):
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "campaign_plan.json").write_text(json.dumps({"freerider_handles": ["Golf"]}))
+    sweep_row = {
+        "game_id": 0, "seed": 1, "agents": ["Delta", "Echo", "Golf"],
+        "llm_seats": [0, 1], "identity_by_seat": ["Delta", "Echo", "Golf"],
+        "final_scores": [3.0, 2.0, 1.0], "winners": [0],
+    }
+    (out / "sweep.jsonl").write_text(json.dumps(sweep_row) + "\n")
+    (out / "telemetry.jsonl").write_text("")
+    (out / "decisions_game0_seat0.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in decisions_g0_s0) + "\n"
+        if decisions_g0_s0 else "")
+    (out / "decisions_game0_seat1.jsonl").write_text("")
+    return out
+
+
+class TestBuildReportCoverageGuardrail:
+    def test_build_report_end_to_end_reproduces_a_healthy_corpus(self, tmp_path):
+        decisions = [
+            {"turn": 1, "phase": "orders",
+             "raw_response": json.dumps({"orders": {}}), "fell_back": False,
+             "prompt": {"user": ""}},
+        ]
+        out = _write_minimal_out(tmp_path, decisions)
+        rep = sc.build_report(str(out))
+        assert rep["parse_fail_by_identity"]["Delta"] == {
+            "decisions": 1, "timeout": 0, "transport": 0, "parse": 0,
+        }
+
+    def test_build_report_raises_on_zero_records_read(self, tmp_path):
+        out = _write_minimal_out(tmp_path, decisions_g0_s0=[])
+        with pytest.raises(CoverageError, match="0 records read"):
+            sc.build_report(str(out))

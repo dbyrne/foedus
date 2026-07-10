@@ -44,6 +44,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from foedus.core import Archetype, Support  # noqa: E402
+from foedus.eval._coverage import assert_coverage  # noqa: E402
 from foedus.eval.punishment_metrics import classify_game_punishment  # noqa: E402
 from foedus.eval.resolution_replay import (  # noqa: E402
     counterfactual_reinstate_order,
@@ -82,6 +83,9 @@ def analyze_game(out_dir: Path, sweep_row: dict, plan: dict) -> list[dict]:
     }
 
     decisions_by_seat = autopsy._load_decisions(out_dir, game_id, llm_seats)
+    total_records = sum(len(v) for v in decisions_by_seat.values())
+    assert_coverage(total_records, total_records,
+                     f"require_dest fix validation game {game_id}: decision records read")
     _final_state, resolutions = replay_game(
         seed=seed, num_players=board["num_players"], max_turns=board["max_turns"],
         archetype=Archetype(board["archetype"]), map_radius=board["map_radius"],
