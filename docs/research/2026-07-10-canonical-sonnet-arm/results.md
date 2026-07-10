@@ -57,14 +57,37 @@ entire 8-game Haiku run, at half the cost.
 *Avg finishing rank uses `foedus.scoring._compute_ranks` — ties share a rank.
 See §8 to regenerate.*
 
-**Yes — decisively, this time.** Golf finishes **last of 4** on the
-leaderboard, 5.69 conservative points below the next-lowest entrant (Echo)
-and 15.77 below the top-rated Foxtrot. It won **0 of 4** games, its mean
-margin against the LLM average is **-13.25** (it lost, badly, on average),
-and its average finishing rank (3.750, worst in 3 of 4 games) is the worst of
-any identity in any of the three runs to date (run #1: 2.500, 3rd of 4;
-Haiku re-run: 2.500, tied for worst). This is a **qualitatively different
-result** from both prior runs, where Golf held 2nd of 4 on the leaderboard.
+**Containment: yes, decisively. Conversion: not established** — see §5-§6
+for why the second half of the question is still open. Golf finishes **last
+of 4** on the leaderboard, 5.69 conservative points below the next-lowest
+entrant (Echo) and 15.77 below the top-rated Foxtrot. It won **0 of 4**
+games, its mean margin against the LLM average is **-13.25**, and it held
+the **strictly lowest raw final score in every one of the four games**
+(`sweep.jsonl` final_scores — g0: Golf 23 of {27,37,34,23}; g1: Golf 20 of
+{20,31,35,42}; g2: Golf 21 of {47,21,32,32}; g3: Golf 23 of {28,38,23,37}).
+Its average finishing rank (3.750) is the worst of any identity in any of
+the three runs to date (run #1: 2.500, 3rd of 4; Haiku re-run: 2.500, tied
+for worst). This is a **qualitatively different result** from both prior
+runs, where Golf held 2nd of 4 on the leaderboard.
+
+**Two of the four games ended in an actual elimination, not just a scoring
+loss — worth stating plainly rather than leaving implicit in the
+standings.** In **game 2, Golf was eliminated outright** (`sweep.jsonl`
+`eliminated: [1]`), around turns 8-9 (`autopsy-s1.json`'s
+`golf_income_drop_turns: [8, 9]`, `paid_execution_turns: [7, 8]`) — the same
+turns as this run's only two "paid" punishment events (§5). This is the
+single most decisive containment event in the corpus: the table didn't just
+out-score the freerider, it removed it from the board. In **game 3, Echo**
+(an LLM entrant) **was eliminated instead** (`eliminated: [0]`, around turn
+10 — Echo's decision log stops at turn 10 orders, 22 entries vs. the other
+seats' 24). This is why Golf's game-3 rank is 3rd rather than 4th: Golf's
+raw score there (23) was still *below* Echo's (28), but
+`foedus.scoring._compute_ranks` gives eliminated players the shared worst
+rank regardless of score, so the survivor (Golf) automatically outranks the
+eliminated player (Echo) — a real engine convention, not a scoring error,
+but it means "Golf placed 3rd, not last, in game 3" reflects survival, not
+better play, and should not be read as a game where the table went easy on
+the freerider.
 
 ## 4. Outcome-level comparison — three-way
 
@@ -87,25 +110,33 @@ direction. The OpenSkill gap is uneven, though: Golf trails Foxtrot by 2.2σ
 and Delta by 1.1σ, but only 0.8σ behind Echo — at n = 4 games, σ ≈ 7.6–8.0
 has barely shrunk from the rating system's prior, so "Golf vs. Echo" is not
 statistically separated even though "Golf vs. Foxtrot" clearly is. The
-**outcome-level record is unambiguous regardless of σ**: Golf won 0 of 4
-games and finished worse than 3rd in every game it played — literal facts
-about the four games played, not modeled inferences sensitive to OpenSkill's
-convergence rate.
+**raw-score record is unambiguous regardless of σ or rank convention**: Golf
+won 0 of 4 games and held the strictly lowest final score of the four
+identities in all four games (§3) — a literal fact about the score sheets,
+not a modeled inference. Its *rank* record (3.750 avg) is one notch better
+than that in game 3 only because of the elimination-rank convention
+described in §3, not because it scored better there.
 
 Per-game trajectory (`foedus_canonical_scorecard.py`), 12-turn games,
 `continental_sweep` map:
 
-| game | freerider seat | margin | subsidy | coalition | hostility→freerider | Golf rank |
-|---:|---:|---:|---:|---:|---:|---:|
-| 0 | 3 | -9.7 | 4 | 0 | 0.25 | 4th |
-| 1 | 0 | -16.0 | 0 | 12 | 0.32 | 4th |
-| 2 | 1 | -16.0 | 0 | 18 | 0.24 | 4th |
-| 3 | 2 | -11.3 | 0 | 1 | 0.23 | 3rd |
+| game | freerider seat | margin | subsidy | coalition | hostility→freerider | Golf rank | eliminated |
+|---:|---:|---:|---:|---:|---:|---:|---|
+| 0 | 3 | -9.7 | 4 | 0 | 0.25 | 4th | — |
+| 1 | 0 | -16.0 | 0 | 12 | 0.32 | 4th | — |
+| 2 | 1 | -16.0 | 0 | 18 | 0.24 | 4th | **Golf** (~turn 8-9) |
+| 3 | 2 | -11.3 | 0 | 1 | 0.23 | 3rd | Echo (~turn 10) |
 
 First-half vs second-half (does the table learn to punish?): subsidy to the
-freerider dropped (2.0 → 0.0/game), coalition activity rose (6.0 → 9.5
-supports/game), and freerider margin worsened further (-12.8 → -13.7). Golf
-lost every game it played and never placed better than 3rd.
+freerider dropped (2.0 → 0.0/game) and coalition activity rose (6.0 → 9.5
+supports/game) — both in the "learning to punish" direction. But freerider
+margin worsened (-12.8 → -13.7) partly because game 2's elimination pulls
+the second half down, and **hostility→freerider moved the wrong way**
+(0.287 → 0.232, `foedus_canonical_scorecard.py`-verified) — the one
+first-half/second-half signal that does *not* support a "the table is
+learning to target Golf more" story. Golf lost every game it played; its
+one better-than-4th finish (game 3) is the elimination-convention artifact
+described in §3, not a game where it played its way to 3rd.
 
 ## 5. Punishment-conversion pipeline (the S1 metric this arm exists to test)
 
@@ -117,6 +148,14 @@ three run dirs:
 | run #1 (Sonnet, buggy engine) | 32 | 39 | 1 | 2.6% |
 | Haiku re-run (fixed engine) | 20 | 21 | 2 | 9.5% |
 | **Sonnet arm (fixed engine)** | 5 | 9 | 2 | **22.2%** |
+
+`executed` exceeding `proposed` is not an arithmetic error: a single
+declared intent can back multiple executed order-actions (e.g. a Move *and*
+a Support of it) — see run #1's `autopsy-s1.md` §0 for the exact per-event
+counting rules; this run's own per-game breakdown (`autopsy-s1.json`) shows
+this directly in game 2 (3 proposed → 7 executed), which is also the game
+where Golf was eliminated (§3-§4) — its `paid_execution_turns: [7, 8]` are
+the coordinated attacks that ended Golf's game.
 
 The conversion rate is highest here, and the three runs now form a
 monotonic-looking sequence (2.6% → 9.5% → 22.2%) as engine-fix + coordination
@@ -154,12 +193,15 @@ even declared against Golf — **and Golf still finished last or
 second-to-last in both of them** (rank 4 in g0, rank 3 in g3). Golf's
 containment in this run cannot be cleanly attributed to the specific
 coordinated-punishment mechanism S1.5 is about: in half the games, Golf lost
-badly with the punishment pipeline never firing at all. The more parsimonious
-read is that a **strong, generally-coordinating LLM table** (high overall
-Support volume, active pact/coalition play — see §4's coalition trajectory)
-outperforms a scripted `DishonestCooperator` on both the mechanism this study
-targets and on general play quality, and this run cannot cleanly separate
-the two.
+badly with the punishment pipeline never firing at all. Game 3 makes this
+especially concrete: the game's one elimination was **Echo**, an LLM
+entrant, not Golf (§3) — a table dynamic entirely unrelated to punishing the
+freerider, in the same game Golf happens to record its best (3rd-place,
+convention-driven) finish of the run. The more parsimonious read is that a
+**strong, generally-coordinating LLM table** (high overall Support volume,
+active pact/coalition play — see §4's coalition trajectory) outperforms a
+scripted `DishonestCooperator` on both the mechanism this study targets and
+on general play quality, and this run cannot cleanly separate the two.
 
 A second, related confound: **Foxtrot individually dominated** (3 of 4 wins,
 conservative score 10.29 — more than 7 points clear of the next entrant).
@@ -222,9 +264,14 @@ individual dominance is a live confound for the containment result (§6).
   decision records across 4 games / 12 decision-log files.
 - **Parse-fail:** 4/286 (1.40%) — Delta 0/96, Echo 2/94, Foxtrot 2/96, all
   well within the fitness-probe range.
-- **Decisions:** 286 total (pre-registered estimate: ~288 = 4×3×12×2).
+- **Decisions:** 286 total (pre-registered estimate: ~288 = 4×3×12×2); the
+  2-decision shortfall is exactly Echo's 96→94 count (§3's game-3
+  elimination around turn 10 cut off its final negotiation+orders pair).
 - **Resume:** not needed — `run_summary.json.resumed = false`, the match
-  completed in a single `launch.sh` leg (rc=0, wall-clock 3h1m). A guarded
+  completed in a single `launch.sh` leg (rc=0). `timing.log`'s wall-clock
+  (3h1m) includes `launch.sh`'s one-time `uv` environment setup;
+  `run_summary.json`'s `match_wall_clock_s` (3.00h, §4) measures just the
+  game loop — both are correct, they measure different spans. A guarded
   `@reboot` autoresume was installed before launch and dry-fire-tested
   against the live run, but never actually invoked; removed post-completion.
 
