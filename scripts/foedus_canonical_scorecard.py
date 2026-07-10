@@ -35,6 +35,7 @@ import json
 import sys
 from pathlib import Path
 
+from foedus.eval._coverage import assert_coverage
 from foedus.eval.memory_metrics import scorecard as base_scorecard
 
 
@@ -116,11 +117,13 @@ def build_report(out_dir: str, freerider_names: set[str] | None = None) -> dict:
 
     # per-entrant parse-fail split (seats rotate; identity is stable)
     by_identity: dict[str, dict[str, int]] = {}
+    total_records_read = 0
     for gid, sweep in sweeps.items():
         idbyseat = sweep.get("identity_by_seat") or sweep.get("agents") or []
         for seat in sweep.get("llm_seats", []):
             ident = idbyseat[seat] if seat < len(idbyseat) else f"seat{seat}"
             recs = _load_jsonl(d / f"decisions_game{gid}_seat{seat}.jsonl")
+            total_records_read += len(recs)
             bucket = by_identity.setdefault(
                 ident, {"decisions": 0, "timeout": 0, "transport": 0, "parse": 0})
             for rec in recs:
@@ -128,6 +131,9 @@ def build_report(out_dir: str, freerider_names: set[str] | None = None) -> dict:
                 kind = _classify_fell_back(rec)
                 if kind:
                     bucket[kind] += 1
+
+    assert_coverage(total_records_read, total_records_read,
+                     "canonical scorecard: decision records read")
 
     # trajectory across games (ordered by game_id)
     per_game = sorted(agg["per_game"], key=lambda g: (g.get("game_id") is None,

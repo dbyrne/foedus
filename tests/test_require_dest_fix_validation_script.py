@@ -21,14 +21,18 @@ tests/test_resolution_replay.py).
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+
+import pytest
 
 _SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
 import foedus_require_dest_fix_validation as validation  # noqa: E402
+from foedus.eval._coverage import CoverageError  # noqa: E402
 
 from tests.test_s1_5_confound_check_script import _write_synthetic_run
 
@@ -48,3 +52,24 @@ def test_build_report_end_to_end_finds_no_pins_in_a_pin_free_game(tmp_path):
     assert t["resolver_accepts"] == 0
     assert t["before_in_candidate_list"] == 0
     assert t["mover_flips_to_success"] == 0
+
+
+def test_build_report_raises_on_zero_records_read(tmp_path):
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "campaign_plan.json").write_text(json.dumps({
+        "freerider_handles": ["Golf"], "freerider_class": "DishonestCooperator",
+        "board": {"num_players": 3, "max_turns": 2,
+                  "map_radius": 2, "archetype": "continental_sweep"},
+    }))
+    sweep_row = {
+        "game_id": 0, "seed": 909, "agents": ["Delta", "Echo", "Golf"],
+        "llm_seats": [0, 1], "freerider_seats": [2],
+        "total_turns": 2, "final_scores": [0.0, 0.0, 0.0], "eliminated": [],
+    }
+    (out / "sweep.jsonl").write_text(json.dumps(sweep_row) + "\n")
+    for seat in (0, 1):
+        (out / f"decisions_game0_seat{seat}.jsonl").write_text("")
+
+    with pytest.raises(CoverageError, match="0 records read"):
+        validation.build_report(str(out))

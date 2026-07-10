@@ -18,7 +18,10 @@ _SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
+import pytest
+
 import foedus_s1_autopsy as autopsy  # noqa: E402
+from foedus.eval._coverage import CoverageError  # noqa: E402
 
 
 def _negotiate(turn, raw, prompt_user=""):
@@ -121,3 +124,23 @@ def test_build_report_omits_structural_subsidy_test_without_scorecard(tmp_path):
     out = _write_run(tmp_path)
     rep = autopsy.build_report(str(out))
     assert rep["structural_subsidy_test"] is None
+
+
+def test_build_report_raises_on_zero_records_read(tmp_path):
+    # A game legitimately having zero LLM decisions near the freerider (as
+    # game 1 in _write_run above does) is fine -- but the corpus as a whole
+    # reading ZERO records anywhere (wrong/stale --out-dir, or every seat
+    # file empty) must fail loudly, not silently report empty totals.
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "campaign_plan.json").write_text(json.dumps({"freerider_handles": ["Golf"]}))
+    sweep_rows = [{"game_id": 0, "agents": ["Delta", "Echo", "Foxtrot", "Golf"],
+                   "llm_seats": [0, 1, 2]}]
+    with (out / "sweep.jsonl").open("w") as f:
+        for row in sweep_rows:
+            f.write(json.dumps(row) + "\n")
+    for seat in (0, 1, 2):
+        (out / f"decisions_game0_seat{seat}.jsonl").write_text("")
+
+    with pytest.raises(CoverageError, match="0 records read"):
+        autopsy.build_report(str(out))

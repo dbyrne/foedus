@@ -27,6 +27,7 @@ import json
 import sys
 from pathlib import Path
 
+from foedus.eval._coverage import assert_coverage
 from foedus.eval.punishment_metrics import classify_game_punishment, pearson_correlation
 
 
@@ -52,12 +53,14 @@ def build_report(out_dir: str, scorecard_path: str | None = None) -> dict:
     sweeps = sorted(_load_jsonl(d / "sweep.jsonl"), key=lambda s: s.get("game_id"))
 
     per_game = []
+    total_records_read = 0
     for sweep in sweeps:
         gid = sweep.get("game_id")
         agents = sweep.get("agents") or sweep.get("identity_by_seat") or []
         llm_seats = list(sweep.get("llm_seats") or [])
         freerider_seats = {i for i, name in enumerate(agents) if name in freerider_handles}
         decisions = _load_decisions(d, gid, llm_seats)
+        total_records_read += sum(len(v) for v in decisions.values())
         report = classify_game_punishment(
             decisions_by_seat=decisions, llm_seats=llm_seats, freerider_seats=freerider_seats)
         per_game.append({
@@ -66,6 +69,13 @@ def build_report(out_dir: str, scorecard_path: str | None = None) -> dict:
             "identity_by_seat": agents,
             **report,
         })
+
+    # Corpus-wide guardrail (a single game legitimately having zero LLM
+    # decisions near the freerider is fine; the WHOLE corpus reading zero
+    # records anywhere -- wrong/stale --out-dir, every seat file empty --
+    # must fail loudly instead of silently reporting empty totals).
+    assert_coverage(total_records_read, total_records_read,
+                     "S1 corpus autopsy: decision records read")
 
     totals = {
         "proposed_count": sum(g["proposed_count"] for g in per_game),

@@ -26,7 +26,10 @@ _SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
+import pytest
+
 import foedus_s1_5_confound_check as confound_check  # noqa: E402
+from foedus.eval._coverage import CoverageError  # noqa: E402
 
 from foedus.agents.heuristics import ROSTER
 from foedus.agents.llm.diplomat import LLMDiplomat
@@ -124,3 +127,24 @@ def test_build_report_end_to_end_on_a_tiny_real_game(tmp_path):
     c2 = rep["check2_clean_call_subset"]
     assert c2["clean_broad"]["executed_count"] <= c2["full"]["executed_count"]
     assert c2["clean_strict"]["executed_count"] <= c2["full"]["executed_count"]
+
+
+def test_build_report_raises_on_zero_records_read(tmp_path):
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "campaign_plan.json").write_text(json.dumps({
+        "freerider_handles": ["Golf"], "freerider_class": "DishonestCooperator",
+        "board": {"num_players": 3, "max_turns": 2,
+                  "map_radius": 2, "archetype": "continental_sweep"},
+    }))
+    sweep_row = {
+        "game_id": 0, "seed": 909, "agents": ["Delta", "Echo", "Golf"],
+        "llm_seats": [0, 1], "freerider_seats": [2],
+        "total_turns": 2, "final_scores": [0.0, 0.0, 0.0], "eliminated": [],
+    }
+    (out / "sweep.jsonl").write_text(json.dumps(sweep_row) + "\n")
+    for seat in (0, 1):
+        (out / f"decisions_game0_seat{seat}.jsonl").write_text("")
+
+    with pytest.raises(CoverageError, match="0 records read"):
+        confound_check.build_report(str(out))
