@@ -1,0 +1,17 @@
+{
+  "match_id": "canonical-sonnet-arm-2026-07-10",
+  "num_games": 4,
+  "match_wall_clock_s": 10802.2,
+  "mean_game_wall_clock_s": 2700.6,
+  "per_game_wall_clock_s": [
+    2372.1,
+    2834.7,
+    3239.7,
+    2355.7
+  ],
+  "total_decisions": 286,
+  "total_fell_back": 4,
+  "parse_fail_rate": 0.014,
+  "seed_commitment": "d4f9a014bc9f56a497263c4bd00084f996a8a2b3ecd83e3f79273b7fe9b7bff8",
+  "resumed": false
+}

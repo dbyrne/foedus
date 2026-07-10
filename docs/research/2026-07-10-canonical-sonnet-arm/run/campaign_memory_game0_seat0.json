@@ -1,0 +1,56 @@
+{
+  "game_index": 0,
+  "seat": 0,
+  "entrant_identity": "Delta",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 4249986303553610128,
+        "my_seat": 0,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 27.0,
+          "1": 37.0,
+          "2": 34.0,
+          "3": 23.0
+        },
+        "per_opponent": {
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 2,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Delta",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Golf: declares ally every turn (11/11) but never reciprocated Support even after I gave it twice\u2014hollow ally talk, don't overcommit resources based on their declarations alone; verify actions not words. Echo & Foxtrot: never declared ally toward me, stayed disengaged, no pacts/breaches either way\u2014but they finished 1st/2nd (37/34) while Golf and I lagged (23/27). Takeaway: chasing Golf's alliance cost me tempo; Echo/Foxtrot's independence outperformed. Next time, be wary of Golf's empty pledges and consider competing directly with Echo/Foxtrot instead of relying on Golf."
+    }
+  ]
+}

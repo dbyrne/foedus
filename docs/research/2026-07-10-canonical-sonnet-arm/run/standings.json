@@ -1,0 +1,31 @@
+{
+  "match_id": "canonical-sonnet-arm-2026-07-10",
+  "num_games": 4,
+  "rating": "OpenSkill PlackettLuce, mu-3sigma",
+  "standings": [
+    {
+      "identity": "Foxtrot",
+      "mu": 34.123,
+      "sigma": 7.946,
+      "conservative": 10.285
+    },
+    {
+      "identity": "Delta",
+      "mu": 25.457,
+      "sigma": 7.596,
+      "conservative": 2.669
+    },
+    {
+      "identity": "Echo",
+      "mu": 23.264,
+      "sigma": 7.686,
+      "conservative": 0.206
+    },
+    {
+      "identity": "Golf",
+      "mu": 17.314,
+      "sigma": 7.598,
+      "conservative": -5.481
+    }
+  ]
+}

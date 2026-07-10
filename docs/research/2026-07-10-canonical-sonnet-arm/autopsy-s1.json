@@ -1,0 +1,212 @@
+{
+  "out_dir": "docs/research/2026-07-10-canonical-sonnet-arm/run",
+  "freerider_handles": [
+    "Golf"
+  ],
+  "totals": {
+    "proposed_count": 5,
+    "executed_count": 9,
+    "paid_count": 2
+  },
+  "per_game": [
+    {
+      "game_id": 0,
+      "freerider_seat": 3,
+      "identity_by_seat": [
+        "Delta",
+        "Echo",
+        "Foxtrot",
+        "Golf"
+      ],
+      "proposed_count": 0,
+      "executed_count": 0,
+      "paid_count": 0,
+      "proposals": [],
+      "executions": [],
+      "golf_income_drop_turns": [],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 0,
+      "attack_move_intents_matched_by_execution": 0
+    },
+    {
+      "game_id": 1,
+      "freerider_seat": 0,
+      "identity_by_seat": [
+        "Golf",
+        "Delta",
+        "Echo",
+        "Foxtrot"
+      ],
+      "proposed_count": 2,
+      "executed_count": 2,
+      "paid_count": 0,
+      "proposals": [
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 10,
+          "seat": 1,
+          "unit_id": 5
+        },
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 10,
+          "seat": 3,
+          "unit_id": 7
+        }
+      ],
+      "executions": [
+        {
+          "kind": "attack_move",
+          "game_turn": 10,
+          "seat": 1,
+          "unit_id": 5
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 10,
+          "seat": 3,
+          "unit_id": 7
+        }
+      ],
+      "golf_income_drop_turns": [
+        10
+      ],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 2,
+      "attack_move_intents_matched_by_execution": 2
+    },
+    {
+      "game_id": 2,
+      "freerider_seat": 1,
+      "identity_by_seat": [
+        "Foxtrot",
+        "Golf",
+        "Delta",
+        "Echo"
+      ],
+      "proposed_count": 3,
+      "executed_count": 7,
+      "paid_count": 2,
+      "proposals": [
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 7,
+          "seat": 2,
+          "unit_id": 6
+        },
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 8,
+          "seat": 0,
+          "unit_id": 8
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 8,
+          "seat": 0,
+          "unit_id": 1,
+          "target_unit_id": 8
+        }
+      ],
+      "executions": [
+        {
+          "kind": "attack_move",
+          "game_turn": 3,
+          "seat": 2,
+          "unit_id": 6
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 3,
+          "seat": 2,
+          "unit_id": 2,
+          "target_unit_id": 6
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 7,
+          "seat": 0,
+          "unit_id": 1
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 7,
+          "seat": 2,
+          "unit_id": 6
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 7,
+          "seat": 0,
+          "unit_id": 8,
+          "target_unit_id": 1
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 8,
+          "seat": 0,
+          "unit_id": 8
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 8,
+          "seat": 0,
+          "unit_id": 1,
+          "target_unit_id": 8
+        }
+      ],
+      "golf_income_drop_turns": [
+        8,
+        9
+      ],
+      "paid_execution_turns": [
+        7,
+        8
+      ],
+      "attack_move_intents_total": 2,
+      "attack_move_intents_matched_by_execution": 2
+    },
+    {
+      "game_id": 3,
+      "freerider_seat": 2,
+      "identity_by_seat": [
+        "Echo",
+        "Foxtrot",
+        "Golf",
+        "Delta"
+      ],
+      "proposed_count": 0,
+      "executed_count": 0,
+      "paid_count": 0,
+      "proposals": [],
+      "executions": [],
+      "golf_income_drop_turns": [],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 0,
+      "attack_move_intents_matched_by_execution": 0
+    }
+  ],
+  "structural_subsidy_test": {
+    "n_games": 4,
+    "coalition_per_game": [
+      0,
+      12,
+      18,
+      1
+    ],
+    "resistance_per_game": [
+      0,
+      2,
+      7,
+      0
+    ],
+    "pearson_r": 0.9271688612974065,
+    "correlations": {
+      "coalition_vs_resistance": 0.9271688612974065,
+      "coalition_vs_margin": -0.9473538398543729,
+      "coalition_vs_subsidy": -0.5916849454576639,
+      "hostility_vs_executed": -0.09236622027905723,
+      "hostility_vs_proposed": 0.28569046393369246
+    }
+  }
+}
