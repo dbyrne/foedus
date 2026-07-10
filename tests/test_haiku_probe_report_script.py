@@ -146,14 +146,22 @@ class TestCoverageGuardrail:
             report.build_report(str(out))
 
     def test_all_orders_records_unparseable_raises(self, tmp_path):
-        # Reproduces the original bug's exact shape: every orders-phase
-        # record is one the LIVE harness did NOT flag as a fallback
-        # (fell_back=False -- it thought these were fine, matching every
-        # real Haiku probe raw_response) but is genuinely unparseable by
-        # this report's own re-parsing. If this guardrail had existed
-        # before the fence-stripping fix, running the report against the
-        # real (fenced) corpus would have hit exactly this and raised
-        # immediately instead of printing "zero all-Hold turns."
+        # This is a regression test for the GUARDRAIL's raise behavior (any
+        # cause of 0/N parsed must stop the report), not a regression test
+        # for the fence-stripping bug's specific MECHANISM -- assert_coverage
+        # only ever sees a (parsed, total) count, so garbage content and
+        # fenced-but-mishandled content are indistinguishable to it and
+        # either would trip this the same way. The mechanism-specific
+        # regression test lives in tests/test_probe_metrics.py
+        # (test_flags_all_hold_turns_in_markdown_fenced_responses and
+        # test_all_orders_records_parse, both fenced=True): those fail
+        # under a reintroduced bare-json.loads _orders_dict, which THIS
+        # fixture would not distinguish from "the model emitted garbage."
+        # What this test does prove: had the guardrail existed before the
+        # fence-stripping fix, running the report against the real (fenced,
+        # 100%-unparseable-under-the-old-code) corpus would have hit this
+        # exact 0/N shape and raised, instead of printing "zero all-Hold
+        # turns" as a clean result.
         decisions = [
             _orders(t, "not json at all, garbage output", fell_back=False)
             for t in range(1, 6)

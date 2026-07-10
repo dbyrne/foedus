@@ -35,14 +35,24 @@ def orders_parse_coverage(decisions: list[dict]) -> tuple[int, int]:
     values yield a usable orders dict via `_orders_dict`, out of how many
     orders-phase records exist where `fell_back` isn't True.
 
-    `fell_back=True` records (timeout / transport / genuine model parse
-    failure) are excluded from both counts: that's a real, expected
-    model-side failure the parse-fail metric already reports on, not a
-    coverage gap in this tool's own re-parsing. Only records the harness
-    itself successfully used belong in the denominator -- if the harness's
-    own parser succeeded on a record but `_orders_dict` doesn't, that's
-    exactly the shape of the original fence-stripping bug this guardrail
-    exists to catch.
+    `fell_back=True` records are excluded from both counts. Note this is a
+    broader category than "genuinely unparseable JSON": `parse_orders_response`
+    (foedus/agents/llm/parse.py) sets it on ANY per-order issue -- an
+    illegal Move/Support, an unknown unit id, or merely needing the label
+    sanitizer -- not only on a totally malformed response. Empirically (all
+    552 real orders-phase records across the sealed corpora as of this
+    writing) most `fell_back=True` records DO still parse fine via
+    `_orders_dict`; excluding them anyway is conservative rather than
+    precise -- it shrinks the denominator to "records the harness didn't
+    flag for ANY reason" rather than "records that are valid JSON," which
+    costs a little coverage signal but never causes a false positive here.
+    The one case this exclusion could theoretically hide -- a record with
+    `fell_back=False` that `_orders_dict` still can't parse (e.g. valid JSON
+    whose `"orders"` key is absent entirely: `parse_orders_response` treats
+    that as `{}`/no-op, but `_orders_dict` returns None) -- occurred 0/552
+    times in the real corpora checked; if it starts occurring, the 95%
+    threshold in `assert_coverage` is what would catch it, same as any
+    other coverage gap.
 
     A corpus-level caller (scripts/foedus_haiku_probe_report.py) sums this
     across every seat/game and feeds the totals into
