@@ -1,0 +1,203 @@
+{
+  "game_index": 3,
+  "seat": 3,
+  "entrant_identity": "Delta",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 8293180377977934555,
+        "my_seat": 0,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 38.0,
+          "1": 26.0,
+          "2": 32.0,
+          "3": 38.0
+        },
+        "per_opponent": {
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 2,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Delta",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Golf: Deceptive ally. Claimed ally all 11 turns but gave zero reciprocal support despite me supporting twice. Don't fund them next game. Echo and Foxtrot: Open enemies, no pretense. Strategy: Verify reciprocation before investing support. Punish free-riders. Don't reward empty declarations."
+    },
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 1898507134362937788,
+        "my_seat": 1,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 25.0,
+          "1": 32.0,
+          "2": 37.0,
+          "3": 37.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Delta",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Golf claims ally every turn but won't commit (no pact, no support). Finished last despite friendliness. Echo and Foxtrot stayed hostile and both won tied first place. Their independent strategy beat alliance-building. Don't trust Golf's empty declarations. Next game: either find genuinely committed allies or adopt the winners' cold, independent approach. Formal alliances may not be the winning path here."
+    },
+    {
+      "facts": {
+        "game_index": 2,
+        "seed": 9070636823725058267,
+        "my_seat": 2,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 43.0,
+          "1": 23.0,
+          "2": 29.0,
+          "3": 37.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Delta",
+        "handles": {
+          "0": "Foxtrot",
+          "1": "Golf",
+          "2": "Delta",
+          "3": "Echo"
+        }
+      },
+      "self_note": "Foxtrot is your strongest threat - won decisively playing aggressive, independent style. Echo also formidable (2nd place) playing similarly. Golf broadcasts constant ally declarations but performs poorly; their friendliness is empty talk. Pacts didn't materialize with anyone. Next game: don't assume declarations equal loyalty. Focus on your own strength. Foxtrot and Echo's success suggests independent play beats false alliance talk. Consider whether mutual support agreements are viable or if you need harder competitive strategy."
+    },
+    {
+      "facts": {
+        "game_index": 3,
+        "seed": 7089718000905472378,
+        "my_seat": 3,
+        "my_rank": 4,
+        "n_players": 4,
+        "final_scores": {
+          "0": 29.0,
+          "1": 43.0,
+          "2": 28.0,
+          "3": 24.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Delta",
+        "handles": {
+          "0": "Echo",
+          "1": "Foxtrot",
+          "2": "Golf",
+          "3": "Delta"
+        }
+      },
+      "self_note": "Golf constantly declares ally status but never backs it with actual support\u2014don't trust their declarations. Foxtrot plays a strong independent game and won decisively; monitor their territorial expansion and resource control closely. You finished last this game. Next time, either secure meaningful pact commitments early or focus on territorial dominance. Avoid isolation."
+    }
+  ]
+}

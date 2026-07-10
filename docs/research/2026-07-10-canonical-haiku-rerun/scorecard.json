@@ -1,0 +1,198 @@
+{
+  "out_dir": "docs/research/2026-07-10-canonical-haiku-rerun/run",
+  "aggregate": {
+    "n_games": 8,
+    "freerider_win_rate": 0.125,
+    "freerider_wins": 1,
+    "mean_margin": 0.833333333333333,
+    "total_subsidy": 2,
+    "mean_subsidy_per_game": 0.25,
+    "total_llm_llm_supports": 2,
+    "mean_llm_llm_supports_per_game": 0.25,
+    "parse_fail_rate": 0.010416666666666666
+  },
+  "trajectory": [
+    {
+      "game_id": 0,
+      "seed": 8293180377977934555,
+      "freerider_seat": 3,
+      "freerider_won": false,
+      "margin": 6.0,
+      "subsidy": 2,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.0,
+      "wall_clock_s": 2584.7
+    },
+    {
+      "game_id": 1,
+      "seed": 1898507134362937788,
+      "freerider_seat": 0,
+      "freerider_won": false,
+      "margin": -10.33,
+      "subsidy": 0,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.19444444444444445,
+      "wall_clock_s": 2532.4
+    },
+    {
+      "game_id": 2,
+      "seed": 9070636823725058267,
+      "freerider_seat": 1,
+      "freerider_won": false,
+      "margin": -13.33,
+      "subsidy": 0,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.027777777777777776,
+      "wall_clock_s": 2030.2
+    },
+    {
+      "game_id": 3,
+      "seed": 7089718000905472378,
+      "freerider_seat": 2,
+      "freerider_won": false,
+      "margin": -4.0,
+      "subsidy": 0,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.17142857142857143,
+      "wall_clock_s": 2332.8
+    },
+    {
+      "game_id": 4,
+      "seed": 496109480107902617,
+      "freerider_seat": 3,
+      "freerider_won": false,
+      "margin": -8.33,
+      "subsidy": 0,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.0,
+      "wall_clock_s": 2489.1
+    },
+    {
+      "game_id": 5,
+      "seed": 492506427639998392,
+      "freerider_seat": 0,
+      "freerider_won": true,
+      "margin": 19.0,
+      "subsidy": 0,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.0,
+      "wall_clock_s": 2462.8
+    },
+    {
+      "game_id": 6,
+      "seed": 5471759138639748987,
+      "freerider_seat": 1,
+      "freerider_won": false,
+      "margin": 9.0,
+      "subsidy": 0,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.15151515151515152,
+      "wall_clock_s": 2746.8
+    },
+    {
+      "game_id": 7,
+      "seed": 3792500903881282904,
+      "freerider_seat": 2,
+      "freerider_won": false,
+      "margin": 8.67,
+      "subsidy": 0,
+      "llm_llm_supports": 2,
+      "stance_hostility_frac": 0.0,
+      "wall_clock_s": 3059.1
+    }
+  ],
+  "trend": {
+    "subsidy": {
+      "first_half_mean": 0.5,
+      "second_half_mean": 0.0,
+      "direction": "v down (-0.50)"
+    },
+    "llm_llm_supports": {
+      "first_half_mean": 0.0,
+      "second_half_mean": 0.5,
+      "direction": "^ up (+0.50)"
+    },
+    "margin": {
+      "first_half_mean": -5.415,
+      "second_half_mean": 7.085,
+      "direction": "^ up (+12.50)"
+    },
+    "stance_hostility_frac": {
+      "first_half_mean": 0.098,
+      "second_half_mean": 0.038,
+      "direction": "v down (-0.06)"
+    }
+  },
+  "parse_fail_by_identity": {
+    "Delta": {
+      "decisions": 192,
+      "timeout": 2,
+      "transport": 0,
+      "parse": 1
+    },
+    "Echo": {
+      "decisions": 192,
+      "timeout": 1,
+      "transport": 0,
+      "parse": 1
+    },
+    "Foxtrot": {
+      "decisions": 192,
+      "timeout": 1,
+      "transport": 0,
+      "parse": 0
+    }
+  },
+  "standings": {
+    "match_id": "canonical-haiku-2026-07-10",
+    "num_games": 8,
+    "rating": "OpenSkill PlackettLuce, mu-3sigma",
+    "standings": [
+      {
+        "identity": "Echo",
+        "mu": 26.458,
+        "sigma": 7.226,
+        "conservative": 4.778
+      },
+      {
+        "identity": "Golf",
+        "mu": 26.184,
+        "sigma": 7.202,
+        "conservative": 4.577
+      },
+      {
+        "identity": "Foxtrot",
+        "mu": 23.562,
+        "sigma": 7.106,
+        "conservative": 2.244
+      },
+      {
+        "identity": "Delta",
+        "mu": 23.312,
+        "sigma": 7.115,
+        "conservative": 1.967
+      }
+    ]
+  },
+  "run_summary": {
+    "match_id": "canonical-haiku-2026-07-10",
+    "num_games": 8,
+    "match_wall_clock_s": 20238.0,
+    "mean_game_wall_clock_s": 2529.7,
+    "per_game_wall_clock_s": [
+      2584.7,
+      2532.4,
+      2030.2,
+      2332.8,
+      2489.1,
+      2462.8,
+      2746.8,
+      3059.1
+    ],
+    "total_decisions": 576,
+    "total_fell_back": 6,
+    "parse_fail_rate": 0.0104,
+    "seed_commitment": "786e2fc4421cc385ae9dfbef8181d4ee27bb2f0ce4a5bfb3238ead9ecff04ace",
+    "resumed": false
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "match_id": "canonical-haiku-2026-07-10",
+  "num_games": 8,
+  "rating": "OpenSkill PlackettLuce, mu-3sigma",
+  "standings": [
+    {
+      "identity": "Echo",
+      "mu": 26.458,
+      "sigma": 7.226,
+      "conservative": 4.778
+    },
+    {
+      "identity": "Golf",
+      "mu": 26.184,
+      "sigma": 7.202,
+      "conservative": 4.577
+    },
+    {
+      "identity": "Foxtrot",
+      "mu": 23.562,
+      "sigma": 7.106,
+      "conservative": 2.244
+    },
+    {
+      "identity": "Delta",
+      "mu": 23.312,
+      "sigma": 7.115,
+      "conservative": 1.967
+    }
+  ]
+}

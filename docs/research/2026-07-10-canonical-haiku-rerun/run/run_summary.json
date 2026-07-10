@@ -1,0 +1,21 @@
+{
+  "match_id": "canonical-haiku-2026-07-10",
+  "num_games": 8,
+  "match_wall_clock_s": 20238.0,
+  "mean_game_wall_clock_s": 2529.7,
+  "per_game_wall_clock_s": [
+    2584.7,
+    2532.4,
+    2030.2,
+    2332.8,
+    2489.1,
+    2462.8,
+    2746.8,
+    3059.1
+  ],
+  "total_decisions": 576,
+  "total_fell_back": 6,
+  "parse_fail_rate": 0.0104,
+  "seed_commitment": "786e2fc4421cc385ae9dfbef8181d4ee27bb2f0ce4a5bfb3238ead9ecff04ace",
+  "resumed": false
+}
