@@ -1,0 +1,150 @@
+{
+  "out_dir": "docs/research/2026-07-10-canonical-sonnet-arm/run",
+  "aggregate": {
+    "n_games": 4,
+    "freerider_win_rate": 0.0,
+    "freerider_wins": 0,
+    "mean_margin": -13.25,
+    "total_subsidy": 4,
+    "mean_subsidy_per_game": 1.0,
+    "total_llm_llm_supports": 31,
+    "mean_llm_llm_supports_per_game": 7.75,
+    "parse_fail_rate": 0.013986013986013986
+  },
+  "trajectory": [
+    {
+      "game_id": 0,
+      "seed": 4249986303553610128,
+      "freerider_seat": 3,
+      "freerider_won": false,
+      "margin": -9.67,
+      "subsidy": 4,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.25,
+      "wall_clock_s": 2372.1
+    },
+    {
+      "game_id": 1,
+      "seed": 3417006599002388034,
+      "freerider_seat": 0,
+      "freerider_won": false,
+      "margin": -16.0,
+      "subsidy": 0,
+      "llm_llm_supports": 12,
+      "stance_hostility_frac": 0.3235294117647059,
+      "wall_clock_s": 2834.7
+    },
+    {
+      "game_id": 2,
+      "seed": 869105726230882253,
+      "freerider_seat": 1,
+      "freerider_won": false,
+      "margin": -16.0,
+      "subsidy": 0,
+      "llm_llm_supports": 18,
+      "stance_hostility_frac": 0.23529411764705882,
+      "wall_clock_s": 3239.7
+    },
+    {
+      "game_id": 3,
+      "seed": 2342021711565692709,
+      "freerider_seat": 2,
+      "freerider_won": false,
+      "margin": -11.33,
+      "subsidy": 0,
+      "llm_llm_supports": 1,
+      "stance_hostility_frac": 0.22857142857142856,
+      "wall_clock_s": 2355.7
+    }
+  ],
+  "trend": {
+    "subsidy": {
+      "first_half_mean": 2.0,
+      "second_half_mean": 0.0,
+      "direction": "v down (-2.00)"
+    },
+    "llm_llm_supports": {
+      "first_half_mean": 6.0,
+      "second_half_mean": 9.5,
+      "direction": "^ up (+3.50)"
+    },
+    "margin": {
+      "first_half_mean": -12.835,
+      "second_half_mean": -13.665,
+      "direction": "v down (-0.83)"
+    },
+    "stance_hostility_frac": {
+      "first_half_mean": 0.287,
+      "second_half_mean": 0.232,
+      "direction": "v down (-0.05)"
+    }
+  },
+  "parse_fail_by_identity": {
+    "Delta": {
+      "decisions": 96,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Echo": {
+      "decisions": 94,
+      "timeout": 2,
+      "transport": 0,
+      "parse": 0
+    },
+    "Foxtrot": {
+      "decisions": 96,
+      "timeout": 1,
+      "transport": 0,
+      "parse": 1
+    }
+  },
+  "standings": {
+    "match_id": "canonical-sonnet-arm-2026-07-10",
+    "num_games": 4,
+    "rating": "OpenSkill PlackettLuce, mu-3sigma",
+    "standings": [
+      {
+        "identity": "Foxtrot",
+        "mu": 34.123,
+        "sigma": 7.946,
+        "conservative": 10.285
+      },
+      {
+        "identity": "Delta",
+        "mu": 25.457,
+        "sigma": 7.596,
+        "conservative": 2.669
+      },
+      {
+        "identity": "Echo",
+        "mu": 23.264,
+        "sigma": 7.686,
+        "conservative": 0.206
+      },
+      {
+        "identity": "Golf",
+        "mu": 17.314,
+        "sigma": 7.598,
+        "conservative": -5.481
+      }
+    ]
+  },
+  "run_summary": {
+    "match_id": "canonical-sonnet-arm-2026-07-10",
+    "num_games": 4,
+    "match_wall_clock_s": 10802.2,
+    "mean_game_wall_clock_s": 2700.6,
+    "per_game_wall_clock_s": [
+      2372.1,
+      2834.7,
+      3239.7,
+      2355.7
+    ],
+    "total_decisions": 286,
+    "total_fell_back": 4,
+    "parse_fail_rate": 0.014,
+    "seed_commitment": "d4f9a014bc9f56a497263c4bd00084f996a8a2b3ecd83e3f79273b7fe9b7bff8",
+    "resumed": false
+  }
+}

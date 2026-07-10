@@ -1,0 +1,203 @@
+{
+  "game_index": 3,
+  "seat": 1,
+  "entrant_identity": "Foxtrot",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 4249986303553610128,
+        "my_seat": 2,
+        "my_rank": 2,
+        "n_players": 4,
+        "final_scores": {
+          "0": 27.0,
+          "1": 37.0,
+          "2": 34.0,
+          "3": 23.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 2,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Note to self re: recurring opponents (seed 4249986303553610128 game, finished 2nd: Echo 37, me 34, Delta 27, Golf 23).\n\nGolf: declared ally 11/11 turns but never once returned Support despite me giving Support twice \u2014 talk is cheap, verify reciprocity before investing more. Treat as free rider; demand actual Support trades before extending further.\n\nEcho: no ally talk, no support either way, but won outright \u2014 quietly efficient, possibly benefits from others' alliances distracting each other. Watch for stealth scaling.\n\nDelta: fully neutral/disengaged, low score \u2014 low threat, low value as ally."
+    },
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 3417006599002388034,
+        "my_seat": 3,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 20.0,
+          "1": 31.0,
+          "2": 35.0,
+          "3": 42.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 5,
+            "my_supports_of_them": 1,
+            "their_support_intent_toward_me": 3,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 8,
+            "my_supports_of_them": 4,
+            "their_support_intent_toward_me": 2,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Won this one (42, rank 1). Key read: Golf talks ally nonstop (11/11) but delivers zero real support and no pact\u2014pure rhetoric, don't rely on them, maybe exploit their predictable false-friendliness. Echo talks less (8/11) but actually reciprocates support most (gave me 4, sent intents twice)\u2014most trustworthy ally by action, worth prioritizing real coordination. Delta moderate on both talk and action\u2014cautious, opportunistic, watch for shifting sides. Overall: judge these three by behavior, not declarations; Echo>Delta>Golf for reliability."
+    },
+    {
+      "facts": {
+        "game_index": 2,
+        "seed": 869105726230882253,
+        "my_seat": 0,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 47.0,
+          "1": 21.0,
+          "2": 32.0,
+          "3": 32.0
+        },
+        "per_opponent": {
+          "1": {
+            "turns_observed": 8,
+            "ally_toward_me": 8,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 4,
+            "my_supports_of_them": 3,
+            "their_support_intent_toward_me": 2,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 7,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Foxtrot",
+          "1": "Golf",
+          "2": "Delta",
+          "3": "Echo"
+        }
+      },
+      "self_note": "Note to self: Won this one big (47 vs 21/32/32). Golf declared ally 8/8 turns but never converted to real Support\u2014likely low threat, possibly passive or all-talk; don't rely on them but don't fear betrayal either. Delta showed mixed signals (4/11 ally, but actual mutual Support 3 given/2 received)\u2014most genuine cooperator, worth engaging pacts with. Echo declared ally often (7/11) but zero real Support\u2014watch for empty rhetoric. No pacts formed or breached by anyone."
+    },
+    {
+      "facts": {
+        "game_index": 3,
+        "seed": 2342021711565692709,
+        "my_seat": 1,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 28.0,
+          "1": 38.0,
+          "2": 23.0,
+          "3": 37.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 10,
+            "ally_toward_me": 3,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 6,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Echo",
+          "1": "Foxtrot",
+          "2": "Golf",
+          "3": "Delta"
+        }
+      },
+      "self_note": "Won this one (38, rank 1). Golf declared ally nearly every turn (11/11) but no pact formed and no actual support exchanged - talk without substance, but consistent friendliness worth testing further. Delta was moderate ally-talk (6/11), Echo minimal (3/10). None of us converted declarations into real Support or pacts - I should push harder to actually formalize pacts with willing talkers like Golf next time, since verbal alliance alone didn't cost anything but also didn't help."
+    }
+  ]
+}

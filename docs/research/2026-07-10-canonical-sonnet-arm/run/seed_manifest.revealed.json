@@ -1,0 +1,13 @@
+{
+  "match_id": "canonical-sonnet-arm-2026-07-10",
+  "num_games": 4,
+  "domain": "foedus-ruleset-v1",
+  "commit": "d4f9a014bc9f56a497263c4bd00084f996a8a2b3ecd83e3f79273b7fe9b7bff8",
+  "seeds": [
+    4249986303553610128,
+    3417006599002388034,
+    869105726230882253,
+    2342021711565692709
+  ],
+  "nonce": "e821dab9e76005e25321e0fac0b44971"
+}
