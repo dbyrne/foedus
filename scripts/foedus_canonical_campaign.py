@@ -58,6 +58,8 @@ from foedus.scoring import compute_match_result  # noqa: E402
 from foedus_llm_diplomat_run import (            # noqa: E402
     run_one_llm_game,
     render_transcript,
+    _env_flag,
+    _env_int,
 )
 
 # Rating is an optional extra; import lazily so --dry-run works without it.
@@ -319,6 +321,16 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
         "board": {"num_players": num_seats, "max_turns": max_turns,
                   "map_radius": map_radius, "archetype": archetype.value,
                   "detente_threshold": cfg.detente_threshold},
+        # Durably records the concurrency setting a sealed match ran under —
+        # read at seal/plan time (pre-game-0), same source
+        # (FOEDUS_PARALLEL_SEATS / FOEDUS_PARALLEL_SEATS_WORKERS) the
+        # hot-swap integration point in docs/design/2026-07-05-parallel-seat-
+        # calls.md uses to drive run_one_llm_game. Avoids a post-hoc "was
+        # this WORKERS=2 or WORKERS=3?" audit question.
+        "parallel_seats": {
+            "enabled": _env_flag("FOEDUS_PARALLEL_SEATS"),
+            "workers": _env_int("FOEDUS_PARALLEL_SEATS_WORKERS"),
+        },
         "seatings": [
             {"game_index": s.game_index,
              "seat_to_entrant": s.seat_to_entrant,
