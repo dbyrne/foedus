@@ -64,21 +64,25 @@ addresses this directly.
 
 | identity | mu | sigma | conservative (μ−3σ) | avg finishing rank | wins |
 |---|---:|---:|---:|---:|---:|
-| Echo | 26.46 | 7.23 | 4.78 | 2.38 | 1 |
-| **Golf (freerider)** | 26.18 | 7.20 | **4.58** | 2.62 | 1 |
-| Foxtrot | 23.56 | 7.11 | 2.24 | 2.50 | 2 |
-| Delta | 23.31 | 7.12 | 1.97 | 2.50 | 2 |
+| Echo | 26.46 | 7.23 | 4.78 | 2.375 | 1 |
+| **Golf (freerider)** | 26.18 | 7.20 | **4.58** | 2.500 | 1 |
+| Foxtrot | 23.56 | 7.11 | 2.24 | 2.375 | 2 |
+| Delta | 23.31 | 7.12 | 1.97 | 2.500 | 2 |
+
+*Avg finishing rank uses `foedus.scoring._compute_ranks` — the engine's own
+standard-competition ranking, where tied final scores share a rank (e.g. game
+0's Delta/Golf tie at 38 each both count as rank 1, not an arbitrary 1/2
+split). See §8 to regenerate.*
 
 **No — not decisively.** Golf still lands **2nd of 4** on the leaderboard,
 0.20 conservative points behind the top LLM entrant (Echo) and ahead of two of
-the three LLM entrants. Its per-game win-rate dropped (3/8 → 1/8, see §4) but
-its *average finishing rank* (2.62) is the **worst of the four identities**,
-essentially tied with Foxtrot/Delta (2.50) rather than clearly better or
-worse — the table did not let it dominate, but it also did not fall to the
-bottom of the standings. With σ ≈ 7.2 still large relative to the ≈2.8-point
-conservative-score spread across all four identities at n = 8 games, none of
-these differences are statistically decisive; treat the leaderboard order as
-directional, not conclusive.
+the three LLM entrants. Its per-game win-rate dropped (3/8 → 1/8, see §4), and
+by average finishing rank it **ties Delta for worst** (2.500, vs. Echo/Foxtrot
+tied at 2.375) — the table did not let it dominate, but it also did not fall
+alone to the bottom of the standings. With σ ≈ 7.2 still large relative to the
+≈2.8-point conservative-score spread across all four identities at n = 8
+games, none of these differences are statistically decisive; treat the
+leaderboard order as directional, not conclusive.
 
 ## 4. Outcome-level comparison vs. run #1
 
@@ -87,7 +91,7 @@ directional, not conclusive.
 | freerider win-rate | 3/8 (37.5%) | 1/8 (12.5%) |
 | freerider mean margin (vs LLM mean) | +2.62 | +0.83 |
 | freerider OpenSkill conservative | 3.06 (2nd of 4) | 4.58 (2nd of 4) |
-| freerider avg finishing rank | 2.50 | 2.62 |
+| freerider avg finishing rank | 2.500 (3rd of 4; only Delta worse) | 2.500 (tied Delta for worst) |
 | parse-fail rate | 8.16% (47/576) | 1.04% (6/576) |
 | match wall-clock | 15.36 h (115.2 m/game) | 5.62 h (42.2 m/game) |
 
@@ -108,6 +112,14 @@ run dirs:
 |---|---:|---:|---:|---:|
 | run #1 (Sonnet, buggy engine) | 32 | 39 | 1 | 2.6% |
 | this run (Haiku, fixed engine) | 20 | 21 | 2 | 9.5% |
+
+`executed` exceeding `proposed` is not an arithmetic error: a single declared
+intent can back multiple executed order-actions (e.g. a Move *and* a Support
+of it, or the same attack resubmitted on a later turn without a fresh
+declared intent) — see run #1's `autopsy-s1.md` §0 for the exact per-event
+counting rules; this run's own per-game breakdown (`autopsy-s1.json`) shows
+both directions across the 8 games (e.g. g2: 3 proposed/2 executed; g7: 3
+proposed/5 executed).
 
 The conversion rate roughly tripled — but off a base of 1 vs. 2 "paid" events
 total across 8 games each. This is **suggestive, not conclusive**: two data
@@ -208,4 +220,21 @@ PYTHONPATH=. python3 scripts/foedus_s1_autopsy.py \
 
 # resolver invariant + seed-manifest check
 PYTHONPATH=. python3 scripts/foedus_verify_invariant.py --out-dir "$OUT" --pairings 20
+
+# avg finishing rank (§3/§4) -- engine's own _compute_ranks convention,
+# ties share a rank; not emitted by any of the scripts above
+PYTHONPATH=. python3 - <<PY
+import json
+from collections import defaultdict
+from foedus.scoring import _compute_ranks
+ranks_by = defaultdict(list)
+for line in open("$OUT/sweep.jsonl"):
+    r = json.loads(line)
+    scores = {i: r["final_scores"][i] for i in range(4)}
+    survivors = [p for p in range(4) if p not in set(r.get("eliminated") or [])]
+    for seat, rank in _compute_ranks(scores, survivors, 4).items():
+        ranks_by[r["agents"][seat]].append(rank)
+for identity, ranks in ranks_by.items():
+    print(f"{identity:<10} avg_rank={sum(ranks)/len(ranks):.3f}  ranks={ranks}")
+PY
 ```

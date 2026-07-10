@@ -48,7 +48,8 @@ Same schema as run #1 (`docs/research/2026-07-04-canonical-campaign-v1/README.md
 | `campaign_memory_game{g}_seat{s}.json` | Cross-game memory carried into later games. |
 | `standings.json` | Final OpenSkill leaderboard (μ, σ, μ−3σ) per entrant identity. |
 | `run_summary.json` | Wall-clock (match + per game), decision + parse-fail totals, seed commitment. |
-| `launch.sh` / `resume.sh` | The exact commands used to launch / crash-resume the match (env vars included). |
+| `launch.sh` / `resume.sh` | The exact commands used to launch the match / the crash-resume path (env vars included). This match completed in a single `launch.sh` leg (`run_summary.json`'s `resumed: false`) — `resume.sh` was installed behind a guarded `@reboot` autoresume and dry-fire-tested against the live run, but never actually invoked. |
+| `timing.log`, `launch.log`, `run.stdout.log`, `run.stderr.log` | Raw process logs from `launch.sh` (start/end timestamps, per-game console output, the `ClaudeCLIClient` argv lines). Not needed to reproduce anything — `run_summary.json` / `sweep.jsonl` already carry the same information structured; kept for a from-scratch audit trail. |
 
 ## Verifying the seeds (anyone can do this)
 
