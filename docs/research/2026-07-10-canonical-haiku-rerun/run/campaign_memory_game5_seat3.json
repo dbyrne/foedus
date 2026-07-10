@@ -1,0 +1,301 @@
+{
+  "game_index": 5,
+  "seat": 3,
+  "entrant_identity": "Foxtrot",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 8293180377977934555,
+        "my_seat": 2,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 38.0,
+          "1": 26.0,
+          "2": 32.0,
+          "3": 38.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Golf declared ally every turn yet rejected pact and gave no support - just theater. Delta and Echo: stone cold neutral. Final scores: Delta 38, Golf 38, me 32, Echo 26. That 6-point deficit cost me 1st. Golf's relentless friendliness offers nothing. Next game: either extract real concessions from Golf or ignore their declarations entirely. Push Delta and Echo on pacts more aggressively - their indifference hides opportunity. Tight margins."
+    },
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 1898507134362937788,
+        "my_seat": 3,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 25.0,
+          "1": 32.0,
+          "2": 37.0,
+          "3": 37.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Golf: Declares ally constantly but never backs it with support\u2014purely performative. Finished last despite friendliness. Delta: Neutral/hostile operator, mid-tier scorer. Echo: Strong independent player who tied my winning score without alliances. Key takeaway: no pacts needed to win. Ignore Golf's false declarations. Compete independently. Don't expect support from anyone. Focus on solid individual play."
+    },
+    {
+      "facts": {
+        "game_index": 2,
+        "seed": 9070636823725058267,
+        "my_seat": 0,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 43.0,
+          "1": 23.0,
+          "2": 29.0,
+          "3": 37.0
+        },
+        "per_opponent": {
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Foxtrot",
+          "1": "Golf",
+          "2": "Delta",
+          "3": "Echo"
+        }
+      },
+      "self_note": "Golf declares ally every turn but never provides support\u2014pure bluff. Ignore their words. Delta and Echo never ally; treat as pure competitors. You won by staying independent. Golf's constant fake ally declarations are distraction tactics. Next game: don't engage with Golf's false friendship. Focus on your strategy. Watch Delta and Echo's unit movements carefully. Play aggressively independent."
+    },
+    {
+      "facts": {
+        "game_index": 3,
+        "seed": 7089718000905472378,
+        "my_seat": 1,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 29.0,
+          "1": 43.0,
+          "2": 28.0,
+          "3": 24.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Echo",
+          "1": "Foxtrot",
+          "2": "Golf",
+          "3": "Delta"
+        }
+      },
+      "self_note": "Golf: declares ally consistently but never provides mutual support\u2014diplomatic posturing without substance. Don't trust their declarations. Echo and Delta are pure rivals with no alliance attempts. Our win came from independent competitive play, not alliances. Maintain this approach. Golf may feign friendship while pursuing their own agenda; stay vigilant."
+    },
+    {
+      "facts": {
+        "game_index": 4,
+        "seed": 496109480107902617,
+        "my_seat": 2,
+        "my_rank": 2,
+        "n_players": 4,
+        "final_scores": {
+          "0": 45.0,
+          "1": 22.0,
+          "2": 27.0,
+          "3": 23.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Golf: Reliably declares ally status (11/11 turns), but we never formalized pact or mutual support. They're trustworthy\u2014leverage with formal alliance next game. Delta: Strong independent player, won decisively (45 pts) without alliances; serious competitive threat. Echo: Weak (22 pts). Strategy: Formalize pact with Golf and exchange support; treat Delta as major opponent."
+    },
+    {
+      "facts": {
+        "game_index": 5,
+        "seed": 492506427639998392,
+        "my_seat": 3,
+        "my_rank": 4,
+        "n_players": 4,
+        "final_scores": {
+          "0": 46.0,
+          "1": 27.0,
+          "2": 33.0,
+          "3": 21.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Golf is a manipulator: declared ally all 11 turns but never backed it with support or pacts. Ignore empty declarations. Delta and Echo ignored me. I played too passively and scored lowest. Next time: demand mutual support agreements early, lock in real alliances with reciprocal pacts, play aggressively from turn one."
+    }
+  ]
+}

@@ -63,6 +63,41 @@ def test_dry_run_emits_sealed_manifest_and_plan(tmp_path):
         assert g["identity_by_seat"][(3 + k) % 4] == "Golf"
 
 
+def test_dry_run_records_parallel_seats_config_from_env(tmp_path, monkeypatch):
+    """A sealed match must durably record its concurrency setting so a later
+    audit never has to ask "was this a WORKERS=2 or WORKERS=3 run?" (the
+    ambiguity flagged after run #1's mid-match instrument question)."""
+    monkeypatch.setenv("FOEDUS_PARALLEL_SEATS", "1")
+    monkeypatch.setenv("FOEDUS_PARALLEL_SEATS_WORKERS", "3")
+    out = tmp_path / "run"
+    rc = orch.main([
+        "--match-id", "unit-test-parallel",
+        "--num-games", "8",
+        "--seed-rng", "999",
+        "--out-dir", str(out),
+        "--dry-run",
+    ])
+    assert rc == 0
+    plan = json.loads((out / "campaign_plan.json").read_text())
+    assert plan["parallel_seats"] == {"enabled": True, "workers": 3}
+
+
+def test_dry_run_parallel_seats_config_defaults_off(tmp_path, monkeypatch):
+    monkeypatch.delenv("FOEDUS_PARALLEL_SEATS", raising=False)
+    monkeypatch.delenv("FOEDUS_PARALLEL_SEATS_WORKERS", raising=False)
+    out = tmp_path / "run"
+    rc = orch.main([
+        "--match-id", "unit-test-noparallel",
+        "--num-games", "8",
+        "--seed-rng", "999",
+        "--out-dir", str(out),
+        "--dry-run",
+    ])
+    assert rc == 0
+    plan = json.loads((out / "campaign_plan.json").read_text())
+    assert plan["parallel_seats"] == {"enabled": False, "workers": None}
+
+
 def _neg() -> str:
     return json.dumps({"press": {"stance": {}, "intents": []},
                        "pacts": {"propose": [], "accept": []}})

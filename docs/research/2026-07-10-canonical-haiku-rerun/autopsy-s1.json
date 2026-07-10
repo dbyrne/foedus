@@ -1,0 +1,450 @@
+{
+  "out_dir": "docs/research/2026-07-10-canonical-haiku-rerun/run",
+  "freerider_handles": [
+    "Golf"
+  ],
+  "totals": {
+    "proposed_count": 20,
+    "executed_count": 21,
+    "paid_count": 2
+  },
+  "per_game": [
+    {
+      "game_id": 0,
+      "freerider_seat": 3,
+      "identity_by_seat": [
+        "Delta",
+        "Echo",
+        "Foxtrot",
+        "Golf"
+      ],
+      "proposed_count": 3,
+      "executed_count": 3,
+      "paid_count": 0,
+      "proposals": [
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 7,
+          "seat": 0,
+          "unit_id": 1
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 7,
+          "seat": 0,
+          "unit_id": 4,
+          "target_unit_id": 1
+        },
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 9,
+          "seat": 0,
+          "unit_id": 1
+        }
+      ],
+      "executions": [
+        {
+          "kind": "attack_move",
+          "game_turn": 7,
+          "seat": 0,
+          "unit_id": 1
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 9,
+          "seat": 0,
+          "unit_id": 1
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 9,
+          "seat": 0,
+          "unit_id": 4,
+          "target_unit_id": 1
+        }
+      ],
+      "golf_income_drop_turns": [
+        6
+      ],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 2,
+      "attack_move_intents_matched_by_execution": 2
+    },
+    {
+      "game_id": 1,
+      "freerider_seat": 0,
+      "identity_by_seat": [
+        "Golf",
+        "Delta",
+        "Echo",
+        "Foxtrot"
+      ],
+      "proposed_count": 5,
+      "executed_count": 5,
+      "paid_count": 1,
+      "proposals": [
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 4,
+          "seat": 1,
+          "unit_id": 3
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 4,
+          "seat": 1,
+          "unit_id": 5,
+          "target_unit_id": 3
+        },
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 5,
+          "seat": 1,
+          "unit_id": 3
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 5,
+          "seat": 1,
+          "unit_id": 5,
+          "target_unit_id": 3
+        },
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 3
+        }
+      ],
+      "executions": [
+        {
+          "kind": "attack_move",
+          "game_turn": 4,
+          "seat": 1,
+          "unit_id": 3
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 4,
+          "seat": 1,
+          "unit_id": 5,
+          "target_unit_id": 3
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 5,
+          "seat": 1,
+          "unit_id": 3
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 5,
+          "seat": 1,
+          "unit_id": 5,
+          "target_unit_id": 3
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 3
+        }
+      ],
+      "golf_income_drop_turns": [
+        5
+      ],
+      "paid_execution_turns": [
+        4
+      ],
+      "attack_move_intents_total": 3,
+      "attack_move_intents_matched_by_execution": 3
+    },
+    {
+      "game_id": 2,
+      "freerider_seat": 1,
+      "identity_by_seat": [
+        "Foxtrot",
+        "Golf",
+        "Delta",
+        "Echo"
+      ],
+      "proposed_count": 3,
+      "executed_count": 2,
+      "paid_count": 0,
+      "proposals": [
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 6,
+          "seat": 2,
+          "unit_id": 2
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 6,
+          "seat": 2,
+          "unit_id": 6,
+          "target_unit_id": 2
+        },
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 10,
+          "seat": 0,
+          "unit_id": 1
+        }
+      ],
+      "executions": [
+        {
+          "kind": "attack_move",
+          "game_turn": 6,
+          "seat": 2,
+          "unit_id": 2
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 6,
+          "seat": 2,
+          "unit_id": 6,
+          "target_unit_id": 2
+        }
+      ],
+      "golf_income_drop_turns": [],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 2,
+      "attack_move_intents_matched_by_execution": 1
+    },
+    {
+      "game_id": 3,
+      "freerider_seat": 2,
+      "identity_by_seat": [
+        "Echo",
+        "Foxtrot",
+        "Golf",
+        "Delta"
+      ],
+      "proposed_count": 4,
+      "executed_count": 4,
+      "paid_count": 0,
+      "proposals": [
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 3,
+          "seat": 3,
+          "unit_id": 0
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 3,
+          "seat": 3,
+          "unit_id": 7,
+          "target_unit_id": 0
+        },
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 5
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 3,
+          "target_unit_id": 5
+        }
+      ],
+      "executions": [
+        {
+          "kind": "attack_move",
+          "game_turn": 3,
+          "seat": 3,
+          "unit_id": 0
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 3,
+          "seat": 3,
+          "unit_id": 7,
+          "target_unit_id": 0
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 5
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 9,
+          "seat": 3,
+          "unit_id": 0
+        }
+      ],
+      "golf_income_drop_turns": [],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 2,
+      "attack_move_intents_matched_by_execution": 2
+    },
+    {
+      "game_id": 4,
+      "freerider_seat": 3,
+      "identity_by_seat": [
+        "Delta",
+        "Echo",
+        "Foxtrot",
+        "Golf"
+      ],
+      "proposed_count": 0,
+      "executed_count": 0,
+      "paid_count": 0,
+      "proposals": [],
+      "executions": [],
+      "golf_income_drop_turns": [],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 0,
+      "attack_move_intents_matched_by_execution": 0
+    },
+    {
+      "game_id": 5,
+      "freerider_seat": 0,
+      "identity_by_seat": [
+        "Golf",
+        "Delta",
+        "Echo",
+        "Foxtrot"
+      ],
+      "proposed_count": 0,
+      "executed_count": 0,
+      "paid_count": 0,
+      "proposals": [],
+      "executions": [],
+      "golf_income_drop_turns": [],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 0,
+      "attack_move_intents_matched_by_execution": 0
+    },
+    {
+      "game_id": 6,
+      "freerider_seat": 1,
+      "identity_by_seat": [
+        "Foxtrot",
+        "Golf",
+        "Delta",
+        "Echo"
+      ],
+      "proposed_count": 2,
+      "executed_count": 2,
+      "paid_count": 0,
+      "proposals": [
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 5,
+          "seat": 0,
+          "unit_id": 4
+        },
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 9,
+          "seat": 0,
+          "unit_id": 4
+        }
+      ],
+      "executions": [
+        {
+          "kind": "attack_move",
+          "game_turn": 5,
+          "seat": 0,
+          "unit_id": 4
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 9,
+          "seat": 0,
+          "unit_id": 4
+        }
+      ],
+      "golf_income_drop_turns": [],
+      "paid_execution_turns": [],
+      "attack_move_intents_total": 2,
+      "attack_move_intents_matched_by_execution": 2
+    },
+    {
+      "game_id": 7,
+      "freerider_seat": 2,
+      "identity_by_seat": [
+        "Echo",
+        "Foxtrot",
+        "Golf",
+        "Delta"
+      ],
+      "proposed_count": 3,
+      "executed_count": 5,
+      "paid_count": 1,
+      "proposals": [
+        {
+          "kind": "attack_move_intent",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 3
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 5,
+          "target_unit_id": 3
+        },
+        {
+          "kind": "attack_support_intent",
+          "game_turn": 7,
+          "seat": 3,
+          "unit_id": 0,
+          "target_unit_id": 3
+        }
+      ],
+      "executions": [
+        {
+          "kind": "attack_move",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 3
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 7,
+          "seat": 1,
+          "unit_id": 5,
+          "target_unit_id": 3
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 7,
+          "seat": 3,
+          "unit_id": 0,
+          "target_unit_id": 3
+        },
+        {
+          "kind": "attack_move",
+          "game_turn": 8,
+          "seat": 1,
+          "unit_id": 3
+        },
+        {
+          "kind": "attack_support",
+          "game_turn": 8,
+          "seat": 3,
+          "unit_id": 0,
+          "target_unit_id": 3
+        }
+      ],
+      "golf_income_drop_turns": [
+        8
+      ],
+      "paid_execution_turns": [
+        7
+      ],
+      "attack_move_intents_total": 1,
+      "attack_move_intents_matched_by_execution": 1
+    }
+  ],
+  "structural_subsidy_test": null
+}

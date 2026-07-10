@@ -1,0 +1,105 @@
+{
+  "game_index": 1,
+  "seat": 3,
+  "entrant_identity": "Foxtrot",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 8293180377977934555,
+        "my_seat": 2,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 38.0,
+          "1": 26.0,
+          "2": 32.0,
+          "3": 38.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Delta",
+          "1": "Echo",
+          "2": "Foxtrot",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Golf declared ally every turn yet rejected pact and gave no support - just theater. Delta and Echo: stone cold neutral. Final scores: Delta 38, Golf 38, me 32, Echo 26. That 6-point deficit cost me 1st. Golf's relentless friendliness offers nothing. Next game: either extract real concessions from Golf or ignore their declarations entirely. Push Delta and Echo on pacts more aggressively - their indifference hides opportunity. Tight margins."
+    },
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 1898507134362937788,
+        "my_seat": 3,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 25.0,
+          "1": 32.0,
+          "2": 37.0,
+          "3": 37.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Foxtrot",
+        "handles": {
+          "0": "Golf",
+          "1": "Delta",
+          "2": "Echo",
+          "3": "Foxtrot"
+        }
+      },
+      "self_note": "Golf: Declares ally constantly but never backs it with support\u2014purely performative. Finished last despite friendliness. Delta: Neutral/hostile operator, mid-tier scorer. Echo: Strong independent player who tied my winning score without alliances. Key takeaway: no pacts needed to win. Ignore Golf's false declarations. Compete independently. Don't expect support from anyone. Focus on solid individual play."
+    }
+  ]
+}
