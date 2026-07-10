@@ -15,6 +15,7 @@ import json
 from foedus.eval.probe_metrics import (
     all_hold_turns,
     is_all_hold,
+    orders_parse_coverage,
     repeated_identical_order_runs,
     self_notes_for_identity,
 )
@@ -111,6 +112,70 @@ class TestRepeatedIdenticalOrderRuns:
             _orders(6, same), _orders(7, same),
         ]
         assert repeated_identical_order_runs(decisions, min_repeat=3) == []
+
+
+class TestOrdersParseCoverage:
+    """(parsed, total) for the orders-phase slice of a decisions list -- the
+    measurable primitive a corpus-level caller feeds into
+    foedus.eval._coverage.assert_coverage. Stays lenient itself (just counts;
+    never raises) so existing per-record classifiers and small/partial test
+    fixtures keep their current behavior -- the raise happens at the corpus
+    boundary (scripts/foedus_haiku_probe_report.py), not here.
+    """
+
+    def test_all_orders_records_parse(self):
+        decisions = [
+            _orders(1, {"1": {"type": "Hold"}}, fenced=True),
+            _orders(2, {"1": {"type": "Move", "dest": 4}}, fenced=True),
+        ]
+        assert orders_parse_coverage(decisions) == (2, 2)
+
+    def test_negotiate_records_are_excluded_from_the_denominator(self):
+        decisions = [
+            _negotiate(1),
+            _orders(1, {"1": {"type": "Hold"}}, fenced=True),
+        ]
+        assert orders_parse_coverage(decisions) == (1, 1)
+
+    def test_unparseable_orders_records_count_toward_total_not_parsed(self):
+        decisions = [
+            _orders(1, {"1": {"type": "Hold"}}, fenced=True),
+            {"turn": 2, "phase": "orders", "raw_response": "not json", "fell_back": False},
+        ]
+        assert orders_parse_coverage(decisions) == (1, 2)
+
+    def test_fell_back_records_are_excluded_from_the_denominator(self):
+        # fell_back=True means the LIVE harness already flagged this call as
+        # unusable (timeout/transport/genuine model parse failure) -- that's
+        # a real, expected model-side failure the parse-fail metric already
+        # reports on, not a coverage gap in THIS tool's own re-parsing. Only
+        # records the harness thought were fine belong in the denominator:
+        # if the harness's own parser succeeded but ours doesn't, that's the
+        # exact shape of the original fence-stripping bug.
+        decisions = [
+            _orders(1, {"1": {"type": "Hold"}}, fenced=True),
+            {"turn": 2, "phase": "orders",
+             "raw_response": "<client error: timed out>", "fell_back": True},
+        ]
+        assert orders_parse_coverage(decisions) == (1, 1)
+
+    def test_bare_unfenced_json_is_the_original_bug_shape(self):
+        # Reproduces the exact original bug: a bare (unfenced) raw_response
+        # is what the pre-fix _orders_dict silently accepted; real corpus
+        # data is always fenced, so this shape existing here at all is a
+        # reminder of what the coverage guardrail exists to catch upstream.
+        decisions = [_orders(1, {"1": {"type": "Hold"}}, fenced=False)]
+        assert orders_parse_coverage(decisions) == (1, 1)
+
+    def test_all_unparseable_yields_zero_parsed_nonzero_total(self):
+        decisions = [
+            {"turn": t, "phase": "orders", "raw_response": "not json"}
+            for t in range(1, 4)
+        ]
+        assert orders_parse_coverage(decisions) == (0, 3)
+
+    def test_empty_decisions_yields_zero_zero(self):
+        assert orders_parse_coverage([]) == (0, 0)
 
 
 class TestSelfNotesForIdentity:

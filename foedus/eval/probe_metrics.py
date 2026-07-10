@@ -29,6 +29,40 @@ def _orders_dict(raw_response: str) -> dict | None:
     return orders if isinstance(orders, dict) else None
 
 
+def orders_parse_coverage(decisions: list[dict]) -> tuple[int, int]:
+    """(parsed, total) among this seat's orders-phase records the LIVE
+    harness itself did NOT flag as a fallback -- how many `raw_response`
+    values yield a usable orders dict via `_orders_dict`, out of how many
+    orders-phase records exist where `fell_back` isn't True.
+
+    `fell_back=True` records (timeout / transport / genuine model parse
+    failure) are excluded from both counts: that's a real, expected
+    model-side failure the parse-fail metric already reports on, not a
+    coverage gap in this tool's own re-parsing. Only records the harness
+    itself successfully used belong in the denominator -- if the harness's
+    own parser succeeded on a record but `_orders_dict` doesn't, that's
+    exactly the shape of the original fence-stripping bug this guardrail
+    exists to catch.
+
+    A corpus-level caller (scripts/foedus_haiku_probe_report.py) sums this
+    across every seat/game and feeds the totals into
+    `foedus.eval._coverage.assert_coverage` -- this function itself stays a
+    plain counter and never raises, so a single bad record (or an
+    intentionally tiny/partial test fixture) doesn't trip anything here;
+    only a real corpus-wide coverage gap should fail loudly, at the boundary
+    that actually owns "is this a corpus worth trusting."
+    """
+    orders_recs = [
+        r for r in decisions
+        if r.get("phase") == "orders" and not r.get("fell_back")
+    ]
+    parsed = sum(
+        1 for r in orders_recs
+        if _orders_dict(r.get("raw_response") or "") is not None
+    )
+    return parsed, len(orders_recs)
+
+
 def is_all_hold(orders: dict) -> bool:
     """True if every declared order is a Hold, or none were declared at all
     (an empty submission silently defaults every unit to Hold)."""

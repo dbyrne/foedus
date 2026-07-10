@@ -50,6 +50,13 @@ Per-identity (`scripts/foedus_haiku_probe_report.py`):
 | Echo | 48 | 0 | 0 | 0 | 0.0% |
 | Foxtrot | 48 | 0 | 0 | 0 | 0.0% |
 
+**Read/parse coverage** (`foedus.eval._coverage.assert_coverage`, added after the incident
+below): 144/144 decision records read, **72/72 orders-phase records parse** (100% — every one of
+those 72 has `fell_back=False`, i.e. the live harness itself used it, so 100% is the expected
+floor, not a coincidence). The report script now refuses to run (raises `CoverageError`) below
+95% read/parse coverage or on any 0-of-N result, instead of silently printing a result computed
+from an empty or near-empty read — see the incident this guards against, immediately below.
+
 **Degeneracy flags** (`foedus.eval.probe_metrics`): all-Hold turns are real and not rare — 18 of
 72 orders-phase decisions (25%) across the three identities (Delta 3/24, Echo 10/24, Foxtrot
 5/24; Echo's are concentrated late-game, e.g. game 0 turns 9/11/12 of 12). **Repeated-identical-
@@ -63,8 +70,17 @@ resolution, a fair reading is late-game consolidation rather than collapse — b
 interpretation, not something this metric verifies; the raw all-Hold count is reported as-is.
 (An earlier version of this report claimed "zero all-Hold turns" — that was a parser bug in
 `_orders_dict`, which didn't strip the markdown fences every real `raw_response` uses and so
-silently skipped all 72 orders-phase records. Caught in the two-reviewer honesty pass; fixed and
-re-run — see `foedus/eval/probe_metrics.py`.)
+silently skipped all 72 orders-phase records while printing a clean, plausible-looking "zero"
+finding. Caught in the two-reviewer honesty pass; fixed and re-run — see
+`foedus/eval/probe_metrics.py`. Structural follow-up: this class of failure — a tool silently
+parsing 0 of its input and reporting a clean result — is now a hard error, not something that
+depends on a reviewer catching it. `foedus/eval/_coverage.py::assert_coverage` makes the report
+script raise `CoverageError` if it reads 0 records, parses 0 of its orders-phase corpus, or drops
+below 95% read/parse coverage; `foedus.eval.probe_metrics.orders_parse_coverage` and the sibling
+eval tools (`foedus_s1_autopsy.py`, `foedus_s1_5_confound_check.py`,
+`foedus_require_dest_fix_validation.py`, `foedus_canonical_scorecard.py`,
+`foedus.eval.resolution_replay.ReplayAgent`) got the same guardrail at their own corpus-load
+boundaries, verified to reproduce every existing sealed-corpus number unchanged.)
 
 Both games ran the full 12-turn cap (no elimination, no détente). Engine compute: 2.62h total,
 78.6m/game mean (game 0: 76.8m, game 1: 80.4m) — informational only; not what the fail-rate
@@ -80,11 +96,11 @@ This axis is the harder call, and the honest answer is *thin, not degenerate*.
 
 **Support orders** (bare + require_dest "pin", post-#47-fix honest count):
 
-| identity | bare | pin | total |
-|---|---|---|---|
-| Delta | 13 | 0 | 13 |
-| Echo | 5 | 1 | 6 |
-| Foxtrot | 4 | 1 | 5 |
+| identity | bare | pin | total | of orders-phase decisions |
+|---|---|---|---|---|
+| Delta | 13 | 0 | 13 | 24 |
+| Echo | 5 | 1 | 6 | 24 |
+| Foxtrot | 4 | 1 | 5 | 24 |
 
 24 declared Support orders total across both games. To find out how many of these were actual
 *inter-player* coordination (vs. a unit propping up its own owner's other unit — always legal,

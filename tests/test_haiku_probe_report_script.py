@@ -14,12 +14,15 @@ import json
 import os
 import sys
 
+import pytest
+
 _SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "scripts")
 if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
 import foedus_haiku_probe_report as report  # noqa: E402
+from foedus.eval._coverage import CoverageError  # noqa: E402
 
 
 def _negotiate(turn, raw, fell_back=False):
@@ -93,7 +96,9 @@ def test_build_report_end_to_end(tmp_path):
 
     # support orders: 1 bare + 1 pin declared by Delta across the corpus.
     delta_supports = rep["support_orders_by_identity"]["Delta"]
-    assert delta_supports == {"bare": 1, "pin": 1, "total": 2}
+    assert delta_supports == {
+        "bare": 1, "pin": 1, "total": 2, "orders_phase_decisions": 5,
+    }
 
     # degeneracy: turn 3 was all-Hold for Delta.
     assert rep["degeneracy_by_identity"]["Delta"]["all_hold_turns"] == [3]
@@ -102,3 +107,84 @@ def test_build_report_end_to_end(tmp_path):
     notes = rep["self_notes_by_identity"]["Delta"]
     assert [n["game_index"] for n in notes] == [0, 1]
     assert "trustworthy" in notes[1]["self_note"]
+
+    # coverage: the happy-path fixture's non-fell_back orders records all
+    # parse cleanly (100%) -- the guardrail must not false-positive here.
+    assert rep["coverage"]["orders_phase_parsed"] == rep["coverage"]["orders_phase_total"]
+    assert rep["coverage"]["orders_phase_total"] > 0
+
+
+class TestCoverageGuardrail:
+    """M-foedus-haiku-fitness-probe post-mortem: a report that silently
+    parses 0 of its input records must fail loudly, not print a clean
+    "zero degeneracy" result. These fixtures exercise the exact failure
+    shapes that guardrail exists to catch."""
+
+    def _minimal_out(self, tmp_path, decisions_g0_s0):
+        out = tmp_path / "run"
+        out.mkdir()
+        (out / "campaign_plan.json").write_text(json.dumps({
+            "freerider_handles": ["Golf"],
+        }))
+        sweep_rows = [
+            {"game_id": 0, "agents": ["Delta", "Echo", "Foxtrot", "Golf"],
+             "llm_seats": [0, 1, 2]},
+        ]
+        with (out / "sweep.jsonl").open("w") as f:
+            for row in sweep_rows:
+                f.write(json.dumps(row) + "\n")
+        (out / "decisions_game0_seat0.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in decisions_g0_s0) + "\n"
+            if decisions_g0_s0 else "")
+        (out / "decisions_game0_seat1.jsonl").write_text("")
+        (out / "decisions_game0_seat2.jsonl").write_text("")
+        return out
+
+    def test_zero_records_read_raises(self, tmp_path):
+        out = self._minimal_out(tmp_path, decisions_g0_s0=[])
+        with pytest.raises(CoverageError, match="0 records read"):
+            report.build_report(str(out))
+
+    def test_all_orders_records_unparseable_raises(self, tmp_path):
+        # Reproduces the original bug's exact shape: every orders-phase
+        # record is one the LIVE harness did NOT flag as a fallback
+        # (fell_back=False -- it thought these were fine, matching every
+        # real Haiku probe raw_response) but is genuinely unparseable by
+        # this report's own re-parsing. If this guardrail had existed
+        # before the fence-stripping fix, running the report against the
+        # real (fenced) corpus would have hit exactly this and raised
+        # immediately instead of printing "zero all-Hold turns."
+        decisions = [
+            _orders(t, "not json at all, garbage output", fell_back=False)
+            for t in range(1, 6)
+        ]
+        out = self._minimal_out(tmp_path, decisions)
+        with pytest.raises(CoverageError, match=r"0 of 5"):
+            report.build_report(str(out))
+
+    def test_coverage_just_below_threshold_raises(self, tmp_path):
+        # 18/20 = 90% < the 95% default threshold -- a partial regression,
+        # not a total parser outage, must still fail loudly rather than
+        # silently under-reporting degeneracy for the 2 unreadable turns.
+        good = [
+            _orders(t, json.dumps({"orders": {"1": {"type": "Hold"}}}), fell_back=False)
+            for t in range(1, 19)
+        ]
+        bad = [
+            _orders(t, "not json at all", fell_back=False)
+            for t in range(19, 21)
+        ]
+        out = self._minimal_out(tmp_path, good + bad)
+        with pytest.raises(CoverageError, match=r"18/20"):
+            report.build_report(str(out))
+
+    def test_coverage_at_threshold_does_not_raise(self, tmp_path):
+        # 19/20 = 95% -- exactly at the default threshold, must NOT raise
+        # (the guardrail is a floor, not a demand for perfection).
+        good = [
+            _orders(t, json.dumps({"orders": {"1": {"type": "Hold"}}}), fell_back=False)
+            for t in range(1, 20)
+        ]
+        bad = [_orders(20, "not json at all", fell_back=False)]
+        out = self._minimal_out(tmp_path, good + bad)
+        report.build_report(str(out))  # must not raise

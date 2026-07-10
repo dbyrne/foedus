@@ -33,8 +33,10 @@ import json
 import sys
 from pathlib import Path
 
+from foedus.eval._coverage import assert_coverage
 from foedus.eval.probe_metrics import (
     all_hold_turns,
+    orders_parse_coverage,
     repeated_identical_order_runs,
     self_notes_for_identity,
 )
@@ -63,6 +65,10 @@ def build_report(out_dir: str) -> dict:
     degeneracy_by_identity: dict[str, dict[str, list]] = {}
     identities: set[str] = set()
 
+    total_records_read = 0
+    total_orders_parsed = 0
+    total_orders_total = 0
+
     for sweep in sweeps:
         gid = sweep.get("game_id")
         agents = sweep.get("agents") or sweep.get("identity_by_seat") or []
@@ -70,6 +76,7 @@ def build_report(out_dir: str) -> dict:
             ident = agents[seat] if seat < len(agents) else f"seat{seat}"
             identities.add(ident)
             decisions = _load_jsonl(d / f"decisions_game{gid}_seat{seat}.jsonl")
+            total_records_read += len(decisions)
 
             fail_bucket = parse_fail_by_identity.setdefault(
                 ident, {"decisions": 0, "timeout": 0, "transport": 0, "parse": 0})
@@ -80,8 +87,9 @@ def build_report(out_dir: str) -> dict:
                     fail_bucket[kind] += 1
 
             support_bucket = support_orders_by_identity.setdefault(
-                ident, {"bare": 0, "pin": 0, "total": 0})
+                ident, {"bare": 0, "pin": 0, "total": 0, "orders_phase_decisions": 0})
             orders_decisions = [r for r in decisions if r.get("phase") == "orders"]
+            support_bucket["orders_phase_decisions"] += len(orders_decisions)
             for rec in orders_decisions:
                 supports = classify_orders_execution(
                     rec.get("raw_response") or "", golf_nodes=set())["supports"]
@@ -90,10 +98,16 @@ def build_report(out_dir: str) -> dict:
                 {seat: orders_decisions})["orders_phase"]
 
             deg_bucket = degeneracy_by_identity.setdefault(
-                ident, {"all_hold_turns": [], "repeated_order_runs": []})
+                ident, {"all_hold_turns": [], "repeated_order_runs": [],
+                        "orders_phase_parsed": 0, "orders_phase_total": 0})
             deg_bucket["all_hold_turns"].extend(all_hold_turns(decisions))
             deg_bucket["repeated_order_runs"].extend(
                 repeated_identical_order_runs(decisions))
+            seat_parsed, seat_total = orders_parse_coverage(decisions)
+            deg_bucket["orders_phase_parsed"] += seat_parsed
+            deg_bucket["orders_phase_total"] += seat_total
+            total_orders_parsed += seat_parsed
+            total_orders_total += seat_total
 
     for bucket in support_orders_by_identity.values():
         bucket["bare"] = bucket["total"] - bucket["pin"]
@@ -102,6 +116,18 @@ def build_report(out_dir: str) -> dict:
         ident: self_notes_for_identity(d, ident) for ident in sorted(identities)
     }
 
+    # Guardrail (M-foedus-haiku-fitness-probe post-mortem): a report that
+    # silently reads or parses 0 of its corpus must fail loudly instead of
+    # printing a clean-looking result computed from an empty read. Checked
+    # AFTER building the buckets above (so a raise here still means "we read
+    # something, but not enough to trust it" -- distinct failure messages
+    # for "nothing was read at all" vs. "reads happened but parsing failed").
+    assert_coverage(total_records_read, total_records_read,
+                     "haiku probe report: decision records read")
+    assert_coverage(total_orders_parsed, total_orders_total,
+                     "haiku probe report: orders-phase degeneracy parse coverage "
+                     "(all-Hold / repeated-order-run detectors)")
+
     return {
         "out_dir": str(d),
         "n_games": len(sweeps),
@@ -109,12 +135,21 @@ def build_report(out_dir: str) -> dict:
         "support_orders_by_identity": support_orders_by_identity,
         "degeneracy_by_identity": degeneracy_by_identity,
         "self_notes_by_identity": self_notes_by_identity,
+        "coverage": {
+            "records_read": total_records_read,
+            "orders_phase_parsed": total_orders_parsed,
+            "orders_phase_total": total_orders_total,
+        },
     }
 
 
 def _print_report(rep: dict) -> None:
     print("=== Haiku fitness probe report ===")
     print(f"out-dir: {rep['out_dir']}   games: {rep['n_games']}")
+    cov = rep["coverage"]
+    print(f"coverage: {cov['records_read']} decision records read; "
+          f"orders-phase degeneracy parse coverage "
+          f"{cov['orders_phase_parsed']}/{cov['orders_phase_total']}")
     print()
     print("-- parse-fail by identity --")
     for ident, b in sorted(rep["parse_fail_by_identity"].items()):
@@ -126,12 +161,14 @@ def _print_report(rep: dict) -> None:
     print()
     print("-- Support orders (bare / pin) by identity --")
     for ident, b in sorted(rep["support_orders_by_identity"].items()):
-        print(f"  {ident}: bare={b['bare']} pin={b['pin']} total={b['total']}")
+        print(f"  {ident}: bare={b['bare']} pin={b['pin']} total={b['total']} "
+              f"(of {b['orders_phase_decisions']} orders-phase decisions)")
     print()
     print("-- degeneracy flags by identity --")
     for ident, b in sorted(rep["degeneracy_by_identity"].items()):
         print(f"  {ident}: all-Hold turns={b['all_hold_turns']} "
-              f"repeated-order runs={b['repeated_order_runs']}")
+              f"repeated-order runs={b['repeated_order_runs']} "
+              f"[parse coverage {b['orders_phase_parsed']}/{b['orders_phase_total']}]")
     print()
     print("-- self-notes by identity --")
     for ident, notes in sorted(rep["self_notes_by_identity"].items()):
