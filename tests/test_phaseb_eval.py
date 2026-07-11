@@ -196,6 +196,37 @@ def test_runner_pair_is_byte_identical_board(tmp_path):
     assert by_arm["trained"]["model_seat"] == by_arm["base"]["model_seat"]
 
 
+def test_mechanical_vs_strategic_decomposition():
+    """The B1 confound decomposition: campaign fallback per arm, base-fallback-
+    when-losing, and the clean-parse subset all compute from banked per-game
+    parse-fail counts."""
+    import foedus_phaseb_analysis as A
+
+    def row(arm, scores, elim, pf, n, seat=0):
+        return {"arm": arm, "model_seat": seat, "final_scores": scores,
+                "eliminated": elim, "parse_fail_count": pf, "n_decisions": n}
+
+    by_seed = {
+        # seed 0: both arms parse cleanly (1/10), identical placement (both last)
+        0: {"trained": row("trained", [10, 20, 30, 40], [], 1, 10),
+            "base": row("base", [10, 20, 30, 40], [], 1, 10)},
+        # seed 1: base is noisy (8/10) and loses the seat (trained 1st, base last)
+        1: {"trained": row("trained", [40, 10, 20, 30], [], 1, 10),
+            "base": row("base", [5, 10, 20, 30], [], 8, 10)},
+    }
+    mv = A._mechanical_vs_strategic(by_seed, 2)
+    assert mv["campaign_fallback_rate"]["trained"].startswith("2/20")
+    assert mv["campaign_fallback_rate"]["base"].startswith("9/20")
+    bl = mv["base_fallback_when_losing"]
+    assert bl["n_seeds_trained_outplaced_base"] == 1                 # only seed 1
+    assert bl["mean_base_fallback_rate_when_losing"] == pytest.approx(0.8)
+    # τ=0.20 clean subset includes only seed 0 (base seed1 fbrate 0.8 excluded)
+    sub20 = [s for s in mv["clean_parse_subset_sensitivity"]
+             if s["clean_threshold_fallback_rate"] == 0.20][0]
+    assert sub20["n_pairs_both_clean"] == 1 and sub20["seeds"] == [0]
+    assert isinstance(mv["headline"], str) and mv["headline"]
+
+
 def test_runner_dry_run_seals_without_games(tmp_path):
     """--dry-run publishes the sealed commitment + plan + secret and runs NO
     game (no agent factory invoked)."""

@@ -54,6 +54,125 @@ def _verdict(sign, *, better_label: str, worse_label: str) -> str:
     return f"NULL — no significant difference (p={p:.4g})"
 
 
+def _mean(xs):
+    return sum(xs) / len(xs) if xs else None
+
+
+def _mechanical_vs_strategic(by_seed: dict, num_seeds: int) -> dict:
+    """DESCRIPTIVE decomposition of the B1 confound (added at reviewer request).
+
+    Distinguishes "trained beats base because it emits valid JSON far more often
+    (fewer fallback-Holds)" — a real, valuable distillation outcome but a
+    *mechanical* one — from "trained learned better strategy". Everything here is
+    computed from the banked per-game MODEL parse-fail counts: a game's MODEL
+    "fallback rate" = parse_fail_count / n_decisions is exactly the fraction of
+    that game's MODEL turns that fell back to a safe Hold. This is a
+    descriptive/secondary lens; it does NOT alter the pre-registered primary
+    verdict (the B1 placement sign test, computed unchanged elsewhere).
+    """
+    seeds = []
+    for i in range(num_seeds):
+        pair = by_seed[i]
+        ms = pair["trained"]["model_seat"]
+        d = {"seed_index": i, "model_seat": ms}
+        for arm in ("trained", "base"):
+            r = pair[arm]
+            n, f = r["n_decisions"], r["parse_fail_count"]
+            d[f"{arm}_fallback"] = f
+            d[f"{arm}_ndec"] = n
+            d[f"{arm}_fbrate"] = (f / n) if n else 0.0
+            d[f"{arm}_rank"] = competition_ranks(r["final_scores"], r["eliminated"])[ms]
+            d[f"{arm}_score"] = r["final_scores"][ms]
+        d["place_delta"] = d["base_rank"] - d["trained_rank"]   # >0 ⇒ trained placed better
+        d["fbgap"] = d["base_fbrate"] - d["trained_fbrate"]     # >0 ⇒ base noisier
+        seeds.append(d)
+
+    tf = sum(s["trained_fallback"] for s in seeds)
+    tn = sum(s["trained_ndec"] for s in seeds)
+    bf = sum(s["base_fallback"] for s in seeds)
+    bn = sum(s["base_ndec"] for s in seeds)
+
+    # (2) base's fallback rate when it LOSES the seat (trained out-places it) vs not.
+    lost = [s for s in seeds if s["place_delta"] > 0]
+    notlost = [s for s in seeds if s["place_delta"] <= 0]
+
+    # (3a) restrict to pairs where BOTH arms parsed "cleanly" (fallback rate ≤ τ)
+    #      and re-run the placement sign test there. Sensitivity over τ.
+    subsets = []
+    for tau in (0.10, 0.20, 0.34):
+        S = [s for s in seeds if s["trained_fbrate"] <= tau and s["base_fbrate"] <= tau]
+        st = two_sided_sign_test([s["place_delta"] for s in S])
+        subsets.append({
+            "clean_threshold_fallback_rate": tau,
+            "n_pairs_both_clean": len(S),
+            "of_total": num_seeds,
+            "seeds": [s["seed_index"] for s in S],
+            "placement_sign_test": st.to_dict(),
+            "trained_mean_rank": _mean([s["trained_rank"] for s in S]),
+            "base_mean_rank": _mean([s["base_rank"] for s in S]),
+        })
+
+    # (3b) split seeds by the parse-fail GAP (base − trained) into low/high halves;
+    #      if trained's placement edge lives only in the high-gap half, it is
+    #      mechanical; if it survives in the low-gap half, there is a strategic part.
+    ordered = sorted(seeds, key=lambda s: s["fbgap"])
+    half = len(ordered) // 2
+    low_gap, high_gap = ordered[:half], ordered[half:]
+    low_st = two_sided_sign_test([s["place_delta"] for s in low_gap])
+    high_st = two_sided_sign_test([s["place_delta"] for s in high_gap])
+
+    trained_better = [s for s in seeds if s["place_delta"] > 0]
+    coincide = [s for s in trained_better if s["fbgap"] > 0]
+
+    # Headline heuristic (descriptive, spelled out so the numbers govern):
+    tau20 = subsets[1]
+    strat = tau20["placement_sign_test"]
+    if tau20["n_pairs_both_clean"] >= 5 and strat["n_positive"] > strat["n_negative"]:
+        headline = ("STRATEGIC COMPONENT SURVIVES — trained still out-places base "
+                    "on the clean-parse subset")
+    elif low_st.n_positive > low_st.n_negative and low_st.n_nonzero >= 3:
+        headline = ("MIXED — trained's placement edge persists even where the "
+                    "parse-fail gap is small, so it is not purely mechanical")
+    elif tau20["n_pairs_both_clean"] < 3:
+        headline = ("PREDOMINANTLY MECHANICAL / INSEPARABLE — base parses cleanly "
+                    "too rarely to observe it play a clean game, so a strategic "
+                    "edge cannot be isolated from JSON-fluency at this n")
+    else:
+        headline = ("PREDOMINANTLY MECHANICAL — trained's edge concentrates where "
+                    "base's fallback rate is high")
+
+    return {
+        "note": ("DESCRIPTIVE/secondary, added at reviewer (Nova) request. 'fallback "
+                 "rate' = MODEL parse_fail_count / n_decisions = fraction of a game's "
+                 "MODEL turns that fell back to a safe Hold. Does NOT change the "
+                 "pre-registered primary B1 verdict."),
+        "campaign_fallback_rate": {
+            "trained": f"{tf}/{tn} ({tf/tn:.1%})" if tn else "0/0",
+            "base": f"{bf}/{bn} ({bf/bn:.1%})" if bn else "0/0",
+        },
+        "base_fallback_when_losing": {
+            "n_seeds_trained_outplaced_base": len(lost),
+            "mean_base_fallback_rate_when_losing": _mean([s["base_fbrate"] for s in lost]),
+            "n_seeds_base_not_outplaced": len(notlost),
+            "mean_base_fallback_rate_when_not_losing": _mean([s["base_fbrate"] for s in notlost]),
+        },
+        "clean_parse_subset_sensitivity": subsets,
+        "parse_fail_gap_split": {
+            "low_gap_half": {"n": len(low_gap),
+                             "seeds": [s["seed_index"] for s in low_gap],
+                             "placement_sign_test": low_st.to_dict()},
+            "high_gap_half": {"n": len(high_gap),
+                              "seeds": [s["seed_index"] for s in high_gap],
+                              "placement_sign_test": high_st.to_dict()},
+        },
+        "edge_coincides_with_mechanical_gap": (
+            f"{len(coincide)}/{len(trained_better)}"
+            if trained_better else "0/0"
+            ) + " of trained-out-placed-base seeds also had base noisier than trained",
+        "headline": headline,
+    }
+
+
 def _openskill_standing(rows: list[dict]):
     """Descriptive OpenSkill μ−3σ (trained-MODEL vs base-MODEL as two
     identities). Corroborating only; returns None if openskill is absent."""
@@ -197,6 +316,7 @@ def analyze(run_dir: Path) -> dict:
             "verdict": _verdict(b2_score, better_label="trained field contains Golf",
                                 worse_label="base field contains Golf"),
         },
+        "mechanical_vs_strategic": _mechanical_vs_strategic(by_seed, num_seeds),
         "openskill_descriptive": _openskill_standing(rows),
         "per_seed": per_seed_table,
     }
@@ -224,6 +344,14 @@ def _seal_table(run_dir: Path) -> dict:
 def _fmt_stat(s: dict, key="mean", nd=2) -> str:
     v = s.get(key)
     return "n/a" if v is None else f"{v:.{nd}f}"
+
+
+def _fmt(v, nd=2) -> str:
+    return "n/a" if v is None else f"{v:.{nd}f}"
+
+
+def _pct(v) -> str:
+    return "n/a" if v is None else f"{v:.0%}"
 
 
 def render_markdown(res: dict) -> str:
@@ -278,6 +406,52 @@ def render_markdown(res: dict) -> str:
     L.append(f"| MODEL parse-fail (all its calls) | {b1['model_parse_fail']['trained']} | "
              f"{b1['model_parse_fail']['base']} |")
     L.append("")
+
+    # B1 mechanical-vs-strategic decomposition (descriptive lens)
+    mv = res["mechanical_vs_strategic"]
+    L.append("### B1 interpretation — mechanical (JSON-fluency) vs strategic\n")
+    L.append("_Descriptive/secondary lens (added at reviewer request). Does NOT "
+             "change the pre-registered B1 verdict above. `fallback rate` = MODEL "
+             "`parse_fail_count / n_decisions` = the fraction of a game's MODEL turns "
+             "that fell back to a safe Hold. The question: is any 'trained beats "
+             "base' mostly 'trained emits valid JSON more often' (mechanical, still a "
+             "real distillation win) or 'trained plays better' (strategic)?_\n")
+    L.append(f"**Read: {mv['headline']}.**\n")
+    L.append(f"1. **Campaign fallback rate per arm (denominated):** trained "
+             f"`{mv['campaign_fallback_rate']['trained']}` vs base "
+             f"`{mv['campaign_fallback_rate']['base']}`. A large base excess ⇒ much "
+             f"of base's disadvantage is its turns collapsing to Hold.")
+    bl = mv["base_fallback_when_losing"]
+    L.append(f"2. **When base loses the seat** (trained out-placed it on "
+             f"{bl['n_seeds_trained_outplaced_base']} seeds): base's mean fallback "
+             f"rate was {_pct(bl['mean_base_fallback_rate_when_losing'])} on those "
+             f"seeds vs {_pct(bl['mean_base_fallback_rate_when_not_losing'])} on the "
+             f"{bl['n_seeds_base_not_outplaced']} seeds it did not lose — i.e. that "
+             f"share of its turns on lost seeds were mechanical fallback-Holds, not "
+             f"valid-but-weak play.")
+    L.append("3. **Strategy-isolating view — restrict to pairs where BOTH arms "
+             "parsed cleanly** (fallback rate ≤ τ) and re-run the placement sign "
+             "test. If the edge vanishes when base parses cleanly ⇒ mechanical; if "
+             "it persists ⇒ strategic.\n")
+    L.append("| clean threshold τ | pairs both-clean | trained better / base better / tie | sign p | trained mean rank | base mean rank |")
+    L.append("|---|---|---|---|---|---|")
+    for sub in mv["clean_parse_subset_sensitivity"]:
+        st = sub["placement_sign_test"]
+        L.append(f"| ≤{sub['clean_threshold_fallback_rate']:.0%} | "
+                 f"{sub['n_pairs_both_clean']}/{sub['of_total']} | "
+                 f"{st['n_positive']} / {st['n_negative']} / {st['n_zero']} | "
+                 f"{st['p_value_two_sided']:.3g} | "
+                 f"{_fmt(sub['trained_mean_rank'])} | {_fmt(sub['base_mean_rank'])} |")
+    gap = mv["parse_fail_gap_split"]
+    lo, hi = gap["low_gap_half"]["placement_sign_test"], gap["high_gap_half"]["placement_sign_test"]
+    L.append("")
+    L.append(f"   Split by parse-fail gap (base−trained): **low-gap half** "
+             f"(n={gap['low_gap_half']['n']}) trained-better/base-better/tie = "
+             f"{lo['n_positive']}/{lo['n_negative']}/{lo['n_zero']} (p={lo['p_value_two_sided']:.3g}); "
+             f"**high-gap half** (n={gap['high_gap_half']['n']}) = "
+             f"{hi['n_positive']}/{hi['n_negative']}/{hi['n_zero']} (p={hi['p_value_two_sided']:.3g}). "
+             f"If trained only wins in the high-gap half, the edge is mechanical.")
+    L.append(f"   Coincidence check: {mv['edge_coincides_with_mechanical_gap']}.\n")
 
     # B2
     b2 = res["B2"]
