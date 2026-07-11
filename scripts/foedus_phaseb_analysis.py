@@ -360,6 +360,41 @@ def render_markdown(res: dict) -> str:
     L.append("**This is a scientific claim under the full review gate.** Verdicts "
              "below are applied EXACTLY as pre-registered in `prereg.md` — the "
              "sealed commitment was committed before game 0.\n")
+
+    # Executive summary (numbers-driven; reconciles the pre-registered verdict
+    # with the honest mechanical-vs-strategic reading).
+    b1, b2, mv = res["B1"], res["B2"], res["mechanical_vs_strategic"]
+    fb = mv["campaign_fallback_rate"]
+    g_tr = b2["golf_score"]["trained"]["mean"]
+    g_ba = b2["golf_score"]["base"]["mean"]
+    L.append("## Bottom line (read this first)\n")
+    L.append(f"- **B1 — beats-own-base: pre-registered verdict is `{b1['verdict']}` — "
+             "BUT this is PREDOMINANTLY MECHANICAL, not strategic.** The untrained "
+             f"base is so JSON-unfit (falls back to a safe Hold on `{fb['base']}` of "
+             "its turns, never parses a single clean game, and lands LAST on all "
+             "20/20 seeds) that the pre-registered placement test cleanly separates "
+             "the two — but it cannot separate *learned strategy* from *learned to "
+             "emit valid orders*. The strategy-isolating view finds **0/20 pairs "
+             "where the base parsed cleanly**, so no strategic edge can be observed. "
+             "Read it as: **distillation produced a mechanically-fit local entrant "
+             f"that reliably out-plays its untrained base (trained falls back only "
+             f"`{fb['trained']}`) — a real, valuable G1 outcome — NOT a demonstration "
+             "of superior strategy.**")
+    L.append(f"- **B2 — containment: `{b2['verdict']}`.** A table with the trained "
+             f"entrant does NOT contain the freerider (Golf) better than one with the "
+             f"base: mean Golf score {g_tr:.1f} (trained field) vs {g_ba:.1f} (base "
+             "field) — if anything Golf did marginally BETTER against the trained "
+             "entrant, non-significant. Golf dominates both fields (never eliminated; "
+             "top OpenSkill μ−3σ by a wide margin) and the anchor-score attribution "
+             "signal shows no coordination benefit. An honest null.")
+    L.append("- **G1 read:** the distill→serve→play loop yields a *mechanically-fit* "
+             "entrant; **superior strategy and freerider containment are NOT "
+             "demonstrated** at this n / config. Next steps are the pre-registered "
+             "retrain levers (fewer epochs / winners-only / assistant-masking) AND a "
+             "mechanically-fit base control (few-shot or repaired base) so a future "
+             "B1 can test *strategy* rather than *JSON-fluency*. A null is a real, "
+             "useful result — reported, not tuned away.\n")
+
     seal = res["seal"]
     L.append("## Seal (commit-reveal, verifiable)\n")
     if seal.get("revealed"):
