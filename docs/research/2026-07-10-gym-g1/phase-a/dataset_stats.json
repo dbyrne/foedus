@@ -1,0 +1,63 @@
+{
+  "task": "G1 Phase A \u2014 SFT corpus for foedus-entrant-v1",
+  "corpus": "12 high-coordination Sonnet games: canonical run #1 (8 games, SEALED) + canonical Sonnet arm (4 games)",
+  "teacher": "claude sonnet (via ClaudeCLIClient); raw_response = verbatim intended decision",
+  "source_dirs": [
+    "docs/research/2026-07-04-canonical-campaign-v1/run",
+    "docs/research/2026-07-10-canonical-sonnet-arm/run"
+  ],
+  "excluded_from_campaign_v1": [
+    "docs/research/2026-07-04-canonical-campaign-v1/preflight/ (live-resume + smoke)",
+    "docs/research/2026-07-04-canonical-campaign-v1/run_crashed_5game/ (15 decision files, crashed run)"
+  ],
+  "composition": "ALL LLM seats (NOT --winners-only); dedup ON",
+  "provenance": {
+    "worktree_head": "bdebe410aa73847d5474378aff3efc094f77ceeb",
+    "run1_run_dir_last_commit": "0e481700cc232dab3419775b6068bd616a66993e",
+    "sonnet_arm_run_dir_last_commit": "1a7227a8c35bb1d6a6a11c3eef628991942714a2"
+  },
+  "dataset_stats_all_llm_seats": {
+    "files": 36,
+    "records": 862,
+    "written": 716,
+    "dropped": {
+      "fell_back": 51,
+      "not_json": 95,
+      "malformed_prompt": 0,
+      "winners_filtered": 0
+    },
+    "duplicates": 0
+  },
+  "per_corpus": {
+    "canonical_run1_8game": {
+      "files": 24,
+      "records": 576,
+      "written": 466,
+      "dropped": {
+        "fell_back": 47,
+        "not_json": 63,
+        "malformed_prompt": 0,
+        "winners_filtered": 0
+      },
+      "duplicates": 0
+    },
+    "canonical_sonnet_arm_4game": {
+      "files": 12,
+      "records": 286,
+      "written": 250,
+      "dropped": {
+        "fell_back": 4,
+        "not_json": 32,
+        "malformed_prompt": 0,
+        "winners_filtered": 0
+      },
+      "duplicates": 0
+    }
+  },
+  "coverage_guard": {
+    "assert_written_gt_0": true,
+    "written": 716
+  },
+  "prereg_rationale": "run #1 was the buggy-ENGINE campaign, but build_sft trains on the teacher's raw_response (verbatim INTENDED decision), which captures the coordinated require_dest Supports the buggy PARSER dropped at resolution. Teacher's true coordinated intent is faithfully in the corpus; the parser bug does NOT corrupt the training signal. Winner labels from run#1 are buggy-derived but irrelevant here because G1 uses ALL seats, not --winners-only.",
+  "note": "not_json = <client error> timeout sentinels + reasoning-prose rows with no parseable JSON object/array"
+}

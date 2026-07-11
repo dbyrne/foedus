@@ -1,0 +1,99 @@
+{
+  "task": "G1 Phase A \u00a7A4 \u2014 mechanical fitness gate for foedus-entrant-v1",
+  "trained_model": "foedus-entrant-v1:latest (q4_K_M, qwen2, 3.1B)",
+  "base_control_model": "foedus-base-v1:latest (q4_K_M, qwen2, 3.1B) \u2014 identical llama.cpp serve path, no LoRA",
+  "backend": "existing foedus OllamaClient -> POST /api/chat @ http://localhost:11434 (LOCAL, $0 API)",
+  "play_config": "2 games, max_turns 6, 3 players, llm_seats=[0], heuristics=[GreedyHold,TitForTat]",
+  "parse_fail_rate": {
+    "count": 1,
+    "denominator": 24,
+    "rate": 0.0417,
+    "pct": "4.2%"
+  },
+  "sonnet_teacher_baseline_parse_fail": "~0.0816 (8.2%) \u2014 from canonical run #1 run_summary.json",
+  "degeneracy_check": {
+    "order_type_token_counts": {
+      "Hold": 13,
+      "Move": 5,
+      "Support": 14
+    },
+    "all_hold": false,
+    "all_fallback": false,
+    "assessment": "NON-DEGENERATE: emits a mix of Hold/Move/Support, declares intents + stances, proposes pacts; not stuck on Hold or fallback."
+  },
+  "per_game": [
+    {
+      "game_id": 0,
+      "seed": 0,
+      "agents": [
+        "LLMDiplomat",
+        "GreedyHold",
+        "TitForTat"
+      ],
+      "llm_seat": 0,
+      "total_turns": 6,
+      "final_scores": [
+        16.0,
+        14.0,
+        6.0
+      ],
+      "winners": [
+        0
+      ],
+      "parse_fail": "1/12"
+    },
+    {
+      "game_id": 1,
+      "seed": 1,
+      "agents": [
+        "LLMDiplomat",
+        "GreedyHold",
+        "TitForTat"
+      ],
+      "llm_seat": 0,
+      "total_turns": 6,
+      "final_scores": [
+        9.0,
+        14.0,
+        22.0
+      ],
+      "winners": [
+        2
+      ],
+      "parse_fail": "0/12"
+    }
+  ],
+  "fell_back_decisions": [
+    {
+      "game": "0",
+      "turn": 2,
+      "phase": "orders",
+      "raw_response": "{\"orders\": {\"0\": {\"type\": \"Support\", \"target\": 1}, \"u1\": {\"type\": \"Hold\"}}}\n"
+    }
+  ],
+  "fell_back_note": "the single fell_back was valid JSON but mixed unit-id key styles ('0' vs 'u1') -> parser coercion miss; a minor schema slip, not a JSON/degeneracy failure",
+  "sample_decisions": [
+    {
+      "phase": "negotiate",
+      "turn": 0,
+      "raw_response": "{\n  \"press\": {\n    \"stance\": {\"1\": \"neutral\", \"2\": \"neutral\"},\n    \"intents\": [\n      {\"unit_id\": 0, \"declared_order\": {\"type\": \"Move\", \"dest\": 4}, \"visible_to\": null}\n    ]\n  },\n  \"pacts\": {\n    \"propose\": [],\n    \"accept\": []\n  }\n}\n"
+    },
+    {
+      "phase": "orders",
+      "turn": 5,
+      "raw_response": "{\"orders\": {\"0\": {\"type\": \"Support\", \"target\": 4}, \"3\": {\"type\": \"Hold\"}}}\n"
+    },
+    {
+      "phase": "negotiate",
+      "turn": 0,
+      "raw_response": "{\n  \"press\": {\n    \"stance\": {\"1\": \"neutral\", \"2\": \"neutral\"},\n    \"intents\": [\n      {\"unit_id\": 0, \"declared_order\": {\"type\": \"Move\", \"dest\": 4}, \"visible_to\": null}\n    ]\n  },\n  \"pacts\": {\n    \"propose\": [],\n    \"accept\": []\n  }\n}\n"
+    },
+    {
+      "phase": "orders",
+      "turn": 5,
+      "raw_response": "{\"orders\": {\"0\": {\"type\": \"Support\", \"target\": 4}}}\n"
+    }
+  ],
+  "verdict": "FIT",
+  "verdict_rationale": "parse-fail 1/24 (4.2%) is BELOW the Sonnet teacher baseline (~8.2%); output is non-degenerate (Hold/Move/Support mix, coordinated intents/stances, Support-heavy consistent with the high-coordination corpus); entrant even top-scored as the LLM seat in game 0. Mechanically sound -> cleared for the Phase B eval campaign (NOT run here)."
+}
