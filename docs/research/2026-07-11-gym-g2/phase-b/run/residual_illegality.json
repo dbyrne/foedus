@@ -12,6 +12,10 @@
       {
         "path": "docs/research/2026-07-10-canonical-sonnet-arm/run/seed_manifest.revealed.json",
         "n_seeds": 4
+      },
+      {
+        "path": "docs/research/2026-07-10-gym-g1/phase-b/run/seed_manifest.revealed.json",
+        "n_seeds": 20
       }
     ],
     "disjoint": true

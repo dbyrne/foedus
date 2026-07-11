@@ -18,15 +18,19 @@ numbers verbatim with G2 framing.
 ## Bottom line (read this first)
 
 - **B1 — beats-own-base on a mechanically-clean basis: `NULL — no significant
-  difference (p=1)`. G1's "REAL" verdict was 100% mechanical.** With both arms
-  grammar-forced to structurally-valid decisions, the trained entrant and its
-  untrained base are **behaviorally indistinguishable**: paired MODEL placement
-  is **0 trained-better / 0 base-better / 20 TIED of 20 seeds** (sign test
-  p=1); final score ties on 19/20 seeds exactly (the one difference: seed 6,
-  12.0 vs 11.0). Both arms land LAST (mean placement 3.95 of 4) — each plays
-  Hold-heavy, near-inert Diplomacy. **Per the pre-registered framing:
-  distilling 12 games into a 3B taught FORMAT, not STRATEGY.** G1's entire
-  p=0.03125 edge came from the JSON channel that G2 removed.
+  difference (p=1)` — consistent with the entire G1 edge having been the JSON
+  channel.** With both arms grammar-forced to structurally-valid decisions,
+  paired MODEL placement is **0 trained-better / 0 base-better / 20 TIED of 20
+  seeds** (sign test p=1); final score ties on 19/20 seeds exactly (the one
+  difference: seed 6, 12.0 vs 11.0). Both arms land LAST (mean placement 3.95
+  of 4), each playing Hold-heavy, near-inert Diplomacy — so the precise
+  reading is **no detectable difference within a low-resolution,
+  floor-dominated metric at n=20**: MODEL score takes only 3 values across
+  all 40 games (12.0×37, 11.0×1, 8.0×2) and placement only 2 (last×38,
+  third×2), leaving little power for modest real differences. **Per the
+  pre-registered framing: distilling 12 games into a 3B taught FORMAT, not
+  STRATEGY** — G1's p=0.03125 edge does not survive removal of the JSON
+  channel (a cross-campaign inference on disjoint seed sets; see caveat 7).
 - **B2 — containment: `NULL (p=1)`** (0 trained-contains / 1 base-contains /
   19 tied). Golf dominates both fields identically (mean score 35.3 vs 35.2,
   never eliminated). Unchanged from G1's null.
@@ -36,11 +40,17 @@ numbers verbatim with G2 framing.
   confound (base structurally failing ~51% of turns) is fully removed.
 - **Residual illegality (the channel constraint does not fix):** trained
   **137/474 (28.9%)** vs base **196/472 (41.5%)** of decisions fell back on a
-  schema-valid but geometrically-illegal move; per emitted order, trained
-  **52/289 (18.0%)** vs base **84/319 (26.3%)**. NOTE: this residual channel
-  *favors the trained arm* (12.6pt fewer illegal-move fallbacks) — and the
-  verdict is STILL a 20/20 placement tie. The null is therefore conservative:
-  even keeping a residual mechanical edge, the trained entrant gains nothing.
+  schema-valid but geometrically-illegal move. The 12.6pt decision-level gap
+  is mostly NEGOTIATE-phase illegality, which never touches score (negotiate:
+  92/237 = 38.8% vs 142/236 = 60.2%, a 21.4pt gap; orders: 45/237 = 19.0% vs
+  54/236 = 22.9%, a 3.9pt gap; per emitted order: 52/289 = 18.0% vs 84/319 =
+  26.3%). Directionally the residual channel would, if anything, favor the
+  trained arm — but that direction is an ASSUMPTION here, not a measured
+  effect: this campaign contains no within-run evidence that fallback
+  differences move placement in this inert regime (the pre-registered
+  parse-fail-gap split in `results.json` finds both the low-gap and high-gap
+  halves are pure 0/0/10 placement ties). Under that assumption the null
+  reads conservative; without it, the null simply stands as measured.
 
 ## The clean comparison to G1 (the point of G2)
 
@@ -55,8 +65,13 @@ numbers verbatim with G2 framing.
 | strategy readable? | NO (confounded) | **YES — and it is NULL** |
 
 Removing the JSON confound did exactly what the design intended: the base
-stopped auto-losing to formatting, and the entire G1 gap collapsed to zero.
-The distilled entrant's only demonstrated skill over its base was emitting
+stopped auto-losing to formatting, and no placement gap remains. Because G2
+ran on fresh, disjoint sealed seeds (correctly — reusing G1's would break the
+pre-registration), "G1's edge was the JSON channel" is a cross-campaign
+inference, not a same-trial ablation (caveat 7); it is, however, exactly what
+G1's own decomposition predicted (0/20 clean-parse pairs; the edge only
+existed where the base was structurally failing). On the clean basis, the
+only skill the distilled entrant demonstrably holds over its base is emitting
 valid JSON — which a 40-line grammar provides for free.
 
 ## Seal (commit-reveal, verifiable)
@@ -92,11 +107,16 @@ valid JSON — which a 40-line grammar provides for free.
 | OpenSkill μ−3σ (descriptive) | −15.11 | −15.37 |
 
 Both models' modal behavior is `{"orders": {"u<i>": {"type": "Hold"}}}` every
-turn (see `run/decisions/`); raw responses differ across arms (spot-check:
-3/24 identical on seed 0) yet produce identical board trajectories because
-neither model meaningfully acts. This is a genuine behavioral tie, not a
-wiring artifact — boards were fingerprint-asserted identical, models confirmed
-different weights (different residual-illegality rates, different text).
+turn (see `run/decisions/`); raw responses differ across arms (111/472 =
+23.5% of aligned decision slots byte-identical over the full campaign) yet
+produce identical board trajectories because neither model meaningfully acts.
+The tie is not a wiring artifact — boards were fingerprint-asserted
+identical, and the arms are demonstrably different models (different
+residual-illegality rates, 76.5% differing raw text). Nor is it
+fallback-driven: the pre-registered clean-parse subset (τ ≤ 34%, the 3
+cleanest pairs) still ties 3/3 with mean rank 4.00 vs 4.00, and both
+parse-fail-gap halves tie 0/0/10 (see `results.json →
+mechanical_vs_strategic`).
 
 ## B2 detail
 
@@ -122,17 +142,31 @@ a bigger base. Constrained decoding should remain ON for all future gym evals
 
 ## Honest caveats (pre-registered; see prereg.md)
 
-1. Small n (20 paired seeds), one board family — but note the result is not a
-   marginal null: it is a 20/20 behavioral tie.
+1. Small n (20 paired seeds), one board family — and the outcome metric is
+   floor-saturated (3 score values, 2 placement values across 40 games), so
+   the 20/20 tie means "no detectable difference at this resolution," not
+   "provably identical play"; a modest real difference could hide under the
+   floor.
 2. One scripted freerider archetype (B2).
 3. One training config; a null steers the recipe, it does not condemn
    distillation.
 4. Residual illegality is asymmetric (trained 28.9% vs base 41.5% of
-   decisions) — reported as pre-registered; it biases TOWARD trained, making
-   the null conservative.
+   decisions) — reported as pre-registered. ~70% of the gap sits in the
+   negotiate phase, which never touches score (orders-phase gap is only
+   3.9pt; per-order 18.0% vs 26.3%), and this campaign offers no within-run
+   evidence that fallback differences move placement (both gap-split halves
+   tie 0/0/10). Any "the asymmetry favors trained, so the null is
+   conservative" reading is an assumption stated as such, not a measurement.
 5. The grammar changes the sampling distribution — identically for both arms;
    G2a showed entrant constrained ≈ unconstrained on all measured rates.
 6. LLM text is not bit-reproducible (ollama defaults); boards are. The 20/20
    tie is robust to that noise precisely because both arms are inert.
+7. **Cross-seed-set inference.** G2 ran on fresh sealed seeds disjoint from
+   G1's (by design — the pre-registration requires it), so "G1's REAL was the
+   JSON channel" compares verdicts across two seed sets rather than ablating
+   the constraint within one. The inference is strongly corroborated by G1's
+   own clean-parse decomposition (0/20 pairs where the base parsed cleanly;
+   the edge existed only where the base structurally failed), but it is an
+   inference, not a same-trial ablation.
 
 _A null is a real, useful result — reported, not tuned away._

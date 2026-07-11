@@ -49,7 +49,9 @@ docs/research/depth/*.json
 # Git worktrees for isolated feature work
 .worktrees/
 
-# G1 Phase B: the sealed seed secret stays operator-private until the
+# Sealed-eval seed secrets (any campaign): operator-private until the
 # post-campaign reveal (seeds are published then in seed_manifest.revealed.json,
-# which verify() checks against the pre-committed commitment). Never commit it.
-docs/research/2026-07-10-gym-g1/phase-b/run/seed_manifest.secret.json
+# which verify() checks against the pre-committed commitment). Never commit one
+# — the glob protects every current and future sealed run dir against an
+# accidental `git add -A` during a sealed window.
+**/seed_manifest.secret.json
