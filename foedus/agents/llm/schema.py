@@ -239,3 +239,51 @@ def schema_for_phase(phase: str) -> dict:
             f"no constrained-decoding schema for phase {phase!r}; "
             f"expected one of {sorted(_PHASE_SCHEMAS)}"
         ) from None
+
+
+def phase_of_system_prompt(system: str) -> str | None:
+    """Classify a decision call by its system prompt: "negotiate" / "orders",
+    or None for any other call (e.g. the campaign self-note, which is free text
+    and must NEVER be schema-constrained).
+
+    Exact-match against the render module's system-prompt constants is
+    deliberate: those constants ARE the phase contract (diplomat.py passes them
+    verbatim), and a fuzzy match could silently constrain a future free-text
+    call.
+    """
+    # Local import: render imports nothing from this module, so this cannot
+    # cycle; kept local so importing schema.py alone stays dependency-light.
+    from foedus.agents.llm import render
+
+    if system == render.NEGOTIATION_SYSTEM_PROMPT:
+        return "negotiate"
+    if system == render.ORDERS_SYSTEM_PROMPT:
+        return "orders"
+    return None
+
+
+class PhaseConstrainedClient:
+    """LLMClient wrapper that turns constrained decoding ON per decision phase.
+
+    Wraps a client with a per-call ``format`` param (e.g. :class:`OllamaClient
+    <foedus.agents.llm.client.OllamaClient>`) and dispatches each ``complete()``
+    to the matching per-phase schema via :func:`phase_of_system_prompt`:
+    negotiate/orders calls get their decision schema; any other call (the
+    campaign self-note) passes through UNCONSTRAINED.
+
+    This is the G2 eval wiring: hand ``LLMDiplomat`` a
+    ``PhaseConstrainedClient(OllamaClient(model=...))`` and both of its decision
+    calls are grammar-constrained with no diplomat/renderer/parser change.
+    """
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+
+    @property
+    def inner(self):
+        return self._inner
+
+    def complete(self, system: str, user: str) -> str:
+        phase = phase_of_system_prompt(system)
+        fmt = schema_for_phase(phase) if phase is not None else None
+        return self._inner.complete(system, user, format=fmt)

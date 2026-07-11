@@ -1,0 +1,465 @@
+{
+  "match_id": "phaseb-gym-g2-2026-07-11",
+  "num_seeds": 20,
+  "num_games": 40,
+  "num_seats": 4,
+  "arms": [
+    "trained",
+    "base"
+  ],
+  "trained_model": "foedus-entrant-v1:latest",
+  "base_model": "foedus-base-v1:latest",
+  "freerider_class": "DishonestCooperator",
+  "golf_handle": "Golf",
+  "anchors": [
+    "Cooperator",
+    "TitForTat"
+  ],
+  "constrained": true,
+  "seed_disjointness": {
+    "checked_sources": [
+      {
+        "path": "docs/research/2026-07-04-canonical-campaign-v1/run/seed_manifest.revealed.json",
+        "n_seeds": 8
+      },
+      {
+        "path": "docs/research/2026-07-10-canonical-sonnet-arm/run/seed_manifest.revealed.json",
+        "n_seeds": 4
+      },
+      {
+        "path": "docs/research/2026-07-10-gym-g1/phase-b/run/seed_manifest.revealed.json",
+        "n_seeds": 20
+      }
+    ],
+    "disjoint": true
+  },
+  "board": {
+    "num_players": 4,
+    "max_turns": 12,
+    "archetype": "continental_sweep",
+    "map_radius": 2
+  },
+  "seat_rotation": "model_seat = seed_index % num_seats",
+  "seatings": [
+    {
+      "seed_index": 0,
+      "model_seat": 0,
+      "golf_seat": 1,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "MODEL",
+        "Golf",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "fcb29f819b527a24baba9b9aa9dd58356f2ec43b3ffbd0d2c09c44d64e929a50"
+    },
+    {
+      "seed_index": 1,
+      "model_seat": 1,
+      "golf_seat": 0,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "MODEL",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "c8d936bb83a58179c5c6d64d49191f088235a51ba0fbeec3c00d5956dc135bfd"
+    },
+    {
+      "seed_index": 2,
+      "model_seat": 2,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "MODEL",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "0a7de5b231f9382562ea1dd5398af93533dbfa7789af3543dbf839957f08ecc6"
+    },
+    {
+      "seed_index": 3,
+      "model_seat": 3,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        2
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "TitForTat",
+        "MODEL"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "27751ccba395ac51af7ac443fd6b7161984a072a56935b0502e8bfb84bd7b29d"
+    },
+    {
+      "seed_index": 4,
+      "model_seat": 0,
+      "golf_seat": 1,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "MODEL",
+        "Golf",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "b563f6f045872da7292d9ae87021f33f84e0b797517cd1b3220fdc52e1482b81"
+    },
+    {
+      "seed_index": 5,
+      "model_seat": 1,
+      "golf_seat": 0,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "MODEL",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "81a48ba0740e1b3e30b08b790122b49f69d8cbd4342ce3229c7ee64e4d8dc116"
+    },
+    {
+      "seed_index": 6,
+      "model_seat": 2,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "MODEL",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "c51108382bc4a943b52767f402a04121f774f7ba9b87981c608ae7835b2d01da"
+    },
+    {
+      "seed_index": 7,
+      "model_seat": 3,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        2
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "TitForTat",
+        "MODEL"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "d7cd653a8330d76a35b9a2708d63505e7a828ed7e2d6dcbf05a9ea325cbe32ab"
+    },
+    {
+      "seed_index": 8,
+      "model_seat": 0,
+      "golf_seat": 1,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "MODEL",
+        "Golf",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "37c98bc28d06a1c5d62536f164c62889db3a7a7e37a511ba05da6e7681edb7f6"
+    },
+    {
+      "seed_index": 9,
+      "model_seat": 1,
+      "golf_seat": 0,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "MODEL",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "f6bfc91ed47a4f22e3e62063a72c67bd8a578bd077d364bf11f5e80070aee11b"
+    },
+    {
+      "seed_index": 10,
+      "model_seat": 2,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "MODEL",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "e398720558a156b7127731bce42b653e861675192c865529dc98c65a5eac18ac"
+    },
+    {
+      "seed_index": 11,
+      "model_seat": 3,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        2
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "TitForTat",
+        "MODEL"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "e7c9b35ecee4ce1b965927844644c2a922d2d317aca7c0370ed11bcd3b92b871"
+    },
+    {
+      "seed_index": 12,
+      "model_seat": 0,
+      "golf_seat": 1,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "MODEL",
+        "Golf",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "712bb4ebd9271b06a6cedf385d882769cce150a2f9a8928c79b440e248bc9c0a"
+    },
+    {
+      "seed_index": 13,
+      "model_seat": 1,
+      "golf_seat": 0,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "MODEL",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "eba82a40ded12acdfa21c57db7594791bc1307198668585eed53c3af37750f4e"
+    },
+    {
+      "seed_index": 14,
+      "model_seat": 2,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "MODEL",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "c4c3dee81e89ecbc1c70798a14093be6b2732ad87718cc4341d23fa14e012c95"
+    },
+    {
+      "seed_index": 15,
+      "model_seat": 3,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        2
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "TitForTat",
+        "MODEL"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "71bfd9a25af9b2016ce89c81abea1d4f5b22db1e2b9432fb494e212db2d7bc4c"
+    },
+    {
+      "seed_index": 16,
+      "model_seat": 0,
+      "golf_seat": 1,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "MODEL",
+        "Golf",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "52efeb5bb759a30b787d3e6e7120a438ee1d1c2bd8ab99991b95129b106600a4"
+    },
+    {
+      "seed_index": 17,
+      "model_seat": 1,
+      "golf_seat": 0,
+      "anchor_seats": [
+        2,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "MODEL",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "838d185a2bccb597a6ff9249b05f1b7a7c812e060df9997f890293b429c13b4b"
+    },
+    {
+      "seed_index": 18,
+      "model_seat": 2,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        3
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "MODEL",
+        "TitForTat"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "94b06daa2b3e289c3f86e2215cdca1f89a002c2372a5065aa73e7ea767cf2931"
+    },
+    {
+      "seed_index": 19,
+      "model_seat": 3,
+      "golf_seat": 0,
+      "anchor_seats": [
+        1,
+        2
+      ],
+      "role_by_seat": [
+        "Golf",
+        "Cooperator",
+        "TitForTat",
+        "MODEL"
+      ],
+      "heuristic_names": [
+        "DishonestCooperator",
+        "Cooperator",
+        "TitForTat"
+      ],
+      "board_fingerprint": "d10e8c23bfe906b38b4e806cd2233d7f33abe85f328356a8d585d1f50e76975f"
+    }
+  ]
+}

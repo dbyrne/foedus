@@ -55,13 +55,13 @@ if str(_REPO) not in sys.path:
 if str(_REPO / "scripts") not in sys.path:
     sys.path.insert(0, str(_REPO / "scripts"))
 
-from foedus.agents.llm import render
 from foedus.agents.llm.client import OllamaClient
 from foedus.agents.llm.parse import extract_json_with_recovery
 from foedus.agents.llm.schema import (
+    PhaseConstrainedClient,
     negotiation_decision_schema,
     orders_decision_schema,
-    schema_for_phase,
+    phase_of_system_prompt as _phase_of_system,
 )
 from foedus.eval._coverage import assert_coverage
 
@@ -72,15 +72,6 @@ ENTRANT_MODEL = "foedus-entrant-v1"
 _NEG_SCHEMA = negotiation_decision_schema()
 _ORD_SCHEMA = orders_decision_schema()
 _SCHEMA_BY_PHASE = {"negotiate": _NEG_SCHEMA, "orders": _ORD_SCHEMA}
-
-
-def _phase_of_system(system: str) -> str | None:
-    """Classify a system prompt into the decision phase, or None (self-note)."""
-    if system == render.NEGOTIATION_SYSTEM_PROMPT:
-        return "negotiate"
-    if system == render.ORDERS_SYSTEM_PROMPT:
-        return "orders"
-    return None
 
 
 def _decision_ok(raw: str, schema: dict) -> bool:
@@ -99,22 +90,6 @@ def _decision_ok(raw: str, schema: dict) -> bool:
 def _json_ok(raw: str) -> bool:
     data, _ = extract_json_with_recovery(raw)
     return isinstance(data, dict)
-
-
-class _PhaseConstrainedClient:
-    """Probe-only wrapper: dispatches each call to the per-phase schema via the
-    new per-call ``format`` param of :class:`OllamaClient`. This exercises the
-    G2a capability end-to-end; the G2b eval wires the same idea. A prompt that
-    is neither decision phase (the campaign self-note) is left unconstrained --
-    it must stay free text."""
-
-    def __init__(self, inner: OllamaClient) -> None:
-        self._inner = inner
-
-    def complete(self, system: str, user: str) -> str:
-        phase = _phase_of_system(system)
-        fmt = schema_for_phase(phase) if phase is not None else None
-        return self._inner.complete(system, user, format=fmt)
 
 
 # --------------------------------------------------------------------------
@@ -195,7 +170,7 @@ def _make_factory(model: str, constrained: bool, host: str, timeout: float):
 
     def factory():
         base = OllamaClient(model=model, host=host, timeout=timeout)
-        client = _PhaseConstrainedClient(base) if constrained else base
+        client = PhaseConstrainedClient(base) if constrained else base
         return LLMDiplomat(client=client, recip_ledger=False, campaign=False)
 
     return factory

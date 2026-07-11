@@ -222,3 +222,63 @@ def test_schema_for_phase_dispatch() -> None:
         schema_for_phase("self_note")
     with pytest.raises(ValueError):
         schema_for_phase("bogus")
+
+
+# --- phase dispatch + PhaseConstrainedClient (G2b wiring) -------------------
+
+def test_phase_of_system_prompt_classifies_decision_calls() -> None:
+    from foedus.agents.llm.render import (
+        NEGOTIATION_SYSTEM_PROMPT,
+        ORDERS_SYSTEM_PROMPT,
+        SELF_NOTE_SYSTEM_PROMPT,
+        SELF_NOTE_SYSTEM_PROMPT_IDENTITY,
+    )
+    from foedus.agents.llm.schema import phase_of_system_prompt
+
+    assert phase_of_system_prompt(NEGOTIATION_SYSTEM_PROMPT) == "negotiate"
+    assert phase_of_system_prompt(ORDERS_SYSTEM_PROMPT) == "orders"
+    # The self-note calls are free text and MUST stay unconstrained.
+    assert phase_of_system_prompt(SELF_NOTE_SYSTEM_PROMPT) is None
+    assert phase_of_system_prompt(SELF_NOTE_SYSTEM_PROMPT_IDENTITY) is None
+    assert phase_of_system_prompt("something else entirely") is None
+    # Exact match only: a prefix/superset must not be constrained by accident.
+    assert phase_of_system_prompt(ORDERS_SYSTEM_PROMPT + " extra") is None
+
+
+class _FormatCapturingClient:
+    """Stub inner client with the per-call `format` param, recording it."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict | None]] = []
+
+    def complete(self, system: str, user: str, format: dict | None = None) -> str:
+        self.calls.append((system, format))
+        return "{}"
+
+
+def test_phase_constrained_client_dispatches_per_phase_schema() -> None:
+    from foedus.agents.llm.render import (
+        NEGOTIATION_SYSTEM_PROMPT,
+        ORDERS_SYSTEM_PROMPT,
+        SELF_NOTE_SYSTEM_PROMPT,
+    )
+    from foedus.agents.llm.schema import PhaseConstrainedClient
+
+    inner = _FormatCapturingClient()
+    client = PhaseConstrainedClient(inner)
+    client.complete(NEGOTIATION_SYSTEM_PROMPT, "user")
+    client.complete(ORDERS_SYSTEM_PROMPT, "user")
+    client.complete(SELF_NOTE_SYSTEM_PROMPT, "user")
+
+    (neg_sys, neg_fmt), (ord_sys, ord_fmt), (note_sys, note_fmt) = inner.calls
+    assert neg_fmt == NEG           # negotiate call carries the negotiate schema
+    assert ord_fmt == ORD           # orders call carries the orders schema
+    assert note_fmt is None         # self-note passes through UNCONSTRAINED
+    assert client.inner is inner
+
+
+def test_phase_constrained_client_satisfies_llmclient_protocol() -> None:
+    from foedus.agents.llm.client import LLMClient
+    from foedus.agents.llm.schema import PhaseConstrainedClient
+
+    assert isinstance(PhaseConstrainedClient(_FormatCapturingClient()), LLMClient)

@@ -137,6 +137,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ollama-host", default=None)
     p.add_argument("--transcripts", type=int, default=1,
                    help="Render the first N seeds' pairs to markdown (audit).")
+    p.add_argument("--constrained", action="store_true",
+                   help="G2: constrained decoding ON for BOTH arms — every "
+                        "negotiate/orders call carries the per-phase JSON "
+                        "schema (foedus.agents.llm.schema), so both models "
+                        "emit structurally-valid decisions and the placement "
+                        "gap measures strategy, not JSON-fluency. Recorded in "
+                        "the sealed secret; --resume refuses a mismatch.")
+    p.add_argument("--assert-disjoint-from", action="append", default=[],
+                   help="Path to a seed_manifest.revealed.json (or any JSON "
+                        "with a top-level 'seeds' list) whose seeds must NOT "
+                        "intersect this match's sealed seeds — the "
+                        "training-corpus disjointness assert. May repeat. "
+                        "Checked at seal time AND on --resume.")
     p.add_argument("--seed-rng", type=int, default=None,
                    help="TEST/REPRO ONLY: seed the seed-draw RNG (a real match "
                         "omits this for a true CSPRNG draw).")
@@ -155,15 +168,56 @@ def _model_for_arm(arm: str, args) -> str:
 def _make_model_agent(arm: str, args, agent_factory):
     """Construct the MODEL seat's agent. Test injection wins; otherwise an
     LLMDiplomat wired to an EXPLICIT local OllamaClient for this arm's model —
-    no API-backed backend is reachable from here."""
+    no API-backed backend is reachable from here.
+
+    With ``--constrained`` (G2) the client is wrapped in
+    :class:`~foedus.agents.llm.schema.PhaseConstrainedClient`, so every
+    negotiate/orders call carries the matching per-phase JSON schema and BOTH
+    arms are grammar-forced to structurally-valid decisions. Any non-decision
+    call (none exist in this campaign: recip_ledger/campaign are OFF) would
+    pass through unconstrained.
+    """
     if agent_factory is not None:
         return agent_factory()
     from foedus.agents.llm.client import OllamaClient
     from foedus.agents.llm.diplomat import LLMDiplomat
     client = OllamaClient(model=_model_for_arm(arm, args), host=args.ollama_host,
                           timeout=args.ollama_timeout)
+    if args.constrained:
+        from foedus.agents.llm.schema import PhaseConstrainedClient
+        client = PhaseConstrainedClient(client)
     # recip_ledger / campaign explicitly OFF: independent single games.
     return LLMDiplomat(client=client, recip_ledger=False, campaign=False)
+
+
+def _assert_seed_disjointness(seeds: list[int], manifest_paths: list[str]) -> dict:
+    """Assert the sealed seeds never appear in any referenced seed list (the
+    training-corpus disjointness gate: a sealed eval seed that also generated
+    training data would contaminate the memorization framing). Fails LOUDLY on
+    an unreadable/empty manifest — a disjointness check that silently checked
+    nothing is the exact failure mode the coverage rule exists for.
+
+    Returns a small record (per-source seed counts + the verdict) for the plan,
+    so the check is auditable from the committed artifacts.
+    """
+    ours = set(seeds)
+    record = {"checked_sources": [], "disjoint": True}
+    for path in manifest_paths:
+        data = json.loads(Path(path).read_text())
+        theirs = data.get("seeds")
+        if not isinstance(theirs, list) or not theirs:
+            raise SystemExit(
+                f"--assert-disjoint-from {path}: no non-empty 'seeds' list — "
+                "refusing to treat an unreadable manifest as disjoint.")
+        overlap = ours & set(theirs)
+        record["checked_sources"].append({"path": path, "n_seeds": len(theirs)})
+        if overlap:
+            record["disjoint"] = False
+            raise SystemExit(
+                f"seed-disjointness VIOLATED: sealed seed(s) {sorted(overlap)} "
+                f"appear in {path} — these seeds generated training data; "
+                "reseal in a fresh out-dir.")
+    return record
 
 
 def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
@@ -210,6 +264,13 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
             if secret.get(field) != want:
                 build_parser().error(
                     f"--resume: {field} {want!r} != sealed {secret.get(field)!r}")
+        # Constrained mode is part of the sealed design (G2): a resume that
+        # silently flipped it would mix constrained + unconstrained games in
+        # one sweep. Missing key (a pre-G2 seal) means False.
+        if bool(secret.get("constrained", False)) != bool(args.constrained):
+            build_parser().error(
+                f"--resume: constrained={args.constrained} != sealed "
+                f"{bool(secret.get('constrained', False))}")
         seeds = secret["seeds"]
         nonce = secret["nonce"]
         sealed = campaign.SeedManifest(
@@ -225,8 +286,12 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
             "match_id": args.match_id, "num_seeds": args.num_seeds,
             "freerider": args.freerider, "anchors": anchors,
             "trained_model": args.trained_model, "base_model": args.base_model,
+            "constrained": bool(args.constrained),
             "seeds": seeds, "nonce": nonce,
         }, indent=2))
+
+    # --- training-corpus seed-disjointness gate (seal AND resume) ------------
+    disjointness = _assert_seed_disjointness(seeds, args.assert_disjoint_from)
 
     # --- per-seed seat plan + sealed board fingerprints ----------------------
     seatings = [plan_paired_seating(i, freerider_class=args.freerider,
@@ -249,6 +314,8 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
         "freerider_class": args.freerider,
         "golf_handle": "Golf",
         "anchors": anchors,
+        "constrained": bool(args.constrained),
+        "seed_disjointness": disjointness,
         "board": {"num_players": num_seats, "max_turns": args.max_turns,
                   "archetype": archetype.value, "map_radius": args.map_radius},
         "seat_rotation": "model_seat = seed_index % num_seats",
@@ -361,6 +428,25 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
                 telemetry["role_by_seat"] = ps.role_by_seat
                 tele_f.write(json.dumps(telemetry, default=str) + "\n")
                 tele_f.flush()
+
+                # Bank the MODEL seat's raw decisions (lean: no prompts) so the
+                # analysis can decompose fallback into structural (schema-
+                # invalid raw) vs semantic (schema-valid but illegal move) —
+                # the G2 residual-illegality report. Written atomically AFTER
+                # the sweep row banks; a crash between the two just re-runs the
+                # game on --resume (sweep.jsonl stays authoritative for done).
+                dec_dir = out_dir / "decisions"
+                dec_dir.mkdir(exist_ok=True)
+                with (dec_dir / f"decisions_seed{i}_{arm}.jsonl").open("w") as df:
+                    for rec in agent.decision_log:
+                        df.write(json.dumps({
+                            "seed_index": i, "arm": arm,
+                            "turn": rec["turn"], "phase": rec["phase"],
+                            "player": rec["player"],
+                            "raw_response": rec["raw_response"],
+                            "fell_back": rec["fell_back"],
+                            "n_coerced": rec["n_coerced"],
+                        }, default=str) + "\n")
 
                 if i < args.transcripts:
                     (out_dir / f"transcript_seed{i}_{arm}.md").write_text(
