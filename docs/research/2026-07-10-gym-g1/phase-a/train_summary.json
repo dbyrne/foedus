@@ -1,0 +1,45 @@
+{
+  "base_model": "Qwen/Qwen2.5-3B-Instruct",
+  "sft_path": "docs/research/2026-07-10-gym-g1/phase-a/sft_g1.jsonl",
+  "n_examples": 716,
+  "smoke": false,
+  "metrics": {
+    "train_runtime": 2607.9768,
+    "train_samples_per_second": 0.824,
+    "train_steps_per_second": 0.104,
+    "total_flos": 6.087418682145178e+16,
+    "train_loss": 0.14017111424494672,
+    "epoch": 3.0
+  },
+  "vram": "VRAM: peak_alloc=4.5GB, free_now=6.8GB / total=12.9GB (headroom vs total=8.4GB)",
+  "config": {
+    "sft_path": "docs/research/2026-07-10-gym-g1/phase-a/sft_g1.jsonl",
+    "base_model": "Qwen/Qwen2.5-3B-Instruct",
+    "out_dir": "/home/david/foedus-g1-run/qlora_entrant_v1",
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "load_in_4bit": true,
+    "max_length": 2048,
+    "per_device_batch_size": 1,
+    "grad_accum": 8,
+    "learning_rate": 0.0002,
+    "num_train_epochs": 3.0,
+    "max_steps": null,
+    "subset": null,
+    "seed": 0,
+    "logging_steps": 1,
+    "save_steps": 50,
+    "resume_from_checkpoint": null,
+    "smoke": false,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ]
+  }
+}

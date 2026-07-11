@@ -1,0 +1,22 @@
+{
+  "task": "G1 Phase A §A3 — serve provenance (fair-comparison hygiene)",
+  "conversion_path": "merge LoRA (fp16, CPU) -> llama.cpp convert_hf_to_gguf.py (f16 GGUF) -> ollama REST /api/blobs + /api/create (server-side quantize q4_K_M). NEVER ollama's safetensors converter (banked finetune-lab lesson: it corrupts Qwen2.5-3B tied embeddings).",
+  "trained_entrant": {
+    "ollama_tag": "foedus-entrant-v1:latest",
+    "quantization": "q4_K_M",
+    "base_model": "Qwen/Qwen2.5-3B-Instruct",
+    "adapter_dir": "/home/david/foedus-g1-run/qlora_entrant_v1 (LoRA r16 a32, 3 epochs, adapter_model.safetensors ~60MB, NOT committed — lives in local run dir + ollama)",
+    "f16_gguf_sha256": "sha256:5e0df6ad2f671d60e3cca49a320058692e311fbb93931b15144066cc5ba0c793"
+  },
+  "base_control": {
+    "ollama_tag": "foedus-base-v1:latest",
+    "quantization": "q4_K_M",
+    "base_model": "Qwen/Qwen2.5-3B-Instruct (HF snapshot aa8e72537993ba99e69dfaafa59ed015b17504d1)",
+    "note": "UNtrained base served via the IDENTICAL llama.cpp f16->q4_K_M path, no LoRA merge — so the Phase B eval compares distillation, not quant artifacts.",
+    "f16_gguf_sha256": "sha256:445149bf23a00d34d4e4af0f7626ab94e9a88f81e5199f869217221afb5c60d1"
+  },
+  "shared_ollama_layers": ["sha256:62fbfd9ed093...(template)", "sha256:a41f8c74b704...(params/tokenizer)"],
+  "llama_cpp": "/home/david/finetune-lab/llama.cpp/convert_hf_to_gguf.py",
+  "convert_python": "/home/david/finetune-lab/.venv/bin/python (torch 2.11.0+cu128, gguf)",
+  "api_cost": "$0 — all local (GPU train + ollama inference)"
+}
