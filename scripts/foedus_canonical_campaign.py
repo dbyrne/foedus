@@ -20,6 +20,12 @@ runner lacks:
     written under ``--out-dir`` in the format the scorecard + gym pipeline
     consume.
 
+  * **--fresh-identities (attribution-study control)** — per-game, never-
+    reused neutral handles + brand-new agent instances for the LLM seats each
+    game, so no cross-game identity exists for memory/ledger/reputation/rating
+    to accumulate on; within-game memory/ledger stay ON (every game is a
+    "game 0" of the persistent design). Freerider handle + rotation unchanged.
+
 Engine and single-game harness are untouched; this is a driver.
 
 Example (the canonical 8-game ruleset-v1 match):
@@ -69,6 +75,54 @@ except Exception:  # pragma: no cover - only hit when openskill missing
     RatingSystem = None
 
 
+# --- fresh per-game identities (attribution-study control) -----------------
+#
+# Neutral handle pool for --fresh-identities: game g's LLM seats draw
+# pool[g*k : (g+1)*k] (k = number of LLM entrants), so every LLM seat in every
+# game is a NEVER-REUSED handle and no cross-game identity exists for memory,
+# reputation, or rating to accumulate on. Deliberately excludes:
+#   * "Golf" (the stable freerider house handle), and
+#   * "Delta"/"Echo"/"Foxtrot" (the persistent-identity handles of the prior
+#     canonical arms), so no handle in a fresh-identity match collides with a
+#     persistent identity from another run operator-side.
+# 24 handles = the canonical 8-game x 3-LLM-seat match, exactly.
+FRESH_HANDLE_POOL = [
+    "Alfa", "Bravo", "Charlie", "Hotel", "India", "Juliett",
+    "Kilo", "Lima", "Mike", "November", "Oscar", "Papa",
+    "Quebec", "Romeo", "Sierra", "Tango", "Uniform", "Victor",
+    "Whiskey", "Xray", "Yankee", "Zulu", "Amber", "Cedar",
+]
+
+
+def fresh_identity_plan(num_games: int, n_llm: int, freerider_identity: str,
+                        pool: list[str] | None = None) -> list[list[str]]:
+    """Per-game roster identity lists for --fresh-identities.
+
+    Returns ``per_game[g] = [llm_handle_0, ..., llm_handle_{k-1}, freerider]``
+    where every LLM handle is unique across the WHOLE match (drawn from
+    ``pool`` in fixed order — deterministic, so a crash-resume regenerates the
+    identical plan from the same args) and the freerider keeps its stable
+    handle in every game. Raises ``ValueError`` if the pool is too small or
+    collides with the freerider handle.
+    """
+    pool = FRESH_HANDLE_POOL if pool is None else pool
+    need = num_games * n_llm
+    if need > len(pool):
+        raise ValueError(
+            f"--fresh-identities needs {need} unique handles "
+            f"({num_games} games x {n_llm} LLM seats) but the pool has only "
+            f"{len(pool)}")
+    used = pool[:need]
+    if len(set(used)) != len(used):
+        raise ValueError(f"fresh-identity pool contains duplicates: {used}")
+    if freerider_identity in used:
+        raise ValueError(
+            f"freerider handle {freerider_identity!r} collides with the "
+            f"fresh-identity pool")
+    return [used[g * n_llm:(g + 1) * n_llm] + [freerider_identity]
+            for g in range(num_games)]
+
+
 def _write_campaign_memory(out_dir: Path, agent, game_id: int, seat: int,
                            identity: str) -> None:
     """Persist one seat's cross-game memory (all records + verbatim self-notes)
@@ -106,10 +160,16 @@ def _read_jsonl_rows(path: Path) -> list[dict]:
 
 
 def _resume_state(out_dir: Path, completed_rows: list, persistent: dict,
-                  llm_entrants: list, entrant_identities: list, rating) -> None:
+                  llm_entrants: list, entrant_identities: list, rating, *,
+                  restore_memory: bool = True) -> None:
     """Restore in-RAM state a crashed match lost: each entrant's cross-game
     memory (matched by stable identity since seats rotate) and the OpenSkill
-    ratings (replayed from the completed sweep rows, in order)."""
+    ratings (replayed from the completed sweep rows, in order).
+
+    ``restore_memory=False`` (the --fresh-identities control) skips the memory
+    restore entirely: every game gets brand-new agents with empty memory by
+    design, so there is nothing to restore and the "no memory found" warning
+    would be misleading. Ratings are still replayed."""
     from foedus.agents.llm.campaign_memory import GameRecord
 
     completed = len(completed_rows)
@@ -120,29 +180,30 @@ def _resume_state(out_dir: Path, completed_rows: list, persistent: dict,
     # newest earlier game that has them (memory is cumulative, so an earlier
     # snapshot is a correct—if slightly staler—restore) instead of silently
     # resuming with zero cross-game memory.
-    by_identity: dict[str, list] = {}
-    mem_game = None
-    for g in range(completed - 1, -1, -1):
-        files = list(out_dir.glob(f"campaign_memory_game{g}_seat*.json"))
-        if files:
-            mem_game = g
-            for p in files:
-                d = json.loads(p.read_text())
-                by_identity[d.get("entrant_identity")] = d.get("records", [])
-            break
-    if completed > 0 and mem_game is None:
-        print("[resume] WARNING: no campaign_memory_game*_seat*.json found for "
-              f"{completed} completed game(s); resuming with EMPTY cross-game "
-              "memory.", file=sys.stderr)
-    elif mem_game is not None and mem_game != completed - 1:
-        print(f"[resume] note: newest persisted memory is game {mem_game} (not "
-              f"{completed - 1}); self-notes for games {mem_game + 1}.."
-              f"{completed - 1} were not written before the crash.",
-              file=sys.stderr)
-    for e in llm_entrants:
-        recs = [GameRecord.from_dict(r)
-                for r in by_identity.get(entrant_identities[e], [])]
-        persistent[e].load_campaign_records(recs)
+    if restore_memory:
+        by_identity: dict[str, list] = {}
+        mem_game = None
+        for g in range(completed - 1, -1, -1):
+            files = list(out_dir.glob(f"campaign_memory_game{g}_seat*.json"))
+            if files:
+                mem_game = g
+                for p in files:
+                    d = json.loads(p.read_text())
+                    by_identity[d.get("entrant_identity")] = d.get("records", [])
+                break
+        if completed > 0 and mem_game is None:
+            print("[resume] WARNING: no campaign_memory_game*_seat*.json found "
+                  f"for {completed} completed game(s); resuming with EMPTY "
+                  "cross-game memory.", file=sys.stderr)
+        elif mem_game is not None and mem_game != completed - 1:
+            print(f"[resume] note: newest persisted memory is game {mem_game} "
+                  f"(not {completed - 1}); self-notes for games {mem_game + 1}.."
+                  f"{completed - 1} were not written before the crash.",
+                  file=sys.stderr)
+        for e in llm_entrants:
+            recs = [GameRecord.from_dict(r)
+                    for r in by_identity.get(entrant_identities[e], [])]
+            persistent[e].load_campaign_records(recs)
 
     if rating is not None:
         from foedus.eval.ruleset import ranks_from_record
@@ -182,6 +243,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--model", default="sonnet", help="FOEDUS_LLM_MODEL.")
     p.add_argument("--cli-timeout", type=float, default=None,
                    help="FOEDUS_LLM_CLI_TIMEOUT seconds (default: client's 300).")
+    p.add_argument("--fresh-identities", action="store_true",
+                   help="ATTRIBUTION CONTROL: give the LLM seats brand-new, "
+                        "never-reused neutral handles AND brand-new agent "
+                        "instances every game, so no cross-game identity "
+                        "exists for memory/ledger/reputation/rating to "
+                        "accumulate on. Within-game memory + ledger stay ON "
+                        "(each game is exactly a 'game 0'). --entrants then "
+                        "only sets HOW MANY LLM seats there are; handles come "
+                        "from FRESH_HANDLE_POOL. The freerider keeps its "
+                        "stable handle and still rotates per §7.4.")
     p.add_argument("--no-rotation", action="store_true",
                    help="Pin entrants to fixed seats (disables §7.4 rotation). "
                         "For the memory-vs-rotation control arm only.")
@@ -223,6 +294,15 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
     freerider_entrants = {len(entrant_llm)}  # the single trailing freerider seat
     num_seats = len(entrant_identities)
     rotate = not args.no_rotation
+    fresh = args.fresh_identities
+    if fresh:
+        try:
+            per_game_identities = fresh_identity_plan(
+                args.num_games, len(entrant_llm), args.freerider_identity)
+        except ValueError as ex:
+            build_parser().error(str(ex))
+    else:
+        per_game_identities = [entrant_identities] * args.num_games
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -268,6 +348,14 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
         if secret.get("rotation") not in (None, rotate):
             mismatch.append(f"rotation {rotate} != sealed "
                             f"{secret.get('rotation')}")
+        if secret.get("fresh_identities") not in (None, fresh):
+            mismatch.append(f"fresh_identities {fresh} != sealed "
+                            f"{secret.get('fresh_identities')}")
+        if fresh and secret.get("per_game_identities") not in (
+                None, per_game_identities):
+            mismatch.append(
+                f"per_game_identities {per_game_identities} != sealed "
+                f"{secret.get('per_game_identities')}")
         if mismatch:
             build_parser().error(
                 "--resume: does not match the sealed match: " + "; ".join(mismatch))
@@ -293,30 +381,36 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
         secret_path.write_text(json.dumps(
             {"match_id": args.match_id, "num_games": args.num_games,
              "entrant_identities": entrant_identities, "rotation": rotate,
+             "fresh_identities": fresh,
+             "per_game_identities": per_game_identities if fresh else None,
              "seeds": seeds, "nonce": nonce}, indent=2))
 
     # --- per-game seating plan (audit + dry-run) -----------------------------
     seatings = [
-        campaign.plan_seating(g, entrant_identities, freerider_entrants,
+        campaign.plan_seating(g, per_game_identities[g], freerider_entrants,
                               rotate=rotate)
         for g in range(args.num_games)
     ]
-    freerider_handles = [entrant_identities[e] for e in sorted(freerider_entrants)]
+    # Stable in both modes: the freerider keeps its handle every game.
+    freerider_handles = [args.freerider_identity]
     plan = {
         "match_id": args.match_id,
         "num_games": args.num_games,
         "num_seats": num_seats,
         "rotation": rotate,
-        "entrant_identities": entrant_identities,
+        # Persistent mode: the stable roster handles. Fresh mode: None — there
+        # ARE no stable LLM identities; see per_game_identities instead.
+        "entrant_identities": None if fresh else entrant_identities,
+        "fresh_identities": fresh,
+        "per_game_identities": per_game_identities if fresh else None,
         "freerider_entrants": sorted(freerider_entrants),
         # operator-only (never shown to agents): which neutral handle is the
         # freerider house anchor, and each handle's true role.
         "freerider_handles": freerider_handles,
         "freerider_class": args.freerider,
         "handle_roles": {
-            entrant_identities[e]: ("freerider" if e in freerider_entrants
-                                    else "llm-entrant")
-            for e in range(num_seats)
+            ids[e]: ("freerider" if e in freerider_entrants else "llm-entrant")
+            for ids in per_game_identities for e in range(num_seats)
         },
         "board": {"num_players": num_seats, "max_turns": max_turns,
                   "map_radius": map_radius, "archetype": archetype.value,
@@ -346,8 +440,13 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
     print(f"seats={num_seats} turns={max_turns} radius={map_radius} "
           f"archetype={archetype.value} detente={cfg.detente_threshold} "
           f"rotation={'ON' if rotate else 'OFF'}")
-    print(f"entrants={entrant_identities}  freerider_seat(entrant)="
-          f"{sorted(freerider_entrants)}")
+    if fresh:
+        print(f"FRESH per-game identities (attribution control): "
+              f"{per_game_identities}  freerider_seat(entrant)="
+              f"{sorted(freerider_entrants)}")
+    else:
+        print(f"entrants={entrant_identities}  freerider_seat(entrant)="
+              f"{sorted(freerider_entrants)}")
     print(f"seed commitment (published pre-match): {sealed.commit}")
     print(f"games={args.num_games}  out-dir={out_dir}")
 
@@ -375,8 +474,10 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
     # Persistent per-entrant LLM agents (index by entrant, NOT seat, so memory
     # travels with the entrant across rotated seats). Freerider is a stateless
     # heuristic re-instantiated inside run_one_llm_game each game.
+    # --fresh-identities: the dict is REBUILT with brand-new instances at the
+    # top of every game (see the loop), so nothing survives between games.
     llm_entrants = [e for e in range(num_seats) if e not in freerider_entrants]
-    persistent = {e: factory() for e in llm_entrants}
+    persistent = {} if fresh else {e: factory() for e in llm_entrants}
 
     rating = RatingSystem() if RatingSystem is not None else None
     transcripts = args.transcripts if args.transcripts is not None else args.num_games
@@ -388,7 +489,7 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
 
     if resuming:
         _resume_state(out_dir, completed_rows, persistent, llm_entrants,
-                      entrant_identities, rating)
+                      entrant_identities, rating, restore_memory=not fresh)
         # Seed the whole-match accumulators from the completed games on disk so
         # run_summary.json reports true whole-match totals, not just the resume
         # leg. (sweep wall_clock_s = per-game engine compute; telemetry carries
@@ -407,7 +508,16 @@ def main(argv: list[str] | None = None, *, agent_factory=None) -> int:
         for g in range(completed, args.num_games):
             gs = seatings[g]
             seed = seeds[g]
-            # clear within-game caches on every reused agent (memory kept)
+            if fresh:
+                # ATTRIBUTION CONTROL: brand-new agent instances every game —
+                # no cross-game memory/ledger/reputation CAN persist, because
+                # no object (and no identity handle) survives between games.
+                # Within-game memory/ledger config is identical (same factory,
+                # same env flags): each game is exactly a "game 0".
+                for e in llm_entrants:
+                    persistent[e] = factory()
+            # clear within-game caches on every reused agent (memory kept);
+            # harmless no-op on the fresh instances above
             for e in llm_entrants:
                 persistent[e].reset_for_new_game()
 
