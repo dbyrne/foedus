@@ -9,7 +9,12 @@ import pytest
 
 pytest.importorskip("openskill")
 
-from foedus.core import Unit  # noqa: E402  (after skip)
+from foedus.core import Hold, Press, Stance, Unit  # noqa: E402  (after skip)
+from foedus.press import (  # noqa: E402
+    finalize_round,
+    signal_done,
+    submit_press_tokens,
+)
 from foedus.rating import Rating, RatingSystem  # noqa: E402
 from foedus.scoring import compute_match_result  # noqa: E402
 
@@ -130,23 +135,74 @@ def test_duplicate_identity_within_match_loses_no_update() -> None:
     assert rs.get("X").mu != pytest.approx(mu_by_seat[2])
 
 
-def test_detente_uses_tied_top_ranks() -> None:
-    """In a détente, all survivors share rank 1 — but payout is score-weighted.
-    OpenSkill should treat them as tied (no rating swing between survivors).
-    """
-    from foedus.core import Hold
-    from foedus.resolve import resolve_turn
+def _all_ally_press(num_players: int) -> dict[int, Press]:
+    """Every player signals ALLY toward every other player."""
+    return {
+        i: Press(
+            stance={j: Stance.ALLY for j in range(num_players) if j != i},
+            intents=[],
+        )
+        for i in range(num_players)
+    }
 
+
+def _run_ally_round(state, orders):
+    """One round of all-pairs mutual-ALLY press, then resolve `orders`."""
+    s = state
+    press = _all_ally_press(state.config.num_players)
+    for p, pr in press.items():
+        s = submit_press_tokens(s, p, pr)
+    for p in press:
+        s = signal_done(s, p)
+    return finalize_round(s, orders)
+
+
+def _reach_detente_two_player():
+    """Drive a 2-player game to a v2 stance-anchored détente: two rounds of
+    mutual-ALLY press while both players hold, hitting `detente_threshold=2`.
+    Returns the terminal state (détente reached, both players surviving)."""
     m = line_map(5)
     s = make_state(m, [Unit(0, 0, 0), Unit(1, 1, 4)],
-                   num_players=2, max_turns=100, peace_threshold=2)
+                   num_players=2, max_turns=100, detente_threshold=2)
+    orders = {0: {0: Hold()}, 1: {1: Hold()}}
     for _ in range(2):
-        s = resolve_turn(s, {0: {0: Hold()}, 1: {1: Hold()}})
+        s = _run_ally_round(s, orders)
     assert s.detente_reached
+    return s
+
+
+def test_detente_uses_tied_top_ranks() -> None:
+    """Pin the détente ranking + payout contract (v2 stance-anchored détente).
+
+    Détente is reached via a mutual-ALLY press streak (not passive Holds).
+    Ranks are always score-order competition ranks — détente does NOT flatten
+    them — so a genuine rank *tie* at the top requires *equal* survivor scores.
+    Payout in détente is *linear* in score (not the non-détente sum-of-squares).
+
+    Pinned invariants:
+      - Equal-score survivors  → both share rank 1 (earns the "tied top ranks"
+        name), each paid an equal 0.5 split.
+      - Unequal-score survivors → ranks 1 and 2 (détente does not flatten them),
+        paid the *linear* détente split (100/150, 50/150) — proving the
+        détente-specific payout path, not the sum-of-squares path (~0.74/0.26).
+      - `match.detente is True` in both cases.
+    """
+    # Equal scores → shared top rank (the genuine "tied" case).
+    s = _reach_detente_two_player()
+    s.scores = {0: 100.0, 1: 100.0}
+    tie = compute_match_result(s)
+    assert tie.detente is True
+    assert tie.rank[0] == 1
+    assert tie.rank[1] == 1
+    assert tie.payout[0] == pytest.approx(0.5)
+    assert tie.payout[1] == pytest.approx(0.5)
+
+    # Unequal scores → score-ordered ranks and the linear détente split.
+    s = _reach_detente_two_player()
     s.scores = {0: 100.0, 1: 50.0}
     match = compute_match_result(s)
-    # Both detente survivors are rank 1 in our scoring (since both detente_reached)
-    # ... wait, our compute_ranks uses score order even in detente. Confirm.
-    # Per implementation: ranks are by score even in detente. So 0=1, 1=2.
+    assert match.detente is True
     assert match.rank[0] == 1
     assert match.rank[1] == 2
+    assert match.payout[0] == pytest.approx(100 / 150)
+    assert match.payout[1] == pytest.approx(50 / 150)
