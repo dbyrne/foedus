@@ -76,29 +76,50 @@ class StubLLMClient:
 
 class OllamaClient:
     """HTTP client for a local Ollama server (`/api/chat`). Default
-    backend — free, no API key, unlimited local play."""
+    backend — free, no API key, unlimited local play.
+
+    Optional constrained decoding (`format`): Ollama accepts a JSON schema on
+    `/api/chat` and compiles it to a generation grammar so the model can only
+    emit schema-conforming text. `format` is **off by default** -- when it is
+    None the request is byte-identical to before (no `format` key sent), so
+    every existing caller is unaffected. A schema may be supplied per-instance
+    (constructor) or per-call (`complete(..., format=...)`, which wins); the G2
+    eval passes the per-phase schema (see `foedus.agents.llm.schema`).
+    """
 
     def __init__(self, model: str | None = None, host: str | None = None,
-                 timeout: float = 120.0) -> None:
+                 timeout: float = 120.0, format: dict | None = None) -> None:
         self.model = model or os.environ.get("FOEDUS_LLM_MODEL", "llama3.1")
         self.host = (
             host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434"
         ).rstrip("/")
         self.timeout = timeout
+        #: Default constrained-decoding schema for every call; None => send no
+        #: `format` (unconstrained). A per-call `format=` overrides this.
+        self.format = format
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str,
+                 format: dict | None = None) -> str:
         import httpx
+
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+        }
+        # Per-call schema wins over the instance default; only send `format` when
+        # a schema is actually in effect so the unconstrained request stays
+        # byte-identical to the pre-G2 behavior.
+        effective_format = format if format is not None else self.format
+        if effective_format is not None:
+            payload["format"] = effective_format
 
         r = httpx.post(
             f"{self.host}/api/chat",
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "stream": False,
-            },
+            json=payload,
             timeout=self.timeout,
         )
         r.raise_for_status()

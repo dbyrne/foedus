@@ -1,0 +1,168 @@
+{
+  "config": {
+    "n_structural_per_phase": 40,
+    "n_games": 4,
+    "max_turns": 8,
+    "models": {
+      "base": "foedus-base-v1",
+      "entrant": "foedus-entrant-v1"
+    },
+    "host": "http://localhost:11434"
+  },
+  "part_a_controlled_replay": {
+    "base": {
+      "unconstrained": {
+        "negotiate": {
+          "n": 40,
+          "json_ok": 40,
+          "decision_valid": 2,
+          "decision_valid_rate": 0.05
+        },
+        "orders": {
+          "n": 40,
+          "json_ok": 40,
+          "decision_valid": 10,
+          "decision_valid_rate": 0.25
+        },
+        "_all": {
+          "n": 80,
+          "decision_valid": 12,
+          "decision_valid_rate": 0.15
+        }
+      },
+      "constrained": {
+        "negotiate": {
+          "n": 40,
+          "json_ok": 40,
+          "decision_valid": 40,
+          "decision_valid_rate": 1.0
+        },
+        "orders": {
+          "n": 40,
+          "json_ok": 40,
+          "decision_valid": 40,
+          "decision_valid_rate": 1.0
+        },
+        "_all": {
+          "n": 80,
+          "decision_valid": 80,
+          "decision_valid_rate": 1.0
+        }
+      }
+    },
+    "entrant": {
+      "unconstrained": {
+        "negotiate": {
+          "n": 40,
+          "json_ok": 40,
+          "decision_valid": 40,
+          "decision_valid_rate": 1.0
+        },
+        "orders": {
+          "n": 40,
+          "json_ok": 40,
+          "decision_valid": 40,
+          "decision_valid_rate": 1.0
+        },
+        "_all": {
+          "n": 80,
+          "decision_valid": 80,
+          "decision_valid_rate": 1.0
+        }
+      },
+      "constrained": {
+        "negotiate": {
+          "n": 40,
+          "json_ok": 40,
+          "decision_valid": 40,
+          "decision_valid_rate": 1.0
+        },
+        "orders": {
+          "n": 40,
+          "json_ok": 40,
+          "decision_valid": 40,
+          "decision_valid_rate": 1.0
+        },
+        "_all": {
+          "n": 80,
+          "decision_valid": 80,
+          "decision_valid_rate": 1.0
+        }
+      }
+    }
+  },
+  "part_b_fallback_decomposition": {
+    "base": {
+      "unconstrained": {
+        "n_decisions": 64,
+        "decision_valid": 6,
+        "structural_invalid": 58,
+        "total_parse_fallback": 31,
+        "residual_illegal_decisions": 2,
+        "orders_emitted": 37,
+        "orders_illegal_coerced": 31,
+        "by_phase": {
+          "negotiate": 32,
+          "orders": 32
+        },
+        "structural_invalid_rate": 0.90625,
+        "total_parse_fallback_rate": 0.484375,
+        "residual_illegal_decision_rate": 0.3333333333333333,
+        "order_illegality_rate": 0.8378378378378378
+      },
+      "constrained": {
+        "n_decisions": 64,
+        "decision_valid": 64,
+        "structural_invalid": 0,
+        "total_parse_fallback": 11,
+        "residual_illegal_decisions": 11,
+        "orders_emitted": 35,
+        "orders_illegal_coerced": 3,
+        "by_phase": {
+          "negotiate": 32,
+          "orders": 32
+        },
+        "structural_invalid_rate": 0.0,
+        "total_parse_fallback_rate": 0.171875,
+        "residual_illegal_decision_rate": 0.171875,
+        "order_illegality_rate": 0.08571428571428572
+      }
+    },
+    "entrant": {
+      "unconstrained": {
+        "n_decisions": 64,
+        "decision_valid": 64,
+        "structural_invalid": 0,
+        "total_parse_fallback": 12,
+        "residual_illegal_decisions": 12,
+        "orders_emitted": 47,
+        "orders_illegal_coerced": 8,
+        "by_phase": {
+          "negotiate": 32,
+          "orders": 32
+        },
+        "structural_invalid_rate": 0.0,
+        "total_parse_fallback_rate": 0.1875,
+        "residual_illegal_decision_rate": 0.1875,
+        "order_illegality_rate": 0.1702127659574468
+      },
+      "constrained": {
+        "n_decisions": 64,
+        "decision_valid": 64,
+        "structural_invalid": 0,
+        "total_parse_fallback": 12,
+        "residual_illegal_decisions": 12,
+        "orders_emitted": 39,
+        "orders_illegal_coerced": 7,
+        "by_phase": {
+          "negotiate": 32,
+          "orders": 32
+        },
+        "structural_invalid_rate": 0.0,
+        "total_parse_fallback_rate": 0.1875,
+        "residual_illegal_decision_rate": 0.1875,
+        "order_illegality_rate": 0.1794871794871795
+      }
+    }
+  }
+}
