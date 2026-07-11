@@ -48,3 +48,8 @@ docs/research/depth/*.json
 
 # Git worktrees for isolated feature work
 .worktrees/
+
+# G1 Phase B: the sealed seed secret stays operator-private until the
+# post-campaign reveal (seeds are published then in seed_manifest.revealed.json,
+# which verify() checks against the pre-committed commitment). Never commit it.
+docs/research/2026-07-10-gym-g1/phase-b/run/seed_manifest.secret.json
