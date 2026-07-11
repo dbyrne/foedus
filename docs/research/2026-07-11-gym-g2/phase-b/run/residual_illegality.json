@@ -1,0 +1,59 @@
+{
+  "run_dir": "docs/research/2026-07-11-gym-g2/phase-b/run",
+  "constrained": true,
+  "num_seeds": 20,
+  "seed_disjointness": {
+    "eval_seeds": 20,
+    "checked_sources": [
+      {
+        "path": "docs/research/2026-07-04-canonical-campaign-v1/run/seed_manifest.revealed.json",
+        "n_seeds": 8
+      },
+      {
+        "path": "docs/research/2026-07-10-canonical-sonnet-arm/run/seed_manifest.revealed.json",
+        "n_seeds": 4
+      },
+      {
+        "path": "docs/research/2026-07-10-gym-g1/phase-b/run/seed_manifest.revealed.json",
+        "n_seeds": 20
+      }
+    ],
+    "disjoint": true
+  },
+  "per_arm": {
+    "trained": {
+      "n_decisions": 474,
+      "decision_valid": 474,
+      "structural_fallback": 0,
+      "total_parse_fallback": 137,
+      "residual_illegal_decisions": 137,
+      "orders_emitted": 289,
+      "orders_illegal_coerced": 52,
+      "by_phase": {
+        "negotiate": 237,
+        "orders": 237
+      },
+      "structural_fallback_rate": 0.0,
+      "total_parse_fallback_rate": 0.2890295358649789,
+      "residual_illegal_decision_rate": 0.2890295358649789,
+      "order_illegality_rate": 0.17993079584775087
+    },
+    "base": {
+      "n_decisions": 472,
+      "decision_valid": 472,
+      "structural_fallback": 0,
+      "total_parse_fallback": 196,
+      "residual_illegal_decisions": 196,
+      "orders_emitted": 319,
+      "orders_illegal_coerced": 84,
+      "by_phase": {
+        "negotiate": 236,
+        "orders": 236
+      },
+      "structural_fallback_rate": 0.0,
+      "total_parse_fallback_rate": 0.4152542372881356,
+      "residual_illegal_decision_rate": 0.4152542372881356,
+      "order_illegality_rate": 0.26332288401253917
+    }
+  }
+}

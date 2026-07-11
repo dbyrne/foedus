@@ -54,6 +54,75 @@ def test_ollama_client_has_sane_defaults(monkeypatch) -> None:
     assert client.host.startswith("http://")
 
 
+class _FakeResponse:
+    def __init__(self, content: str) -> None:
+        self._content = content
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def json(self) -> dict:
+        return {"message": {"content": self._content}}
+
+
+def _capture_post(monkeypatch):
+    """Patch httpx.post to record the JSON payload and return a canned reply."""
+    captured: dict = {}
+
+    def fake_post(url, json, timeout):  # noqa: A002 - mirror httpx's kwarg name
+        captured["url"] = url
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return _FakeResponse("ok")
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", fake_post)
+    return captured
+
+
+def test_ollama_default_sends_no_format_key(monkeypatch) -> None:
+    """Existing callers are unaffected: with no schema the request carries no
+    `format` key at all (byte-identical to the pre-G2 payload)."""
+    captured = _capture_post(monkeypatch)
+    OllamaClient(model="m").complete("sys", "user")
+    assert "format" not in captured["json"]
+    assert captured["json"]["model"] == "m"
+    assert captured["json"]["stream"] is False
+    assert captured["json"]["messages"] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "user"},
+    ]
+
+
+def test_ollama_instance_format_is_sent(monkeypatch) -> None:
+    captured = _capture_post(monkeypatch)
+    schema = {"type": "object"}
+    OllamaClient(model="m", format=schema).complete("sys", "user")
+    assert captured["json"]["format"] == schema
+
+
+def test_ollama_per_call_format_is_sent(monkeypatch) -> None:
+    captured = _capture_post(monkeypatch)
+    schema = {"type": "object", "required": ["orders"]}
+    OllamaClient(model="m").complete("sys", "user", format=schema)
+    assert captured["json"]["format"] == schema
+
+
+def test_ollama_per_call_format_overrides_instance(monkeypatch) -> None:
+    captured = _capture_post(monkeypatch)
+    inst = {"type": "object", "title": "instance"}
+    call = {"type": "object", "title": "percall"}
+    OllamaClient(model="m", format=inst).complete("sys", "user", format=call)
+    assert captured["json"]["format"] == call
+
+
+def test_ollama_complete_still_matches_protocol_two_arg_call(monkeypatch) -> None:
+    """A caller using the base LLMClient protocol (system, user) keeps working;
+    the new `format` arg is optional and defaults to unconstrained."""
+    _capture_post(monkeypatch)
+    assert OllamaClient(model="m").complete("sys", "user") == "ok"
+
+
 def test_claude_client_reads_model_and_key_from_env(monkeypatch) -> None:
     monkeypatch.setenv("FOEDUS_LLM_MODEL", "claude-haiku-4-5-20251001")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-123")

@@ -284,3 +284,187 @@ def test_runner_resume_from_fresh_seal_runs_all(tmp_path):
     assert len(rows) == 4  # 2 seeds * 2 arms
     revealed = json.loads((out / "seed_manifest.revealed.json").read_text())
     assert revealed["seeds"] is not None and len(revealed["seeds"]) == 2
+
+
+# --- G2: constrained mode + seed-disjointness + decision banking -------------
+
+def test_make_model_agent_wraps_client_when_constrained():
+    """--constrained wires PhaseConstrainedClient around the OllamaClient (no
+    network call: construction only)."""
+    import argparse
+    import foedus_phaseb_paired_eval as pb
+    from foedus.agents.llm.client import OllamaClient
+    from foedus.agents.llm.schema import PhaseConstrainedClient
+
+    args = argparse.Namespace(
+        trained_model="t", base_model="b", ollama_host=None,
+        ollama_timeout=1.0, constrained=True)
+    agent = pb._make_model_agent("base", args, None)
+    assert isinstance(agent._client, PhaseConstrainedClient)
+    assert isinstance(agent._client.inner, OllamaClient)
+    assert agent._client.inner.model == "b"
+
+    args.constrained = False
+    agent = pb._make_model_agent("trained", args, None)
+    assert isinstance(agent._client, OllamaClient)   # unwrapped when OFF
+    assert agent._client.model == "t"
+
+
+def test_assert_seed_disjointness(tmp_path):
+    import foedus_phaseb_paired_eval as pb
+
+    m = tmp_path / "corpus_manifest.json"
+    m.write_text(json.dumps({"seeds": [111, 222, 333]}))
+
+    rec = pb._assert_seed_disjointness([1, 2, 3], [str(m)])
+    assert rec["disjoint"] is True
+    assert rec["checked_sources"][0]["n_seeds"] == 3
+
+    with pytest.raises(SystemExit):                       # overlap -> abort
+        pb._assert_seed_disjointness([222, 5], [str(m)])
+
+    empty = tmp_path / "empty.json"
+    empty.write_text(json.dumps({"seeds": []}))
+    with pytest.raises(SystemExit):                       # empty -> loud fail
+        pb._assert_seed_disjointness([1], [str(empty)])
+
+
+def test_runner_constrained_recorded_and_resume_guarded(tmp_path):
+    """--constrained is sealed into the secret + plan, and --resume refuses a
+    flipped flag (a resume must not mix constrained + unconstrained games)."""
+    import foedus_phaseb_paired_eval as pb
+
+    out = tmp_path / "run"
+    base = ["--match-id", "phaseb-g2-flag", "--num-seeds", "2",
+            "--out-dir", str(out), "--seed-rng", "7", "--constrained"]
+    assert pb.main(base + ["--dry-run"]) == 0
+    secret = json.loads((out / "seed_manifest.secret.json").read_text())
+    plan = json.loads((out / "phaseb_plan.json").read_text())
+    assert secret["constrained"] is True
+    assert plan["constrained"] is True
+
+    # resume WITHOUT --constrained -> refused
+    with pytest.raises(SystemExit):
+        pb.main(["--match-id", "phaseb-g2-flag", "--num-seeds", "2",
+                 "--out-dir", str(out), "--resume"])
+
+
+def test_runner_disjointness_gate_blocks_contaminated_seal(tmp_path):
+    """A seal whose drawn seeds intersect a corpus manifest aborts BEFORE any
+    plan/game; a disjoint corpus seals fine and records the check in the plan."""
+    import foedus_phaseb_paired_eval as pb
+
+    # seed-rng 1 gives a deterministic seed draw; capture it first.
+    probe = tmp_path / "probe"
+    assert pb.main(["--match-id", "phaseb-g2-dis", "--num-seeds", "2",
+                    "--out-dir", str(probe), "--seed-rng", "1",
+                    "--dry-run"]) == 0
+    drawn = json.loads((probe / "seed_manifest.secret.json").read_text())["seeds"]
+
+    contaminated = tmp_path / "corpus_bad.json"
+    contaminated.write_text(json.dumps({"seeds": [drawn[0], 42]}))
+    with pytest.raises(SystemExit):
+        pb.main(["--match-id", "phaseb-g2-dis", "--num-seeds", "2",
+                 "--out-dir", str(tmp_path / "bad"), "--seed-rng", "1",
+                 "--assert-disjoint-from", str(contaminated), "--dry-run"])
+
+    clean = tmp_path / "corpus_ok.json"
+    clean.write_text(json.dumps({"seeds": [42, 43]}))
+    out = tmp_path / "good"
+    assert pb.main(["--match-id", "phaseb-g2-dis", "--num-seeds", "2",
+                    "--out-dir", str(out), "--seed-rng", "1",
+                    "--assert-disjoint-from", str(clean), "--dry-run"]) == 0
+    plan = json.loads((out / "phaseb_plan.json").read_text())
+    assert plan["seed_disjointness"]["disjoint"] is True
+    assert plan["seed_disjointness"]["checked_sources"][0]["n_seeds"] == 2
+
+
+def test_runner_banks_model_decision_logs(tmp_path):
+    """Every (seed, arm) game banks a lean decisions file whose row count
+    equals the banked n_decisions — the input for the G2 residual analysis."""
+    import foedus_phaseb_paired_eval as pb
+
+    def stub_factory():
+        from foedus.agents.llm.client import StubLLMClient
+        from foedus.agents.llm.diplomat import LLMDiplomat
+        return LLMDiplomat(client=StubLLMClient(["{}"] * 400))
+
+    out = tmp_path / "run"
+    rc = pb.main([
+        "--match-id", "phaseb-g2-dec", "--num-seeds", "1", "--max-turns", "2",
+        "--out-dir", str(out), "--seed-rng", "9",
+    ], agent_factory=stub_factory)
+    assert rc == 0
+    rows = [json.loads(l) for l in (out / "sweep.jsonl").read_text().splitlines()
+            if l.strip()]
+    for r in rows:
+        dec = out / "decisions" / f"decisions_seed{r['seed_index']}_{r['arm']}.jsonl"
+        assert dec.exists()
+        dec_rows = [json.loads(l) for l in dec.read_text().splitlines() if l.strip()]
+        assert len(dec_rows) == r["n_decisions"]
+        assert {d["phase"] for d in dec_rows} <= {"negotiate", "orders"}
+        assert all("raw_response" in d and "fell_back" in d for d in dec_rows)
+
+
+def test_residual_analysis_decomposes_and_guards(tmp_path):
+    """foedus_g2_residual_analysis: correct per-arm decomposition on a synthetic
+    run dir; hard-fails on a decisions/sweep row-count mismatch."""
+    import foedus_g2_residual_analysis as ra
+
+    run = tmp_path / "run"
+    (run / "decisions").mkdir(parents=True)
+    (run / "phaseb_plan.json").write_text(json.dumps(
+        {"num_seeds": 1, "constrained": True}))
+    (run / "seed_manifest.revealed.json").write_text(json.dumps({"seeds": [77]}))
+
+    valid_orders = '{"orders": {"1": {"type": "Move", "dest": 9}}}'
+    invalid_orders = 'not json at all'
+    sweep = [
+        {"seed_index": 0, "arm": "trained", "n_decisions": 2},
+        {"seed_index": 0, "arm": "base", "n_decisions": 2},
+    ]
+    (run / "sweep.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in sweep) + "\n")
+
+    def dec(arm, rows):
+        p = run / "decisions" / f"decisions_seed0_{arm}.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+
+    # trained: both schema-valid; one fell back on an illegal order (residual).
+    dec("trained", [
+        {"phase": "orders", "raw_response": valid_orders,
+         "fell_back": False, "n_coerced": 0},
+        {"phase": "orders", "raw_response": valid_orders,
+         "fell_back": True, "n_coerced": 1},
+    ])
+    # base: one structural fallback (non-JSON), one clean.
+    dec("base", [
+        {"phase": "orders", "raw_response": invalid_orders,
+         "fell_back": True, "n_coerced": 1},
+        {"phase": "orders", "raw_response": valid_orders,
+         "fell_back": False, "n_coerced": 0},
+    ])
+
+    corpus = tmp_path / "corpus.json"
+    corpus.write_text(json.dumps({"seeds": [1, 2, 3]}))
+    res = ra.analyze(run, [str(corpus)])
+
+    tr, ba = res["per_arm"]["trained"], res["per_arm"]["base"]
+    assert tr["structural_fallback"] == 0
+    assert tr["residual_illegal_decisions"] == 1
+    assert tr["orders_illegal_coerced"] == 1 and tr["orders_emitted"] == 2
+    assert ba["structural_fallback"] == 1
+    assert ba["residual_illegal_decisions"] == 0
+    assert res["seed_disjointness"]["disjoint"] is True
+
+    # Disjointness violation -> abort.
+    bad_corpus = tmp_path / "corpus_bad.json"
+    bad_corpus.write_text(json.dumps({"seeds": [77]}))
+    with pytest.raises(SystemExit):
+        ra.analyze(run, [str(bad_corpus)])
+
+    # Row-count mismatch -> refuse to report.
+    dec("base", [{"phase": "orders", "raw_response": valid_orders,
+                  "fell_back": False, "n_coerced": 0}])
+    with pytest.raises(SystemExit):
+        ra.analyze(run, [str(corpus)])
