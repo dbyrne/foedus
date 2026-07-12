@@ -92,10 +92,11 @@ Two reads jump out beyond A1 itself:
    fragility warning. Paid punishment remains a rare event everywhere.
 2. **Fresh tables subsidize the freerider the most** (1.88 supports/game vs
    0.38/0.25/1.00). The Sonnet arm's first-half→second-half subsidy drop
-   (2.0 → 0.0) was read as "learning to punish"; with persistence removed,
-   the learning never happens — each fresh table starts naive and keeps
-   feeding Golf (game 1: subsidy 4 and Golf **won**; game 4: subsidy 5).
-   Exploratory observation, not a pre-registered test.
+   (2.0 → 0.0, to zero) was read as "learning to punish"; this run's
+   half-split is 2.0 → 1.75 — a decline **far weaker** than the Sonnet
+   arm's, with each fresh table starting naive and most of the feeding
+   intact in the second half (game 1: subsidy 4 and Golf **won**; game 4:
+   subsidy 5). Exploratory observation, not a pre-registered test.
 
 ## 4. A2 (mechanism) — punishment-pipeline linkage
 
@@ -143,15 +144,21 @@ Per-game winner margins:
 | | winner − runner-up (per game) | mean | winner − table mean, mean |
 |---|---|---:|---:|
 | Sonnet arm (4 g, Foxtrot won 3) | 3, 7, 15, 1 | 6.5 | 9.3 |
-| this study (8 g, 8 distinct winners) | 5, 4, 1, 8, 3, 4, 2, 9 | 4.5 | 7.0 |
+| this study (8 g, 7 distinct winners) | 5, 4, 1, 8, 3, 4, 2, 9 | 4.5 | 7.0 |
 
 Fresh-identity games still produce clear per-game winners — sometimes at
 Foxtrot-like scale (g3: +12.25 over table mean; g6: +10.0) — but dominance
-is a bit shallower on average, is never concentrated (8 winners in 8 games;
-identity-level concentration is impossible by construction), and, decisively,
-**per-game emergent dominance did not translate into freerider containment**
-(Golf itself was the "dominant winner" twice). A persistent Foxtrot was not
-inevitable: it was a product of the persistent-identity design.
+is a bit shallower on average and far less concentrated: **7 distinct
+winners in 8 games** (Bravo, Golf ×2, Oscar, Quebec, Uniform, Yankee,
+Zulu). Identity-level concentration is impossible by construction only for
+the 24 single-game LLM identities; **Golf — the one identity that plays all
+8 games — is exempt from that constraint, and is in fact the run's only
+repeat winner.** That irony cuts the same way as A1: the sole persistent
+identity at this table is its most frequent winner, which reinforces, not
+weakens, the VANISHES reading — **per-game emergent dominance did not
+translate into freerider containment** (twice the "dominant winner" *was*
+the freerider). A persistent Foxtrot was not inevitable: it was a product
+of the persistent-identity design.
 
 ## 6. Verdict
 
