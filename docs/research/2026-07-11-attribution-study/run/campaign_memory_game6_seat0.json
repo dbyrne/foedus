@@ -1,0 +1,56 @@
+{
+  "game_index": 6,
+  "seat": 0,
+  "entrant_identity": "Yankee",
+  "records": [
+    {
+      "facts": {
+        "game_index": 6,
+        "seed": 6161810562470044655,
+        "my_seat": 0,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 42.0,
+          "1": 23.0,
+          "2": 40.0,
+          "3": 23.0
+        },
+        "per_opponent": {
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Yankee",
+        "handles": {
+          "0": "Yankee",
+          "1": "Golf",
+          "2": "Whiskey",
+          "3": "Xray"
+        }
+      },
+      "self_note": "Golf: consistently declared ally toward me (11/11 turns) but no pact ever formed and no real support exchanged either way\u2014likely uses friendly signaling without commitment; don't rely on it for actual backing, but safe to accept nominal non-aggression. Whiskey: zero alliance signals yet finished a close second (40 vs my 42)\u2014quietly efficient, watch them closely as the real threat even without diplomatic engagement. Xray: no signals, low score\u2014low priority, minimal threat so far."
+    }
+  ]
+}

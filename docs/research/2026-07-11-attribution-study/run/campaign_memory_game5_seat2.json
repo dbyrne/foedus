@@ -1,0 +1,56 @@
+{
+  "game_index": 5,
+  "seat": 2,
+  "entrant_identity": "Uniform",
+  "records": [
+    {
+      "facts": {
+        "game_index": 5,
+        "seed": 5960678794909749136,
+        "my_seat": 2,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 32.0,
+          "1": 27.0,
+          "2": 36.0,
+          "3": 31.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 8,
+            "my_supports_of_them": 2,
+            "their_support_intent_toward_me": 2,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 9,
+            "my_supports_of_them": 5,
+            "their_support_intent_toward_me": 4,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Uniform",
+        "handles": {
+          "0": "Golf",
+          "1": "Tango",
+          "2": "Uniform",
+          "3": "Victor"
+        }
+      },
+      "self_note": "Won this one (36) as Uniform, edging Victor(31)/Golf(32)/Tango(27). No pacts formed despite heavy alliance talk\u2014nobody accepted, nobody breached, so likely all cautious/non-committal players.\n\nVictor: most reliable reciprocal support (5 given/4 received) despite no pact\u2014treat as trustworthy de facto ally, worth proposing pact early next time.\nTango: some mutual support (2/2) but weaker commitment\u2014secondary partner.\nGolf: talked ally 11/11 turns but zero actual support either way\u2014pure lip service, don't trust declarations, watch for opportunism."
+    }
+  ]
+}

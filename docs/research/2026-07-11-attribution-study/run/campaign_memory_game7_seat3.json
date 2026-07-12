@@ -1,0 +1,56 @@
+{
+  "game_index": 7,
+  "seat": 3,
+  "entrant_identity": "Zulu",
+  "records": [
+    {
+      "facts": {
+        "game_index": 7,
+        "seed": 356022034328442787,
+        "my_seat": 3,
+        "my_rank": 1,
+        "n_players": 4,
+        "final_scores": {
+          "0": 33.0,
+          "1": 24.0,
+          "2": 34.0,
+          "3": 43.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 5,
+            "my_supports_of_them": 3,
+            "their_support_intent_toward_me": 4,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 2,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Zulu",
+        "handles": {
+          "0": "Amber",
+          "1": "Cedar",
+          "2": "Golf",
+          "3": "Zulu"
+        }
+      },
+      "self_note": "Won this one (43) vs Golf 34, Amber 33, Cedar 24. Golf declared ally EVERY turn (11/11) but gave zero actual support - pure talk, likely stalling/lulling tactic; don't trust declarations from Golf, watch their actions instead. Amber was moderate but reciprocal (5 declared, 3-4 mutual support) - reasonably reliable partner. Cedar rarely engaged (2/11, no support either way) - treat as low-priority/neutral, not a real ally. No pacts accepted, no breaches by anyone this game."
+    }
+  ]
+}

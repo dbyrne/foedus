@@ -1,0 +1,56 @@
+{
+  "game_index": 7,
+  "seat": 0,
+  "entrant_identity": "Amber",
+  "records": [
+    {
+      "facts": {
+        "game_index": 7,
+        "seed": 356022034328442787,
+        "my_seat": 0,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 33.0,
+          "1": 24.0,
+          "2": 34.0,
+          "3": 43.0
+        },
+        "per_opponent": {
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 2,
+            "my_supports_of_them": 4,
+            "their_support_intent_toward_me": 1,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 4,
+            "my_supports_of_them": 2,
+            "their_support_intent_toward_me": 3,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Amber",
+        "handles": {
+          "0": "Amber",
+          "1": "Cedar",
+          "2": "Golf",
+          "3": "Zulu"
+        }
+      },
+      "self_note": "Foedus recap (seed 356022034328442787): finished 3rd (33) vs Golf 34, Zulu 43, Cedar 24.\n\nGolf: claimed ally 11/11 turns but gave zero real support back and I never reciprocated - all talk, no action. Treat their \"ally\" declarations as noise, watch what they do not say. Golf ended up winning, so don't dismiss them despite empty words.\n\nZulu: fewer ally claims but actually followed through with support 3 times and won the game (43). More trustworthy signal-to-action ratio - prioritize real deals with Zulu over Golf's empty flattery.\n\nCedar: low engagement both ways, finished last. Neutral, low priority."
+    }
+  ]
+}

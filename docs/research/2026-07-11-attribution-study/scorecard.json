@@ -1,0 +1,450 @@
+{
+  "out_dir": "docs/research/2026-07-11-attribution-study/run",
+  "aggregate": {
+    "n_games": 8,
+    "freerider_win_rate": 0.25,
+    "freerider_wins": 2,
+    "mean_margin": -0.6666666666666656,
+    "total_subsidy": 15,
+    "mean_subsidy_per_game": 1.875,
+    "total_llm_llm_supports": 88,
+    "mean_llm_llm_supports_per_game": 11.0,
+    "parse_fail_rate": 0.017361111111111112
+  },
+  "trajectory": [
+    {
+      "game_id": 0,
+      "seed": 7497139629654135633,
+      "freerider_seat": 3,
+      "freerider_won": false,
+      "margin": -0.67,
+      "subsidy": 3,
+      "llm_llm_supports": 5,
+      "stance_hostility_frac": 0.2647058823529412,
+      "wall_clock_s": 2938.2
+    },
+    {
+      "game_id": 1,
+      "seed": 923756085460130327,
+      "freerider_seat": 0,
+      "freerider_won": true,
+      "margin": 7.67,
+      "subsidy": 4,
+      "llm_llm_supports": 14,
+      "stance_hostility_frac": 0.3611111111111111,
+      "wall_clock_s": 2134.6
+    },
+    {
+      "game_id": 2,
+      "seed": 7862132354331668770,
+      "freerider_seat": 1,
+      "freerider_won": true,
+      "margin": 4.67,
+      "subsidy": 0,
+      "llm_llm_supports": 15,
+      "stance_hostility_frac": 0.21212121212121213,
+      "wall_clock_s": 3495.1
+    },
+    {
+      "game_id": 3,
+      "seed": 6112597337729826676,
+      "freerider_seat": 2,
+      "freerider_won": false,
+      "margin": -3.67,
+      "subsidy": 1,
+      "llm_llm_supports": 8,
+      "stance_hostility_frac": 0.19444444444444445,
+      "wall_clock_s": 2608.0
+    },
+    {
+      "game_id": 4,
+      "seed": 847706427164561365,
+      "freerider_seat": 3,
+      "freerider_won": false,
+      "margin": -2.67,
+      "subsidy": 5,
+      "llm_llm_supports": 20,
+      "stance_hostility_frac": 0.19444444444444445,
+      "wall_clock_s": 2052.8
+    },
+    {
+      "game_id": 5,
+      "seed": 5960678794909749136,
+      "freerider_seat": 0,
+      "freerider_won": false,
+      "margin": 0.67,
+      "subsidy": 0,
+      "llm_llm_supports": 14,
+      "stance_hostility_frac": 0.3235294117647059,
+      "wall_clock_s": 2974.7
+    },
+    {
+      "game_id": 6,
+      "seed": 6161810562470044655,
+      "freerider_seat": 1,
+      "freerider_won": false,
+      "margin": -12.0,
+      "subsidy": 0,
+      "llm_llm_supports": 0,
+      "stance_hostility_frac": 0.25,
+      "wall_clock_s": 2739.3
+    },
+    {
+      "game_id": 7,
+      "seed": 356022034328442787,
+      "freerider_seat": 2,
+      "freerider_won": false,
+      "margin": 0.67,
+      "subsidy": 2,
+      "llm_llm_supports": 12,
+      "stance_hostility_frac": 0.4857142857142857,
+      "wall_clock_s": 3126.1
+    }
+  ],
+  "trend": {
+    "subsidy": {
+      "first_half_mean": 2.0,
+      "second_half_mean": 1.75,
+      "direction": "v down (-0.25)"
+    },
+    "llm_llm_supports": {
+      "first_half_mean": 10.5,
+      "second_half_mean": 11.5,
+      "direction": "^ up (+1.00)"
+    },
+    "margin": {
+      "first_half_mean": 2.0,
+      "second_half_mean": -3.333,
+      "direction": "v down (-5.33)"
+    },
+    "stance_hostility_frac": {
+      "first_half_mean": 0.258,
+      "second_half_mean": 0.313,
+      "direction": "^ up (+0.06)"
+    }
+  },
+  "parse_fail_by_identity": {
+    "Alfa": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Bravo": {
+      "decisions": 24,
+      "timeout": 2,
+      "transport": 0,
+      "parse": 0
+    },
+    "Charlie": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Hotel": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "India": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Juliett": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Mike": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Kilo": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Lima": {
+      "decisions": 24,
+      "timeout": 3,
+      "transport": 0,
+      "parse": 0
+    },
+    "Oscar": {
+      "decisions": 24,
+      "timeout": 1,
+      "transport": 0,
+      "parse": 0
+    },
+    "Papa": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "November": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Quebec": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Romeo": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Sierra": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Tango": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 1
+    },
+    "Uniform": {
+      "decisions": 24,
+      "timeout": 1,
+      "transport": 0,
+      "parse": 0
+    },
+    "Victor": {
+      "decisions": 24,
+      "timeout": 1,
+      "transport": 0,
+      "parse": 0
+    },
+    "Yankee": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Whiskey": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Xray": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Amber": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Cedar": {
+      "decisions": 24,
+      "timeout": 0,
+      "transport": 0,
+      "parse": 0
+    },
+    "Zulu": {
+      "decisions": 24,
+      "timeout": 1,
+      "transport": 0,
+      "parse": 0
+    }
+  },
+  "standings": {
+    "match_id": "attribution-study-2026-07-11",
+    "num_games": 8,
+    "rating": "OpenSkill PlackettLuce, mu-3sigma",
+    "standings": [
+      {
+        "identity": "Golf",
+        "mu": 25.61,
+        "sigma": 7.161,
+        "conservative": 4.127
+      },
+      {
+        "identity": "Quebec",
+        "mu": 27.889,
+        "sigma": 8.263,
+        "conservative": 3.098
+      },
+      {
+        "identity": "Yankee",
+        "mu": 27.872,
+        "sigma": 8.26,
+        "conservative": 3.092
+      },
+      {
+        "identity": "Oscar",
+        "mu": 27.886,
+        "sigma": 8.265,
+        "conservative": 3.091
+      },
+      {
+        "identity": "Zulu",
+        "mu": 27.857,
+        "sigma": 8.258,
+        "conservative": 3.084
+      },
+      {
+        "identity": "Uniform",
+        "mu": 27.848,
+        "sigma": 8.259,
+        "conservative": 3.069
+      },
+      {
+        "identity": "Bravo",
+        "mu": 27.795,
+        "sigma": 8.264,
+        "conservative": 3.005
+      },
+      {
+        "identity": "November",
+        "mu": 26.747,
+        "sigma": 8.183,
+        "conservative": 2.198
+      },
+      {
+        "identity": "Romeo",
+        "mu": 26.722,
+        "sigma": 8.179,
+        "conservative": 2.185
+      },
+      {
+        "identity": "Whiskey",
+        "mu": 26.632,
+        "sigma": 8.171,
+        "conservative": 2.118
+      },
+      {
+        "identity": "Kilo",
+        "mu": 26.595,
+        "sigma": 8.178,
+        "conservative": 2.062
+      },
+      {
+        "identity": "Hotel",
+        "mu": 26.558,
+        "sigma": 8.177,
+        "conservative": 2.028
+      },
+      {
+        "identity": "Alfa",
+        "mu": 26.553,
+        "sigma": 8.18,
+        "conservative": 2.014
+      },
+      {
+        "identity": "Sierra",
+        "mu": 25.036,
+        "sigma": 8.081,
+        "conservative": 0.793
+      },
+      {
+        "identity": "Mike",
+        "mu": 24.718,
+        "sigma": 8.08,
+        "conservative": 0.478
+      },
+      {
+        "identity": "Victor",
+        "mu": 24.682,
+        "sigma": 8.069,
+        "conservative": 0.474
+      },
+      {
+        "identity": "Amber",
+        "mu": 24.659,
+        "sigma": 8.064,
+        "conservative": 0.468
+      },
+      {
+        "identity": "India",
+        "mu": 24.684,
+        "sigma": 8.079,
+        "conservative": 0.446
+      },
+      {
+        "identity": "Xray",
+        "mu": 22.892,
+        "sigma": 8.07,
+        "conservative": -1.317
+      },
+      {
+        "identity": "Papa",
+        "mu": 21.353,
+        "sigma": 8.087,
+        "conservative": -2.907
+      },
+      {
+        "identity": "Lima",
+        "mu": 20.963,
+        "sigma": 8.08,
+        "conservative": -3.277
+      },
+      {
+        "identity": "Charlie",
+        "mu": 20.962,
+        "sigma": 8.084,
+        "conservative": -3.29
+      },
+      {
+        "identity": "Juliett",
+        "mu": 20.935,
+        "sigma": 8.079,
+        "conservative": -3.304
+      },
+      {
+        "identity": "Tango",
+        "mu": 20.885,
+        "sigma": 8.069,
+        "conservative": -3.323
+      },
+      {
+        "identity": "Cedar",
+        "mu": 20.838,
+        "sigma": 8.064,
+        "conservative": -3.353
+      }
+    ]
+  },
+  "run_summary": {
+    "match_id": "attribution-study-2026-07-11",
+    "num_games": 8,
+    "match_wall_clock_s": 22068.8,
+    "mean_game_wall_clock_s": 2758.6,
+    "per_game_wall_clock_s": [
+      2938.2,
+      2134.6,
+      3495.1,
+      2608.0,
+      2052.8,
+      2974.7,
+      2739.3,
+      3126.1
+    ],
+    "total_decisions": 576,
+    "total_fell_back": 10,
+    "parse_fail_rate": 0.0174,
+    "seed_commitment": "86c4b7fe29ef411cd17c251818f12dfe9ceb89075bff6a8ae64508373cba8615",
+    "resumed": true
+  }
+}

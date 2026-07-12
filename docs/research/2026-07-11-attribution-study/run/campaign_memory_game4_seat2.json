@@ -1,0 +1,56 @@
+{
+  "game_index": 4,
+  "seat": 2,
+  "entrant_identity": "Sierra",
+  "records": [
+    {
+      "facts": {
+        "game_index": 4,
+        "seed": 847706427164561365,
+        "my_seat": 2,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 37.0,
+          "1": 34.0,
+          "2": 33.0,
+          "3": 32.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 2,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 1,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 10,
+            "my_supports_of_them": 9,
+            "their_support_intent_toward_me": 8,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 1,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Sierra",
+        "handles": {
+          "0": "Quebec",
+          "1": "Romeo",
+          "2": "Sierra",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Quebec: barely engages diplomatically (2/11 ally declarations, no support exchanged) yet won outright\u2014treat as a silent, efficient threat; don't ignore them just because they're quiet. Romeo: consistently reliable ally, high mutual support (9/8), trustworthy for real cooperation. Golf: declares ally constantly (11/11) but delivers almost no actual support (0-1)\u2014all talk, no follow-through; don't overcommit resources trusting their words. Next time, leverage Romeo alliance but focus more aggression/blocking on Quebec despite their low chatter."
+    }
+  ]
+}

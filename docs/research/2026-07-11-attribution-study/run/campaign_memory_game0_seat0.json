@@ -1,0 +1,56 @@
+{
+  "game_index": 0,
+  "seat": 0,
+  "entrant_identity": "Alfa",
+  "records": [
+    {
+      "facts": {
+        "game_index": 0,
+        "seed": 7497139629654135633,
+        "my_seat": 0,
+        "my_rank": 2,
+        "n_players": 4,
+        "final_scores": {
+          "0": 35.0,
+          "1": 40.0,
+          "2": 23.0,
+          "3": 32.0
+        },
+        "per_opponent": {
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 7,
+            "my_supports_of_them": 1,
+            "their_support_intent_toward_me": 2,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Alfa",
+        "handles": {
+          "0": "Alfa",
+          "1": "Bravo",
+          "2": "Charlie",
+          "3": "Golf"
+        }
+      },
+      "self_note": "Bravo: talks ally often (7/11) and even offered support twice, but only 1 mutual exchange, no pact\u2014yet still won outright (40 pts). Treat Bravo's friendliness as unreliable; they optimize for their own score. Watch closely, don't overcommit trust.\n\nGolf: declared ally 11/11 turns but zero actual support either direction\u2014pure rhetoric, no substance. Don't rely on Golf's declarations; verify actions before trusting.\n\nCharlie: no ally signals, no engagement, weakest score. Likely passive/isolated\u2014low threat, low value as partner."
+    }
+  ]
+}

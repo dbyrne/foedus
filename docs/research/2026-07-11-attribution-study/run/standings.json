@@ -1,0 +1,157 @@
+{
+  "match_id": "attribution-study-2026-07-11",
+  "num_games": 8,
+  "rating": "OpenSkill PlackettLuce, mu-3sigma",
+  "standings": [
+    {
+      "identity": "Golf",
+      "mu": 25.61,
+      "sigma": 7.161,
+      "conservative": 4.127
+    },
+    {
+      "identity": "Quebec",
+      "mu": 27.889,
+      "sigma": 8.263,
+      "conservative": 3.098
+    },
+    {
+      "identity": "Yankee",
+      "mu": 27.872,
+      "sigma": 8.26,
+      "conservative": 3.092
+    },
+    {
+      "identity": "Oscar",
+      "mu": 27.886,
+      "sigma": 8.265,
+      "conservative": 3.091
+    },
+    {
+      "identity": "Zulu",
+      "mu": 27.857,
+      "sigma": 8.258,
+      "conservative": 3.084
+    },
+    {
+      "identity": "Uniform",
+      "mu": 27.848,
+      "sigma": 8.259,
+      "conservative": 3.069
+    },
+    {
+      "identity": "Bravo",
+      "mu": 27.795,
+      "sigma": 8.264,
+      "conservative": 3.005
+    },
+    {
+      "identity": "November",
+      "mu": 26.747,
+      "sigma": 8.183,
+      "conservative": 2.198
+    },
+    {
+      "identity": "Romeo",
+      "mu": 26.722,
+      "sigma": 8.179,
+      "conservative": 2.185
+    },
+    {
+      "identity": "Whiskey",
+      "mu": 26.632,
+      "sigma": 8.171,
+      "conservative": 2.118
+    },
+    {
+      "identity": "Kilo",
+      "mu": 26.595,
+      "sigma": 8.178,
+      "conservative": 2.062
+    },
+    {
+      "identity": "Hotel",
+      "mu": 26.558,
+      "sigma": 8.177,
+      "conservative": 2.028
+    },
+    {
+      "identity": "Alfa",
+      "mu": 26.553,
+      "sigma": 8.18,
+      "conservative": 2.014
+    },
+    {
+      "identity": "Sierra",
+      "mu": 25.036,
+      "sigma": 8.081,
+      "conservative": 0.793
+    },
+    {
+      "identity": "Mike",
+      "mu": 24.718,
+      "sigma": 8.08,
+      "conservative": 0.478
+    },
+    {
+      "identity": "Victor",
+      "mu": 24.682,
+      "sigma": 8.069,
+      "conservative": 0.474
+    },
+    {
+      "identity": "Amber",
+      "mu": 24.659,
+      "sigma": 8.064,
+      "conservative": 0.468
+    },
+    {
+      "identity": "India",
+      "mu": 24.684,
+      "sigma": 8.079,
+      "conservative": 0.446
+    },
+    {
+      "identity": "Xray",
+      "mu": 22.892,
+      "sigma": 8.07,
+      "conservative": -1.317
+    },
+    {
+      "identity": "Papa",
+      "mu": 21.353,
+      "sigma": 8.087,
+      "conservative": -2.907
+    },
+    {
+      "identity": "Lima",
+      "mu": 20.963,
+      "sigma": 8.08,
+      "conservative": -3.277
+    },
+    {
+      "identity": "Charlie",
+      "mu": 20.962,
+      "sigma": 8.084,
+      "conservative": -3.29
+    },
+    {
+      "identity": "Juliett",
+      "mu": 20.935,
+      "sigma": 8.079,
+      "conservative": -3.304
+    },
+    {
+      "identity": "Tango",
+      "mu": 20.885,
+      "sigma": 8.069,
+      "conservative": -3.323
+    },
+    {
+      "identity": "Cedar",
+      "mu": 20.838,
+      "sigma": 8.064,
+      "conservative": -3.353
+    }
+  ]
+}

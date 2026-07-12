@@ -1,0 +1,56 @@
+{
+  "game_index": 2,
+  "seat": 3,
+  "entrant_identity": "Lima",
+  "records": [
+    {
+      "facts": {
+        "game_index": 2,
+        "seed": 7862132354331668770,
+        "my_seat": 3,
+        "my_rank": 4,
+        "n_players": 4,
+        "final_scores": {
+          "0": 30.0,
+          "1": 35.0,
+          "2": 34.0,
+          "3": 27.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 1,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 8,
+            "my_supports_of_them": 3,
+            "their_support_intent_toward_me": 3,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Lima",
+        "handles": {
+          "0": "Mike",
+          "1": "Golf",
+          "2": "Kilo",
+          "3": "Lima"
+        }
+      },
+      "self_note": "Golf: declares \"ally\" every single turn (11/11) yet gave zero actual Support\u2014rhetoric without follow-through; Golf won this game (35) while I finished last (27), so don't over-trust the friendly talk, watch what they do not what they say. Kilo: fewer ally claims but genuine reciprocity (3 mutual Support exchanges)\u2014more reliable partner, worth prioritizing real alliance. Mike: mostly disengaged, low ally signals, no cooperation either way\u2014low priority, watch for opportunism."
+    }
+  ]
+}
