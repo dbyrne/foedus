@@ -98,6 +98,13 @@ Two reads jump out beyond A1 itself:
    intact in the second half (game 1: subsidy 4 and Golf **won**; game 4:
    subsidy 5). Exploratory observation, not a pre-registered test.
 
+Prompt-comparability caveat: the seat-legend line in every prompt ("each
+handle is the same entrant every game of this campaign") is literally untrue
+under fresh identities — it was kept byte-identical to the persistent arms
+deliberately, to avoid introducing a prompt confound, and it is inert here
+because every agent plays exactly one game with empty cross-game memory
+(nothing exists to link a handle across games).
+
 ## 4. A2 (mechanism) — punishment-pipeline linkage
 
 Pipeline per game (`foedus_s1_autopsy.py`, coverage-guarded; totals

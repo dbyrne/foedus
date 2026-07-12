@@ -148,7 +148,10 @@ training work in this milestone.
   path), so the pre-committed seal is never re-rolled;
   `run_summary.json.resumed = true` reflects this flow, not a crash —
   `timing.log` records the actual legs. The operator-private
-  `seed_manifest.secret.json` is committed only at reveal time.
+  `seed_manifest.secret.json` is gitignored (`**/seed_manifest.secret.json`)
+  and is never committed at all; the published record of the seeds is
+  `seed_manifest.revealed.json`, which `campaign.verify()` checks against
+  the pre-committed commitment.
 - Detached launch (`launch.sh`, log + PID file), guarded `@reboot`
   autoresume (`autoresume.sh`, crontab-tagged, removed post-completion),
   crash-resume banked-only (`resume.sh`, continues from flushed sweep rows
