@@ -1,0 +1,56 @@
+{
+  "game_index": 7,
+  "seat": 1,
+  "entrant_identity": "Cedar",
+  "records": [
+    {
+      "facts": {
+        "game_index": 7,
+        "seed": 356022034328442787,
+        "my_seat": 1,
+        "my_rank": 4,
+        "n_players": 4,
+        "final_scores": {
+          "0": 33.0,
+          "1": 24.0,
+          "2": 34.0,
+          "3": 43.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 3,
+            "my_supports_of_them": 2,
+            "their_support_intent_toward_me": 3,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 2,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 2,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Cedar",
+        "handles": {
+          "0": "Amber",
+          "1": "Cedar",
+          "2": "Golf",
+          "3": "Zulu"
+        }
+      },
+      "self_note": "Golf: talks ally nonstop (11/11 turns) but delivered zero real support despite me feeding them twice\u2014pure rhetoric, don't trust their pacts, extract value but expect no reciprocity. Amber: quieter (3/11 ally claims) but matched intent-for-intent when they did engage\u2014more reliable if smaller-scale. Zulu: almost no diplomacy (2/11, no support either way) yet won outright\u2014likely plays solo/efficient, watch for quiet snowballing, don't rely on reading their intentions from talk."
+    }
+  ]
+}

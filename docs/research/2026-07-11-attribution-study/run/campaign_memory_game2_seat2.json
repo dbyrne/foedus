@@ -1,0 +1,56 @@
+{
+  "game_index": 2,
+  "seat": 2,
+  "entrant_identity": "Kilo",
+  "records": [
+    {
+      "facts": {
+        "game_index": 2,
+        "seed": 7862132354331668770,
+        "my_seat": 2,
+        "my_rank": 2,
+        "n_players": 4,
+        "final_scores": {
+          "0": 30.0,
+          "1": 35.0,
+          "2": 34.0,
+          "3": 27.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 6,
+            "my_supports_of_them": 3,
+            "their_support_intent_toward_me": 3,
+            "pact_with_me": false,
+            "breach_involving_me": true
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 6,
+            "my_supports_of_them": 3,
+            "their_support_intent_toward_me": 2,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Kilo",
+        "handles": {
+          "0": "Mike",
+          "1": "Golf",
+          "2": "Kilo",
+          "3": "Lima"
+        }
+      },
+      "self_note": "Mike: declares ally frequently (6/11) but breached the pact despite mutual support exchanges\u2014don't trust their ally talk, verify with actions each turn, treat as opportunistic.\nGolf: declares ally 100% of turns but never actually supports or requests support\u2014pure rhetoric, no real commitment. Still won game (35 pts) while avoiding conflict; watch for quiet snowballing.\nLima: moderate, consistent ally signals with matching mutual support, no breach\u2014most reliable partner so far. Prioritize real coordination with Lima over Mike/Golf's empty declarations next time."
+    }
+  ]
+}

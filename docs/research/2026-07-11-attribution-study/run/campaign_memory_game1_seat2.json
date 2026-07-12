@@ -1,0 +1,56 @@
+{
+  "game_index": 1,
+  "seat": 2,
+  "entrant_identity": "India",
+  "records": [
+    {
+      "facts": {
+        "game_index": 1,
+        "seed": 923756085460130327,
+        "my_seat": 2,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 38.0,
+          "1": 34.0,
+          "2": 31.0,
+          "3": 26.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 9,
+            "my_supports_of_them": 7,
+            "their_support_intent_toward_me": 6,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 8,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 2,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "India",
+        "handles": {
+          "0": "Golf",
+          "1": "Hotel",
+          "2": "India",
+          "3": "Juliett"
+        }
+      },
+      "self_note": "Golf: talks ally nonstop (11/11) but gave zero real support and never pacted\u2014pure rhetoric, ended up winning. Don't trust their declarations; verify with actions before committing. Hotel: genuine reciprocal ally (7/6 mutual support), no breaches\u2014reliable partner, worth prioritizing real coordination with them again. Juliett: moderate ally talk (8/11) but almost no actual support given by either side\u2014likely opportunistic/passive. Lesson: weight past support ratios over declaration frequency when choosing allies; Golf's empty alliance talk correlated with their win\u2014watch for that pattern."
+    }
+  ]
+}

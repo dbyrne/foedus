@@ -1,0 +1,56 @@
+{
+  "game_index": 5,
+  "seat": 3,
+  "entrant_identity": "Victor",
+  "records": [
+    {
+      "facts": {
+        "game_index": 5,
+        "seed": 5960678794909749136,
+        "my_seat": 3,
+        "my_rank": 3,
+        "n_players": 4,
+        "final_scores": {
+          "0": 32.0,
+          "1": 27.0,
+          "2": 36.0,
+          "3": 31.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 7,
+            "my_supports_of_them": 1,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "2": {
+            "turns_observed": 11,
+            "ally_toward_me": 10,
+            "my_supports_of_them": 4,
+            "their_support_intent_toward_me": 4,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Victor",
+        "handles": {
+          "0": "Golf",
+          "1": "Tango",
+          "2": "Uniform",
+          "3": "Victor"
+        }
+      },
+      "self_note": "Golf: declares ally constantly (11/11) but gave zero real support and never accepted pacts\u2014pure talk, treat as unreliable/free-rider despite friendly signaling. Uniform: strong reciprocal ally, matched declarations with actual support (4/4), won the game\u2014prioritize real cooperation with them next time. Tango: moderate ally talk (7/11) but almost no follow-through (1 support), finished last\u2014likely weaker or unfocused player, not a priority ally. Trust actions over declared intent; Uniform earned it, Golf didn't."
+    }
+  ]
+}

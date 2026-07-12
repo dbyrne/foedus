@@ -1,0 +1,56 @@
+{
+  "game_index": 6,
+  "seat": 2,
+  "entrant_identity": "Whiskey",
+  "records": [
+    {
+      "facts": {
+        "game_index": 6,
+        "seed": 6161810562470044655,
+        "my_seat": 2,
+        "my_rank": 2,
+        "n_players": 4,
+        "final_scores": {
+          "0": 42.0,
+          "1": 23.0,
+          "2": 40.0,
+          "3": 23.0
+        },
+        "per_opponent": {
+          "0": {
+            "turns_observed": 11,
+            "ally_toward_me": 0,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "1": {
+            "turns_observed": 11,
+            "ally_toward_me": 11,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 0,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          },
+          "3": {
+            "turns_observed": 11,
+            "ally_toward_me": 6,
+            "my_supports_of_them": 0,
+            "their_support_intent_toward_me": 2,
+            "pact_with_me": false,
+            "breach_involving_me": false
+          }
+        },
+        "my_handle": "Whiskey",
+        "handles": {
+          "0": "Yankee",
+          "1": "Golf",
+          "2": "Whiskey",
+          "3": "Xray"
+        }
+      },
+      "self_note": "Foedus vs Yankee/Golf/Xray (seed 6161810562470044655): Finished 2nd (40) behind Yankee (42). Golf declared ally 11/11 turns but never backed it with actual support\u2014pure talk, gave nothing, got nothing. Xray gave real support signals (2 turns) despite fewer ally declarations\u2014more trustworthy in action than words. Yankee never declared ally yet won\u2014likely quietly efficient/independent, watch their board moves closely rather than their diplomacy. Lesson: weight actions over declarations for all three; consider testing Xray with reciprocal support next time."
+    }
+  ]
+}
